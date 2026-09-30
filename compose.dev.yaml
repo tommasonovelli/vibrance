@@ -1,0 +1,81 @@
+# Vibrance: development Compose file, the containerized toolchain. See
+# README.md.
+#
+#   scripts/check.sh    the gate in the `test` service
+#   scripts/dev.sh      a shell, or one command, in the `dev` service
+#
+# The project is `vibrance-dev` (DESIGN.md §3.6), never the `musiclib`
+# project of an installation; the scripts also pass the name explicitly, so
+# COMPOSE_PROJECT_NAME cannot redirect them. Every image is pinned by version
+# and digest in the Dockerfile.
+
+name: vibrance-dev
+
+x-hardening: &hardening
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  # -------------------------------------------------------------------------
+  # Hermetic gate: tests a read-only snapshot of the sources baked into the
+  # image, without any network, with TMPDIR on the ext4 test volume.
+  test:
+    profiles: [tools]
+    build:
+      context: .
+      target: test
+      args:
+        DEV_UID: ${VIBRANCE_DEV_UID:-10001}
+        DEV_GID: ${VIBRANCE_DEV_GID:-10001}
+    image: vibrance-test:local
+    init: true
+    network_mode: none
+    read_only: true
+    <<: *hardening
+    cap_drop: [ALL]
+    tmpfs:
+      - /tmp
+    environment:
+      # Ctrl-C reaches `go test`, not only the wrapper script.
+      TINI_KILL_PROCESS_GROUP: "1"
+      # go test -timeout of docker/gate.sh (per package).
+      GATE_TEST_TIMEOUT: ${GATE_TEST_TIMEOUT:-15m}
+    volumes:
+      - go-build-cache:/home/dev/.cache/go-build
+      - testdata:/testdata
+
+  # -------------------------------------------------------------------------
+  # Interactive toolchain on the live sources (bind mount), with network for
+  # `go get`. Used by scripts/dev.sh.
+  dev:
+    profiles: [tools]
+    build:
+      context: .
+      target: deps
+      args:
+        DEV_UID: ${VIBRANCE_DEV_UID:-10001}
+        DEV_GID: ${VIBRANCE_DEV_GID:-10001}
+    image: vibrance-dev:local
+    init: true
+    <<: *hardening
+    cap_drop: [ALL]
+    environment:
+      TINI_KILL_PROCESS_GROUP: "1"
+    entrypoint: ["/src/docker/with-testdata.sh"]
+    command: ["bash"]
+    working_dir: /src
+    volumes:
+      - type: bind
+        source: .
+        target: /src
+      - go-mod-cache:/home/dev/go/pkg/mod
+      - go-build-cache:/home/dev/.cache/go-build
+      - testdata:/testdata
+
+volumes:
+  # Go build cache (also holds the fuzzing cache), shared by test and dev.
+  go-build-cache:
+  # Module cache for `dev`; seeded from the image on first use.
+  go-mod-cache:
+  # ext4 filesystem for TMPDIR of the tests (see docker/with-testdata.sh).
+  testdata:

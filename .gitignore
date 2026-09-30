@@ -1,0 +1,14 @@
+# Binaries
+/vibrance
+/bin/
+
+# Test and profiling output
+*.test
+*.out
+coverage.html
+
+# Local environment
+.env
+
+# The read-only clone of MusicLib used as a reference (DESIGN.md §0.2)
+/.ref/

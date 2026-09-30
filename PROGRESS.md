@@ -4,7 +4,7 @@ Design: DESIGN.md (versione 0.1). Orchestratore: aggiorna questo file a ogni pas
 
 | Passo | Titolo | Stato | Round | Commit | Note |
 |---|---|---|---|---|---|
-| S0 | Bootstrap del repository e toolchain | todo | | | |
+| S0 | Bootstrap del repository e toolchain | done | 2 | (vedi git log: «Step S0») | 2026-09-30 |
 | S1 | Spike: le ipotesi del contratto con MusicLib reale | todo | | | |
 | S2 | Configurazione, avvio, salute e arresto | todo | | | |
 | S3 | Store SQLite, migrazioni, transazioni | todo | | | |
@@ -34,6 +34,10 @@ Design: DESIGN.md (versione 0.1). Orchestratore: aggiorna questo file a ogni pas
 Stati: `todo`, `in-progress`, `done`, `blocked`.
 
 ## Debiti (nit non bloccanti del revisore)
+- (S0) CLAUDE.md/AGENTS.md: il riassunto di I13 omette che prima di S25 una migrazione si può correggere dichiarandolo in NOTES (più severo del §2.3).
+- (S0) `.gitignore` senza `/.claude/worktrees/` (MusicLib lo ha; `.dockerignore` esclude già `/.claude/`).
+- (S0) `.gitattributes` senza marcatori `binary` per i fixture audio (da valutare in S1).
+- (S0) Intestazione di `docker/gate.sh`: non dice che la build scarta l'output.
 
 ## TO CONFIRM aperti (da riportare all'utente a fine fase)
 

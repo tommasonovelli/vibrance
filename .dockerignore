@@ -1,0 +1,12 @@
+# Keep the build context small, reproducible and free of secrets.
+.git
+.env
+.env.*
+**/*.test
+**/*.out
+coverage.html
+/bin/
+/vibrance
+# The MusicLib reference clone and local agent files: never in an image.
+/.ref/
+/.claude/
