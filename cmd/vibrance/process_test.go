@@ -2,7 +2,9 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"io"
@@ -24,12 +26,15 @@ import (
 // binary of this package, built once with the race detector, with real
 // signals and real exit codes.
 
-// binary is the vibrance executable the process tests run.
+// binary is the vibrance executable the process tests run. It is the
+// program as it is released but for one string: its state folder is state,
+// a temporary folder, instead of /var/lib/vibrance.
 var binary struct {
-	once sync.Once
-	dir  string
-	path string
-	err  error
+	once  sync.Once
+	dir   string
+	path  string
+	state string
+	err   error
 }
 
 func TestMain(m *testing.M) {
@@ -59,16 +64,48 @@ func vibranceBinary(t *testing.T) string {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
 		path := filepath.Join(binary.dir, "vibrance")
-		if out, err := exec.CommandContext(ctx, goTool, "build", "-race", "-o", path, ".").CombinedOutput(); err != nil {
+		state := filepath.Join(binary.dir, "state")
+		if binary.err = os.Mkdir(state, 0o755); binary.err != nil {
+			return
+		}
+		if out, err := exec.CommandContext(ctx, goTool, "build", "-race", "-ldflags", "-X main.stateDir="+state, "-o", path, ".").CombinedOutput(); err != nil {
 			binary.err = fmt.Errorf("go build -race: %w\n%s", err, out)
 			return
 		}
-		binary.path = path
+		binary.path, binary.state = path, state
 	})
 	if binary.err != nil {
 		t.Fatal(binary.err)
 	}
 	return binary.path
+}
+
+// resetState empties the state folder of the binary, so that the test
+// starts where a new installation does, and returns it.
+func resetState(t *testing.T) string {
+	t.Helper()
+	vibranceBinary(t)
+	if err := os.RemoveAll(binary.state); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(binary.state, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return binary.state
+}
+
+// stateFiles are the names of the files in the state folder, sorted.
+func stateFiles(t *testing.T, state string) []string {
+	t.Helper()
+	entries, err := os.ReadDir(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	return names
 }
 
 // process is `vibrance serve` running as a child process.
@@ -217,7 +254,7 @@ func wantCleanRun(t *testing.T, p *process) {
 	if p.stderr.String() != "" {
 		t.Fatalf("the server wrote to stderr:\n%s", p.stderr)
 	}
-	want := []string{"starting", "http listening", "ready", "stopping", "http server stopped", "stopped"}
+	want := []string{"starting", "http listening", "database open", "ready", "stopping", "http server stopped", "database closed", "stopped"}
 	if got := p.stdout.messages(t); !slices.Equal(got, want) {
 		t.Fatalf("log events %q, want %q", got, want)
 	}
@@ -235,8 +272,19 @@ func wantCleanRun(t *testing.T, p *process) {
 // healthcheck subcommand, sets umask 022, and stops on SIGTERM with exit
 // code 0. Once it is gone the healthcheck fails.
 func TestProcessLifecycle(t *testing.T) {
+	state := resetState(t)
 	p := startServe(t, freeAddr(t), 0o077, "VIBRANCE_SCAN_INTERVAL=45s", "VIBRANCE_WORKERS=3")
 	p.waitReady(t)
+
+	// The database is created before the server is ready. The umask the
+	// process was started with (077) is not the one its files get (022).
+	info, err := os.Stat(filepath.Join(state, "vibrance.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o644 {
+		t.Fatalf("the database has mode %#o, want 0644", got)
+	}
 
 	if status, body, err := p.get(t, "/health/live"); err != nil || status != 200 || body != `{"status":"live"}`+"\n" {
 		t.Fatalf("/health/live: %d %q %v", status, body, err)
@@ -254,6 +302,10 @@ func TestProcessLifecycle(t *testing.T) {
 	p.signal(t, syscall.SIGTERM)
 	p.wantExit(t, exitOK)
 	wantCleanRun(t, p)
+	// A clean stop leaves the database as one complete file.
+	if got := stateFiles(t, state); !slices.Equal(got, []string{"vibrance.db"}) {
+		t.Fatalf("the state folder holds %q after the stop, want only the database", got)
+	}
 	first := p.stdout.events(t)[0]
 	for key, want := range map[string]any{
 		"version":       "devel",
@@ -276,6 +328,7 @@ func TestProcessLifecycle(t *testing.T) {
 
 // SIGINT stops the server like SIGTERM.
 func TestProcessSIGINT(t *testing.T) {
+	resetState(t)
 	p := startServe(t, freeAddr(t), 0o022)
 	p.waitReady(t)
 	p.signal(t, syscall.SIGINT)
@@ -284,9 +337,12 @@ func TestProcessSIGINT(t *testing.T) {
 }
 
 // Crash-only (DESIGN.md §2.1): a killed server leaves nothing behind that
-// the next one has to undo. A new process on the same address is ready at
-// once and stops cleanly.
+// the next one has to undo by a protocol of its own. The database it was
+// killed with, still spread over the file and its write-ahead log, is the
+// one the next process opens: it is ready on the same address and stops
+// cleanly, leaving one complete file.
 func TestProcessKilledAndStartedAgain(t *testing.T) {
+	state := resetState(t)
 	addr := freeAddr(t)
 	killed := startServe(t, addr, 0o022)
 	killed.waitReady(t)
@@ -294,11 +350,15 @@ func TestProcessKilledAndStartedAgain(t *testing.T) {
 	if ws := killed.wait(t); !ws.Signaled() || ws.Signal() != syscall.SIGKILL {
 		t.Fatalf("the server ended with %v, want killed", killed.cmd.ProcessState)
 	}
-	if got := killed.stdout.messages(t); !slices.Equal(got, []string{"starting", "http listening", "ready"}) {
+	if got := killed.stdout.messages(t); !slices.Equal(got, []string{"starting", "http listening", "database open", "ready"}) {
 		t.Fatalf("log events of the killed server: %q", got)
 	}
 	if code, _ := runHealthcheck(t, addr); code != exitFailure {
 		t.Fatalf("healthcheck with the server killed: exit %d, want %d", code, exitFailure)
+	}
+	// The killed server never moved its write-ahead log into the database.
+	if info, err := os.Stat(filepath.Join(state, "vibrance.db-wal")); err != nil || info.Size() == 0 {
+		t.Fatalf("the killed server left no write-ahead log to recover from: %v", err)
 	}
 
 	again := startServe(t, addr, 0o022)
@@ -309,6 +369,115 @@ func TestProcessKilledAndStartedAgain(t *testing.T) {
 	again.signal(t, syscall.SIGTERM)
 	again.wantExit(t, exitOK)
 	wantCleanRun(t, again)
+	if got := stateFiles(t, state); !slices.Equal(got, []string{"vibrance.db"}) {
+		t.Fatalf("the state folder holds %q after the stop, want only the database", got)
+	}
+	// What the killed server had committed is there: its migrations.
+	db, err := sql.Open("sqlite", filepath.Join(state, "vibrance.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var tables, check string
+	queryErr := errors.Join(
+		db.QueryRowContext(t.Context(), `SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name IN ('users', 'tracks', 'search_tracks')`).Scan(&tables),
+		db.QueryRowContext(t.Context(), `PRAGMA integrity_check`).Scan(&check))
+	if err := errors.Join(queryErr, db.Close()); err != nil {
+		t.Fatal(err)
+	}
+	if tables != "3" || check != "ok" {
+		t.Fatalf("the recovered database: %s of 3 tables, integrity_check %q", tables, check)
+	}
+}
+
+// lastEvent is the last log event of a server that has ended.
+func lastEvent(t *testing.T, p *process) map[string]any {
+	t.Helper()
+	events := p.stdout.events(t)
+	if len(events) == 0 {
+		t.Fatalf("the server logged nothing; %s", p.output())
+	}
+	return events[len(events)-1]
+}
+
+// wantRefusedStartup checks how a server ended that step 3 of the startup
+// refused: exit code 1, one error line with the stable code, and before it
+// only the events of a server that listened, was never ready, and stopped.
+func wantRefusedStartup(t *testing.T, p *process, code string) string {
+	t.Helper()
+	p.wantExit(t, exitFailure)
+	if p.stderr.String() != "" {
+		t.Fatalf("the server wrote to stderr:\n%s", p.stderr)
+	}
+	msgs := p.stdout.messages(t)
+	if len(msgs) != 4 || !slices.Equal(msgs[:3], []string{"starting", "http listening", "http server stopped"}) {
+		t.Fatalf("log events %q, want starting, http listening, http server stopped and the error", msgs)
+	}
+	last := lastEvent(t, p)
+	if last["level"] != "ERROR" || last["code"] != code {
+		t.Fatalf("the server logged %v, want an error with code %s", last, code)
+	}
+	return msgs[3]
+}
+
+// A database written by a newer Vibrance stops the startup with exit code
+// 1 and store_schema_too_new (DESIGN.md §11.2, I13). The server is never
+// ready, and the database is left as it was.
+func TestProcessRefusesANewerDatabase(t *testing.T) {
+	state := resetState(t)
+	first := startServe(t, freeAddr(t), 0o022)
+	first.waitReady(t)
+	first.signal(t, syscall.SIGTERM)
+	first.wantExit(t, exitOK)
+
+	path := filepath.Join(state, "vibrance.db")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, execErr := db.ExecContext(t.Context(), `INSERT INTO goose_db_version (version_id, is_applied) VALUES (9999, 1)`)
+	if err := errors.Join(execErr, db.Close()); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	p := startServe(t, freeAddr(t), 0o022)
+	msg := wantRefusedStartup(t, p, "store_schema_too_new")
+	if !strings.Contains(msg, "schema version 9999") {
+		t.Fatalf("the message does not name the version: %s", msg)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Fatal("the refused database was changed")
+	}
+}
+
+// A state folder the server cannot write to stops the startup with exit
+// code 1 and state_unwritable, before SQLite is asked anything.
+func TestProcessRefusesAnUnwritableStateFolder(t *testing.T) {
+	state := resetState(t)
+	if err := os.Chmod(state, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chmod(state, 0o755); err != nil {
+			t.Error(err)
+		}
+	})
+
+	p := startServe(t, freeAddr(t), 0o022)
+	msg := wantRefusedStartup(t, p, "state_unwritable")
+	if !strings.Contains(msg, state) || !strings.Contains(msg, "VIBRANCE_UID") {
+		t.Fatalf("the message does not say what to check: %s", msg)
+	}
+	if got := stateFiles(t, state); len(got) != 0 {
+		t.Fatalf("the state folder holds %q", got)
+	}
 }
 
 // An invalid configuration ends the process with exit code 2 and one error
@@ -332,6 +501,7 @@ func TestProcessRefusesInvalidConfiguration(t *testing.T) {
 // A second server on the same address ends with exit code 1 and
 // http_listen, and does not disturb the first.
 func TestProcessAddressInUse(t *testing.T) {
+	resetState(t)
 	first := startServe(t, freeAddr(t), 0o022)
 	first.waitReady(t)
 
@@ -356,6 +526,7 @@ func TestProcessAddressInUse(t *testing.T) {
 // body never arrives; the read timeout would free it only after 30
 // seconds.
 func TestProcessStopCutsAnOpenRequest(t *testing.T) {
+	resetState(t)
 	p := startServe(t, freeAddr(t), 0o022)
 	p.waitReady(t)
 
@@ -402,8 +573,8 @@ func TestProcessStopCutsAnOpenRequest(t *testing.T) {
 	if p.stderr.String() != "" {
 		t.Fatalf("the server wrote to stderr:\n%s", p.stderr)
 	}
-	want := []string{"starting", "http listening", "ready", "stopping",
-		"requests still open after the grace period: closing their connections", "http server stopped", "stopped"}
+	want := []string{"starting", "http listening", "database open", "ready", "stopping",
+		"requests still open after the grace period: closing their connections", "http server stopped", "database closed", "stopped"}
 	if got := p.stdout.messages(t); !slices.Equal(got, want) {
 		t.Fatalf("log events %q, want %q", got, want)
 	}

@@ -119,7 +119,7 @@ type running struct {
 func startServer(t *testing.T, prepare func(*server)) *running {
 	t.Helper()
 	logs := &syncBuffer{}
-	s := newServer(newLogger(logs))
+	s := newServer(newLogger(logs), t.TempDir())
 	if prepare != nil {
 		prepare(s)
 	}
@@ -213,7 +213,7 @@ const (
 // again.
 func TestReadinessFollowsTheStartup(t *testing.T) {
 	var logs syncBuffer
-	s := newServer(newLogger(&logs))
+	s := newServer(newLogger(&logs), t.TempDir())
 	ln := listen(t)
 	base := "http://" + ln.Addr().String()
 
@@ -221,7 +221,9 @@ func TestReadinessFollowsTheStartup(t *testing.T) {
 	wantJSON(t, do(t, "GET", base+"/health/live"), 200, liveJSON)
 	wantJSON(t, do(t, "GET", base+"/health/ready"), 503, notReadyJSON)
 
-	s.startup() // steps 3 to 7
+	if err := s.startup(t.Context()); err != nil { // steps 3 to 7
+		t.Fatal(err)
+	}
 	wantJSON(t, do(t, "GET", base+"/health/live"), 200, liveJSON)
 	wantJSON(t, do(t, "GET", base+"/health/ready"), 200, readyJSON)
 
@@ -239,7 +241,7 @@ func TestReadinessFollowsTheStartup(t *testing.T) {
 	// already read, so only the handler can be asked.
 	wantJSON(t, serveDirectly(s, "/health/live"), 200, liveJSON)
 	wantJSON(t, serveDirectly(s, "/health/ready"), 503, shuttingDownJSON)
-	want := []string{"http listening", "ready", "http server stopped"}
+	want := []string{"http listening", "database open", "ready", "http server stopped", "database closed"}
 	if got := logs.messages(t); !slices.Equal(got, want) {
 		t.Fatalf("log events %q, want %q", got, want)
 	}
@@ -315,7 +317,7 @@ func TestStopWithNothingOpen(t *testing.T) {
 	if elapsed := time.Since(start); elapsed > shutdownGrace/2 {
 		t.Fatalf("the stop took %s with nothing open", elapsed)
 	}
-	want := []string{"http listening", "ready", "stopping", "http server stopped"}
+	want := []string{"http listening", "database open", "ready", "stopping", "http server stopped", "database closed"}
 	if got := r.logs.messages(t); !slices.Equal(got, want) {
 		t.Fatalf("log events %q, want %q", got, want)
 	}
@@ -479,7 +481,7 @@ func TestStopCutsARequestThatOutlivesTheGracePeriod(t *testing.T) {
 // that the process exits and is restarted.
 func TestRunEndsWhenTheHTTPServerStops(t *testing.T) {
 	logs := &syncBuffer{}
-	s := newServer(newLogger(logs))
+	s := newServer(newLogger(logs), t.TempDir())
 	ln := listen(t)
 	done := make(chan error, 1)
 	go func() { done <- s.run(t.Context(), ln) }()
@@ -507,7 +509,7 @@ func TestRunEndsWhenTheHTTPServerStops(t *testing.T) {
 
 // The limits of §11.1 are those of the server.
 func TestHTTPServerLimits(t *testing.T) {
-	s := newServer(newLogger(io.Discard))
+	s := newServer(newLogger(io.Discard), t.TempDir())
 	got := [...]time.Duration{s.http.ReadHeaderTimeout, s.http.ReadTimeout, s.http.WriteTimeout, s.http.IdleTimeout}
 	want := [...]time.Duration{10 * time.Second, 30 * time.Second, 30 * time.Second, 120 * time.Second}
 	if got != want {
@@ -598,7 +600,8 @@ func TestRunRefusesBeforeListening(t *testing.T) {
 				e[k] = v
 			}
 			var logs syncBuffer
-			err := Run(t.Context(), env(e), tc.euid, 4, newLogger(&logs))
+			stateDir := t.TempDir()
+			err := Run(t.Context(), env(e), tc.euid, 4, stateDir, newLogger(&logs))
 			if err == nil || Code(err) != tc.code {
 				t.Fatalf("Run returned %v (code %s), want code %s", err, Code(err), tc.code)
 			}
@@ -607,10 +610,11 @@ func TestRunRefusesBeforeListening(t *testing.T) {
 					t.Fatalf("the error does not contain %q: %v", want, err)
 				}
 			}
-			// Nothing started: nothing was logged, either.
+			// Nothing started: nothing was logged or written, either.
 			if logs.String() != "" {
 				t.Fatalf("a refused startup logged:\n%s", &logs)
 			}
+			wantEmptyDir(t, stateDir)
 		})
 	}
 }
@@ -621,7 +625,8 @@ func TestRunCannotListen(t *testing.T) {
 	busy := listen(t)
 
 	var logs syncBuffer
-	err := Run(t.Context(), env(validEnv(busy.Addr().String())), 1000, 4, newLogger(&logs))
+	stateDir := t.TempDir()
+	err := Run(t.Context(), env(validEnv(busy.Addr().String())), 1000, 4, stateDir, newLogger(&logs))
 	var ae *Error
 	if !errors.As(err, &ae) || ae.Code != CodeHTTPListen || ae.Err == nil {
 		t.Fatalf("Run returned %v, want an *Error with code %s and a cause", err, CodeHTTPListen)
@@ -632,6 +637,8 @@ func TestRunCannotListen(t *testing.T) {
 	if got := logs.messages(t); !slices.Equal(got, []string{"starting"}) {
 		t.Fatalf("log events %q, want only starting", got)
 	}
+	// The database comes after HTTP (step 3): it was not created.
+	wantEmptyDir(t, stateDir)
 }
 
 // Run from the environment to the stop: it logs what it starts with,
@@ -645,10 +652,11 @@ func TestRun(t *testing.T) {
 	}
 
 	var logs syncBuffer
+	stateDir := t.TempDir()
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	done := make(chan error, 1)
-	go func() { done <- Run(ctx, env(validEnv(addr)), 1000, 4, newLogger(&logs)) }()
+	go func() { done <- Run(ctx, env(validEnv(addr)), 1000, 4, stateDir, newLogger(&logs)) }()
 
 	deadline := time.Now().Add(30 * time.Second)
 	for !slices.Contains(logs.messages(t), "ready") {
@@ -674,9 +682,12 @@ func TestRun(t *testing.T) {
 		t.Fatalf("Run did not end within 30s; logs:\n%s", &logs)
 	}
 
-	want := []string{"starting", "http listening", "ready", "stopping", "http server stopped", "stopped"}
+	want := []string{"starting", "http listening", "database open", "ready", "stopping", "http server stopped", "database closed", "stopped"}
 	if got := logs.messages(t); !slices.Equal(got, want) {
 		t.Fatalf("log events %q, want %q", got, want)
+	}
+	if got := dirNames(t, stateDir); !slices.Equal(got, []string{databaseFile}) {
+		t.Fatalf("the state folder holds %q after the run, want only the database", got)
 	}
 	first := logs.events(t)[0]
 	for key, want := range map[string]any{

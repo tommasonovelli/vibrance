@@ -1,0 +1,20 @@
+# sqlc configuration (DESIGN.md §3.2, I7): queries in sql/, schema from the
+# goose migrations, generated Go in internal/store (committed).
+# Run through Docker only: scripts/sqlc.sh (generate) and scripts/check.sh (diff).
+#
+# `schema` lists the migrations one by one. Every new migration is added
+# here, except one that creates full-text tables: those are kept out of sqlc
+# (DESIGN.md T7), so migrations/00002_search.sql is not listed, and the
+# queries on its tables (MATCH, bm25, rowid) are written by hand in
+# internal/search. A test of internal/store checks this list.
+version: "2"
+sql:
+  - engine: sqlite
+    schema:
+      - migrations/00001_schema.sql
+    queries: sql
+    gen:
+      go:
+        package: store
+        out: internal/store
+        sql_package: database/sql

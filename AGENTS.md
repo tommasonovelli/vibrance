@@ -18,8 +18,9 @@ Vibrance is a read-only listening server over the `library/` folder that Vibranc
 ## Build, test, run: Docker only
 
 - The host needs only Docker with the Compose v2 plugin. Never install Go, ffmpeg or other tools on the host. On Windows, use Git Bash (the scripts set `MSYS_NO_PATHCONV=1`) and keep LF line endings (`.gitattributes`).
-- `scripts/check.sh [packages]` is the gate. It runs `go build`, `go vet`, `gofmt` and `go test -race` on the whole module by default, in a container without network, with `TMPDIR` on a real ext4 volume. It tests a snapshot of the tree taken at build time. It must pass on the whole module before a step is done.
+- `scripts/check.sh [packages]` is the gate. It checks that the generated sqlc code is up to date (`sqlc diff`), then runs `go build`, `go vet`, `gofmt` and `go test -race` on the whole module by default, in a container without network, with `TMPDIR` on a real ext4 volume. It tests a snapshot of the tree taken at build time. It must pass on the whole module before a step is done.
 - `scripts/dev.sh [cmd]` gives a shell, or runs one command, in the toolchain container on the live sources. For example, repeat concurrency tests with `scripts/dev.sh go test -race -count=20 -run TestX ./internal/...`.
+- `scripts/sqlc.sh` regenerates `internal/store` after any change to `sql/` or `migrations/`. Commit the result. `sqlc.yaml` lists the migrations one by one, without the full-text one. Keep `sql/*.sql` in ASCII: sqlc cuts the queries of a file with other characters at the wrong byte.
 - `scripts/lint-shell.sh` runs shellcheck, after any change to a shell script.
 - The only Compose projects to use are `vibrance-dev` (development), `vibrance-spike` (manual trials) and `vibrance-contract` (contract suite). **Never** use `musiclib`, the user's installation. Never run `docker compose down -v` or `docker volume rm` on anything else.
 

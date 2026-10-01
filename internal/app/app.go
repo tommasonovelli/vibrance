@@ -3,14 +3,18 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sync/atomic"
 	"time"
 
 	"vibrance/internal/buildinfo"
 	"vibrance/internal/config"
+	"vibrance/internal/store"
 )
 
 // The stable codes of the failures that belong to the server itself.
@@ -19,7 +23,13 @@ const (
 	CodeRunAsRoot = "run_as_root"
 	// CodeHTTPListen: the HTTP server cannot listen, or stopped by itself.
 	CodeHTTPListen = "http_listen"
+	// CodeStateUnwritable: the server cannot create files in its state
+	// folder.
+	CodeStateUnwritable = "state_unwritable"
 )
+
+// databaseFile is the name of the database in the state folder (§5.1).
+const databaseFile = "vibrance.db"
 
 // The limits of the HTTP server (DESIGN.md §11.1).
 const (
@@ -34,7 +44,8 @@ const (
 // cuts them (§11.2): a stream may last longer than any reasonable wait.
 const shutdownGrace = 10 * time.Second
 
-// Error is a failure of the server itself, with its stable code.
+// Error is a failure of the server, with its stable code: one of this
+// package, or that of the failure of the store it wraps.
 type Error struct {
 	Code string
 	Msg  string
@@ -72,8 +83,9 @@ func Code(err error) string {
 // error has a stable code (Code); the caller logs it.
 //
 // euid is the effective user id of the process, and cpus the number of
-// CPUs available to it.
-func Run(ctx context.Context, getenv func(string) string, euid, cpus int, log *slog.Logger) error {
+// CPUs available to it. stateDir is the folder of the server's state: the
+// database, and later the thumbnails.
+func Run(ctx context.Context, getenv func(string) string, euid, cpus int, stateDir string, log *slog.Logger) error {
 	// Step 1: refuse root, then read and validate the configuration.
 	// Nothing is opened or written before both pass.
 	if err := checkNotRoot(euid); err != nil {
@@ -90,7 +102,7 @@ func Run(ctx context.Context, getenv func(string) string, euid, cpus int, log *s
 	if err != nil {
 		return &Error{Code: CodeHTTPListen, Msg: "cannot listen on " + cfg.HTTPAddr, Err: err}
 	}
-	if err := newServer(log).run(ctx, ln); err != nil {
+	if err := newServer(log, stateDir).run(ctx, ln); err != nil {
 		return err
 	}
 	log.Info("stopped")
@@ -118,15 +130,18 @@ const (
 
 // server is the state of one run.
 type server struct {
-	log   *slog.Logger
-	http  *http.Server
-	state atomic.Int32
+	log      *slog.Logger
+	http     *http.Server
+	state    atomic.Int32
+	stateDir string
+	// store is the database, from step 3 of the startup on.
+	store *store.Store
 	// grace is shutdownGrace; only the tests shorten it.
 	grace time.Duration
 }
 
-func newServer(log *slog.Logger) *server {
-	s := &server{log: log, grace: shutdownGrace}
+func newServer(log *slog.Logger, stateDir string) *server {
+	s := &server{log: log, stateDir: stateDir, grace: shutdownGrace}
 	s.http = &http.Server{
 		Handler:           s.routes(),
 		ReadHeaderTimeout: readHeaderTimeout,
@@ -143,7 +158,18 @@ func newServer(log *slog.Logger) *server {
 // and stops. It owns ln.
 func (s *server) run(ctx context.Context, ln net.Listener) error {
 	served := s.serveHTTP(ln)
-	s.startup()
+	if err := s.startup(ctx); err != nil {
+		if ctx.Err() != nil {
+			// A stop asked for during the startup interrupts the step that
+			// was running. That is a stop like any other, not a failure
+			// of the step.
+			s.log.Info("stopping", "interrupted", err.Error())
+			err = nil
+		}
+		err = errors.Join(err, s.shutdown())
+		<-served
+		return err
+	}
 	select {
 	case <-ctx.Done():
 		s.log.Info("stopping")
@@ -167,11 +193,14 @@ func (s *server) serveHTTP(ln net.Listener) <-chan error {
 }
 
 // startup runs what is left of the startup once HTTP answers, in the order
-// of §11.2. The steps below arrive with the components they start; each
-// one that refuses will stop the startup there, with its code.
+// of §11.2. A step that refuses stops the startup there, with its code.
 //
-//	Step 3: check that /var/lib/vibrance is writable, open the database,
-//	        apply the migrations (store_schema_too_new).
+//	Step 3: check that the state folder is writable, open the database,
+//	        apply the migrations (state_unwritable, store_open,
+//	        store_schema_too_new, store_migrate).
+//
+// The steps below arrive with the components they start:
+//
 //	Step 4: verify ffmpeg and ffprobe at the pinned version
 //	        (media_tool_unavailable, media_tool_version).
 //	Step 5: create the admin if there is no user (admin_password_missing,
@@ -182,28 +211,71 @@ func (s *server) serveHTTP(ln net.Listener) <-chan error {
 //
 // Readiness turns positive last. It depends neither on MusicLib nor on
 // the state of the index (I14).
-func (s *server) startup() {
+func (s *server) startup(ctx context.Context) error {
+	if err := s.openStore(ctx); err != nil {
+		return err
+	}
 	s.state.Store(stateReady)
 	s.log.Info("ready")
+	return nil
+}
+
+// openStore is step 3 of the startup.
+func (s *server) openStore(ctx context.Context) error {
+	if err := checkWritable(s.stateDir); err != nil {
+		return err
+	}
+	st, err := store.Open(ctx, filepath.Join(s.stateDir, databaseFile))
+	if err != nil {
+		return &Error{Code: store.Code(err), Msg: "opening the database", Err: err}
+	}
+	s.store = st
+	s.log.Info("database open")
+	return nil
+}
+
+// writeProbe is the file that checkWritable creates and removes. Its name
+// is fixed, so that a probe left behind by a killed process is taken over
+// by the next one instead of piling up.
+const writeProbe = ".write-check"
+
+// checkWritable verifies that the server can create files in its state
+// folder. Without it the first sign of a volume that belongs to another
+// user, or of a read-only one, would be an obscure error of SQLite.
+func checkWritable(dir string) error {
+	probe := filepath.Join(dir, writeProbe)
+	f, err := os.OpenFile(probe, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err == nil {
+		err = errors.Join(f.Close(), os.Remove(probe))
+	}
+	if err != nil {
+		return &Error{Code: CodeStateUnwritable, Msg: fmt.Sprintf(
+			"the state folder %s is not writable: it must be a writable volume that belongs to the user the server runs as "+
+				"(VIBRANCE_UID and VIBRANCE_GID in .env)", dir), Err: err}
+	}
+	return nil
 }
 
 // shutdown stops the server in the order of §11.2. Stopping is not a
 // protocol the data depends on: a killed process recovers at the next
-// start (crash-only).
+// start (crash-only). A step that fails does not keep the next ones from
+// running.
 //
 //  1. Readiness turns negative.
 //  2. The HTTP server stops accepting and waits for the open requests, for
 //     at most the grace period; then it closes their connections. A
 //     request cut this way is not a failure of the stop: streams outlive
 //     any grace period.
-//
-// The steps below arrive with the components they stop:
-//
-//  3. Cancel the scanner and its jobs, which ends the child processes.
+//  3. (Arrives with the scanner.) Cancel the scanner and its jobs, which
+//     ends the child processes.
 //  4. PRAGMA optimize and wal_checkpoint(TRUNCATE); close the database.
 func (s *server) shutdown() error {
 	s.state.Store(stateStopping)
+	httpErr := s.stopHTTP()
+	return errors.Join(httpErr, s.closeStore())
+}
 
+func (s *server) stopHTTP() error {
 	ctx, cancel := context.WithTimeout(context.Background(), s.grace)
 	defer cancel()
 	err := s.http.Shutdown(ctx)
@@ -215,5 +287,17 @@ func (s *server) shutdown() error {
 		return &Error{Code: CodeHTTPListen, Msg: "closing the HTTP server", Err: err}
 	}
 	s.log.Info("http server stopped")
+	return nil
+}
+
+// closeStore closes the database, if the startup got as far as opening it.
+func (s *server) closeStore() error {
+	if s.store == nil {
+		return nil
+	}
+	if err := s.store.Close(); err != nil {
+		return &Error{Code: store.Code(err), Msg: "closing the database", Err: err}
+	}
+	s.log.Info("database closed")
 	return nil
 }

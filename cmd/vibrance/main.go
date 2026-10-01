@@ -25,6 +25,12 @@ const (
 	exitUsage   = 2 // refused before doing anything: invalid arguments or configuration, running as root
 )
 
+// stateDir is the folder of the server's state: the database, and later the
+// thumbnails. It is fixed, not a setting (§3.4). It is a variable only so
+// that the process tests can link a binary that keeps its state in a
+// temporary folder (-ldflags "-X main.stateDir=...").
+var stateDir = "/var/lib/vibrance"
+
 func main() {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	os.Exit(run(os.Args[1:], os.Getenv, os.Geteuid(), os.Stdout, log))
@@ -34,7 +40,7 @@ func main() {
 func run(args []string, getenv func(string) string, euid int, stdout io.Writer, log *slog.Logger) int {
 	switch {
 	case len(args) == 1 && args[0] == "serve":
-		return serve(getenv, euid, log)
+		return serve(getenv, euid, stateDir, log)
 	case len(args) == 1 && args[0] == "healthcheck":
 		return healthcheck(getenv, log)
 	case len(args) == 1 && args[0] == "version":

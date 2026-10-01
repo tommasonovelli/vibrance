@@ -2,7 +2,7 @@
 # Shared helpers for the host-side scripts. Source it; do not execute it.
 #
 # Sets:    REPO_ROOT, and exports VIBRANCE_DEV_UID / VIBRANCE_DEV_GID for Compose.
-# Defines: die, info, compose_dev.
+# Defines: die, info, compose_dev, run_sqlc.
 
 die() {
   printf '%s: error: %s\n' "${0##*/}" "$*" >&2
@@ -57,4 +57,22 @@ readonly DEV_PROJECT=vibrance-dev
 compose_dev() {
   docker compose --project-name "${DEV_PROJECT}" --project-directory "${REPO_ROOT}" \
     -f "${REPO_ROOT}/compose.dev.yaml" "$@"
+}
+
+# sqlc (DESIGN.md §3.6), pinned like every other image (I12), the same pin as
+# MusicLib.
+readonly SQLC_IMAGE='sqlc/sqlc:1.31.1@sha256:70f53171d27b2424e9358869975455a6e955a5aa8e58a998a270a6e34e525537'
+
+# run_sqlc <ro|rw> <sqlc args...>: sqlc on the repository, as the host user,
+# without network. `ro` mounts the sources read-only (diff); `rw` lets
+# `generate` write internal/store.
+run_sqlc() {
+  local mode="$1"
+  shift
+  local mount="type=bind,source=${REPO_ROOT},target=/src"
+  [[ "${mode}" == ro ]] && mount+=",readonly"
+  docker run --rm --network none --read-only --tmpfs /tmp --env HOME=/tmp \
+    --user "${VIBRANCE_DEV_UID}:${VIBRANCE_DEV_GID}" --cap-drop ALL \
+    --security-opt no-new-privileges:true \
+    --mount "${mount}" --workdir /src "${SQLC_IMAGE}" "$@"
 }

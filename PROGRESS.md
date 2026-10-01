@@ -6,8 +6,8 @@ Design: DESIGN.md (versione 0.1). Orchestratore: aggiorna questo file a ogni pas
 |---|---|---|---|---|---|
 | S0 | Bootstrap del repository e toolchain | done | 2 | b68c8e1 | 2026-09-30 |
 | S1 | Spike: le ipotesi del contratto con MusicLib reale | done | 1 | 438cb1f | 2026-10-01 · H1–H9 confermate, nessun BLOCCO |
-| S2 | Configurazione, avvio, salute e arresto | done | 1 | (vedi git log: «Step S2») | 2026-10-01 |
-| S3 | Store SQLite, migrazioni, transazioni | todo | | | |
+| S2 | Configurazione, avvio, salute e arresto | done | 1 | fb94888 | 2026-10-01 |
+| S3 | Store SQLite, migrazioni, transazioni | done | 2 | (vedi git log: «Step S3») | 2026-10-01 |
 | S4 | Ricevuta, accesso confinato e classificazione | todo | | | |
 | S5 | Adapter media: processi, tag, durata, impronta | todo | | | |
 | S6 | Identità e riconciliazione (puro) | todo | | | |
@@ -52,11 +52,23 @@ Stati: `todo`, `in-progress`, `done`, `blocked`.
 - (S2) `app.go:215`: anche un errore di chiusura del server porta il codice `http_listen` (nome improprio).
 - (S2) `cmd/vibrance/main_test.go` (`freeAddr`) e `internal/app/app_test.go` (`TestRun`): porta liberata e poi riusata; possibile fallimento raro (mai osservato in 25 ripetizioni).
 - (S2) `cmd/vibrance/process_test.go:389`: `TestProcessStopCutsAnOpenRequest` usa `time.Sleep(500ms)`; `internal/app` usa già `ConnState`, deterministico.
+- (S3) `internal/app/app.go:162`: `if ctx.Err() != nil` tratta come arresto normale qualunque errore di avvio che coincide con un SIGTERM (un rifiuto vero, p. es. `store_schema_too_new`, finirebbe a INFO con uscita 0). Più stretto: solo se l'errore è la cancellazione del context. Legato a N-027.
+- (S3) `internal/store/store.go` `Close()`: usa `context.Background()` senza limite proprio (l'attesa è comunque limitata dal `busy_timeout`); nei test un `t.Fatalf` che lascia una `*sql.Conn` aperta blocca il cleanup fino al timeout: rilasciare le connessioni con `t.Cleanup`.
+- (S3) `internal/store/tx_test.go` `TestWithWriteTxRollsBackOnError`: usa `t.Context()` senza scadenza; se il rollback si rompe fallisce solo per timeout del pacchetto.
+- (S3) `internal/store/store.go:119`: `url.Values{"_pragma": connPragmas}` + `q.Add` fa `append` su una slice che condivide l'array della variabile di pacchetto; meglio `slices.Clone`.
+- (S3) `README.md`, tabella dei codici: manca `store_close` (da aggiungere quando N-027 sarà confermato).
+- (S3) `cmd/vibrance/process_test.go`: `-ldflags "-X main.stateDir=<path>"` si rompe se `TMPDIR` contiene spazi (non accade nel gate).
+- (S3) `tx_test.go` `TestTransactionsWhileTheContextEnds`: 2000 commit con fsync, 2–15 s per esecuzione (`internal/store` nel gate da ~22 s a 26–33 s); 500 probabilmente bastano.
+- (S3) `tx.go`: il nome `endOf` dice poco (`withContextErr`); commento a `tx_test.go:264-267` poco leggibile.
+- (S3, per S12+) A context finito l'errore di `fn` soddisfa `errors.Is` sia per il context sia per la causa (p. es. `sql.ErrNoRows`): i handler devono controllare prima il context, altrimenti un client disconnesso può diventare un 404 (N-029).
+- (S3, per S13/S21) Un `BEGIN IMMEDIATE` in attesa del lock di un altro processo non è interrotto dal context e dura fino ai 5 s di `busy_timeout` (N-029); `VACUUM INTO` è rifiutato su una connessione `query_only` (N-028).
 
 ## TO CONFIRM aperti (da riportare all'utente a fine fase)
 - N-014 (S1) Dopo un `rebuild` offline di MusicLib `.maintenance` sparisce ma `library/` resta vuota finché l'app non riparte: in quell'intervallo Vibrance vede tutti gli album non disponibili (poi tornano con gli stessi ID). Riportato all'utente a fine fase 0 (2026-10-01).
 - N-017 (S2) È marcato `DECIDED` in NOTES.md ma ha un effetto visibile: dopo la chiusura forzata all'arresto (richieste aperte oltre i 10 s di tolleranza) il processo esce con 0, mentre MusicLib esce con 1. Il revisore ritiene la lettura corretta; da riportare all'utente a fine fase A.
 - (S2, osservazione del revisore, per S22) La tolleranza di arresto di 10 s coincide con il timeout di default di `docker stop` (10 s, poi SIGKILL): da S3 in poi, con uno stream aperto, il SIGKILL diventa probabile (checkpoint saltato; recuperabile perché crash-only). Il servizio Compose del §11.6 non ha `stop_grace_period`: possibile errata per S22, da chiedere all'utente a fine fase A.
+- N-027 (S3) Codici di uscita attorno al database: un SIGTERM durante l'avvio (apertura o migrazione) è un arresto normale con uscita 0; se all'arresto un altro processo legge ancora il database, il checkpoint finale aspetta 5 s, poi `store_close` e uscita 1 (nessun dato perso).
+- (S3, suggerimento del revisore) N-023: tre PRAGMA (`journal_mode`, `optimize`, `wal_checkpoint(TRUNCATE)`) sono costanti in `internal/store/store.go`, fuori da `sql/`, perché sqlc 1.31.1 scarta i PRAGMA; I7 alla lettera ammette solo l'eccezione FTS5. Proporre all'utente un'errata a I7 (tocca un'invariante: serve la sua approvazione, §0.8).
 
 ## Errata al design
 Vedi la sezione «Errata» in fondo a DESIGN.md.
