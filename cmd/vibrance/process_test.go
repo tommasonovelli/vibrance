@@ -254,7 +254,7 @@ func wantCleanRun(t *testing.T, p *process) {
 	if p.stderr.String() != "" {
 		t.Fatalf("the server wrote to stderr:\n%s", p.stderr)
 	}
-	want := []string{"starting", "http listening", "database open", "ready", "stopping", "http server stopped", "database closed", "stopped"}
+	want := []string{"starting", "http listening", "database open", "media tools verified", "ready", "stopping", "http server stopped", "database closed", "stopped"}
 	if got := p.stdout.messages(t); !slices.Equal(got, want) {
 		t.Fatalf("log events %q, want %q", got, want)
 	}
@@ -350,7 +350,7 @@ func TestProcessKilledAndStartedAgain(t *testing.T) {
 	if ws := killed.wait(t); !ws.Signaled() || ws.Signal() != syscall.SIGKILL {
 		t.Fatalf("the server ended with %v, want killed", killed.cmd.ProcessState)
 	}
-	if got := killed.stdout.messages(t); !slices.Equal(got, []string{"starting", "http listening", "database open", "ready"}) {
+	if got := killed.stdout.messages(t); !slices.Equal(got, []string{"starting", "http listening", "database open", "media tools verified", "ready"}) {
 		t.Fatalf("log events of the killed server: %q", got)
 	}
 	if code, _ := runHealthcheck(t, addr); code != exitFailure {
@@ -573,7 +573,7 @@ func TestProcessStopCutsAnOpenRequest(t *testing.T) {
 	if p.stderr.String() != "" {
 		t.Fatalf("the server wrote to stderr:\n%s", p.stderr)
 	}
-	want := []string{"starting", "http listening", "database open", "ready", "stopping",
+	want := []string{"starting", "http listening", "database open", "media tools verified", "ready", "stopping",
 		"requests still open after the grace period: closing their connections", "http server stopped", "database closed", "stopped"}
 	if got := p.stdout.messages(t); !slices.Equal(got, want) {
 		t.Fatalf("log events %q, want %q", got, want)

@@ -119,7 +119,7 @@ type running struct {
 func startServer(t *testing.T, prepare func(*server)) *running {
 	t.Helper()
 	logs := &syncBuffer{}
-	s := newServer(newLogger(logs), t.TempDir())
+	s := newServer(newLogger(logs), t.TempDir(), testWorkers)
 	if prepare != nil {
 		prepare(s)
 	}
@@ -213,7 +213,7 @@ const (
 // again.
 func TestReadinessFollowsTheStartup(t *testing.T) {
 	var logs syncBuffer
-	s := newServer(newLogger(&logs), t.TempDir())
+	s := newServer(newLogger(&logs), t.TempDir(), testWorkers)
 	ln := listen(t)
 	base := "http://" + ln.Addr().String()
 
@@ -241,7 +241,7 @@ func TestReadinessFollowsTheStartup(t *testing.T) {
 	// already read, so only the handler can be asked.
 	wantJSON(t, serveDirectly(s, "/health/live"), 200, liveJSON)
 	wantJSON(t, serveDirectly(s, "/health/ready"), 503, shuttingDownJSON)
-	want := []string{"http listening", "database open", "ready", "http server stopped", "database closed"}
+	want := []string{"http listening", "database open", "media tools verified", "ready", "http server stopped", "database closed"}
 	if got := logs.messages(t); !slices.Equal(got, want) {
 		t.Fatalf("log events %q, want %q", got, want)
 	}
@@ -317,7 +317,7 @@ func TestStopWithNothingOpen(t *testing.T) {
 	if elapsed := time.Since(start); elapsed > shutdownGrace/2 {
 		t.Fatalf("the stop took %s with nothing open", elapsed)
 	}
-	want := []string{"http listening", "database open", "ready", "stopping", "http server stopped", "database closed"}
+	want := []string{"http listening", "database open", "media tools verified", "ready", "stopping", "http server stopped", "database closed"}
 	if got := r.logs.messages(t); !slices.Equal(got, want) {
 		t.Fatalf("log events %q, want %q", got, want)
 	}
@@ -481,7 +481,7 @@ func TestStopCutsARequestThatOutlivesTheGracePeriod(t *testing.T) {
 // that the process exits and is restarted.
 func TestRunEndsWhenTheHTTPServerStops(t *testing.T) {
 	logs := &syncBuffer{}
-	s := newServer(newLogger(logs), t.TempDir())
+	s := newServer(newLogger(logs), t.TempDir(), testWorkers)
 	ln := listen(t)
 	done := make(chan error, 1)
 	go func() { done <- s.run(t.Context(), ln) }()
@@ -509,7 +509,7 @@ func TestRunEndsWhenTheHTTPServerStops(t *testing.T) {
 
 // The limits of §11.1 are those of the server.
 func TestHTTPServerLimits(t *testing.T) {
-	s := newServer(newLogger(io.Discard), t.TempDir())
+	s := newServer(newLogger(io.Discard), t.TempDir(), testWorkers)
 	got := [...]time.Duration{s.http.ReadHeaderTimeout, s.http.ReadTimeout, s.http.WriteTimeout, s.http.IdleTimeout}
 	want := [...]time.Duration{10 * time.Second, 30 * time.Second, 30 * time.Second, 120 * time.Second}
 	if got != want {
@@ -682,7 +682,7 @@ func TestRun(t *testing.T) {
 		t.Fatalf("Run did not end within 30s; logs:\n%s", &logs)
 	}
 
-	want := []string{"starting", "http listening", "database open", "ready", "stopping", "http server stopped", "database closed", "stopped"}
+	want := []string{"starting", "http listening", "database open", "media tools verified", "ready", "stopping", "http server stopped", "database closed", "stopped"}
 	if got := logs.messages(t); !slices.Equal(got, want) {
 		t.Fatalf("log events %q, want %q", got, want)
 	}

@@ -8,8 +8,8 @@ Design: DESIGN.md (versione 0.1). Orchestratore: aggiorna questo file a ogni pas
 | S1 | Spike: le ipotesi del contratto con MusicLib reale | done | 1 | 438cb1f | 2026-10-01 · H1–H9 confermate, nessun BLOCCO |
 | S2 | Configurazione, avvio, salute e arresto | done | 1 | fb94888 | 2026-10-01 |
 | S3 | Store SQLite, migrazioni, transazioni | done | 2 | b318e5b | 2026-10-01 |
-| S4 | Ricevuta, accesso confinato e classificazione | done | 1 | (vedi git log: «Step S4») | 2026-10-01 |
-| S5 | Adapter media: processi, tag, durata, impronta | todo | | | |
+| S4 | Ricevuta, accesso confinato e classificazione | done | 1 | 653e554 | 2026-10-01 |
+| S5 | Adapter media: processi, tag, durata, impronta | done | 1 | (vedi git log: «Step S5») | 2026-10-02 |
 | S6 | Identità e riconciliazione (puro) | todo | | | |
 | S7 | Indicizzare un album | todo | | | |
 | S8 | Scanner: ciclo, trigger, stato | todo | | | |
@@ -68,6 +68,12 @@ Stati: `todo`, `in-progress`, `done`, `blocked`.
 - (S4) `receipt.go:102-134`: `schema_version` 2 con una chiave nota ripetuta dà `receipt_invalid` invece di `receipt_schema_unsupported` (il controllo dei doppioni viene prima).
 - (S4) `confinement_test.go`: non vieta `Stat` né `FS()` su `os.Root` (seguirebbero link interni); oggi coperto dai test di comportamento.
 - (S4) Un artista rinominato da MusicLib fra `Artists()` e `Albums()` compare per un ciclo come `listing_failed` (scelta prudente, N-033).
+- (S5) `-protocol_whitelist fd` è tenuto fermo solo dai test degli argomenti (`TestProbeArgs`, `TestFingerprintArgs`): la mutazione che lo toglie sopravvive ai test di comportamento (difesa in profondità: il demuxer è forzato).
+- (S5) N-036: finestra teorica sul riuso del pid in `kill(-pid)` dopo la raccolta del processo (caso peggiore: uccidere un altro nostro ffmpeg). MusicLib la chiude con `golang.org/x/sys`, che il §2.4 non ammette (è già dipendenza indiretta): da proporre all'utente.
+- (S5) `Command`, `Result`, `Runner.Run`, `ProbeTimeout`, `FingerprintTimeout` esportati ma usati solo dentro `internal/media`; `server.tools`, `Probe`, `MapTags`, `Fingerprint` usati solo dai test fino a S7/S8 (ordine del piano).
+- (S5) `TestOnlyTheRunnerStartsProcesses` vieta qualunque selettore `.Name` in `internal/media` (un futuro campo `Name` innocuo lo farebbe fallire).
+- (S5) `TestRunSemaphoreBoundsTheTools`: picco esattamente uguale agli slot con uno sleep di 0,2 s; dipende dai tempi su una macchina molto carica (20/20 con `-race`).
+- (S5, per S7) `Probe` e `Fingerprint` danno codici diversi su un file non audio (`media_not_supported` / `media_tool_failed`, N-043): S7 deve mapparli su `probe_failed` e `fingerprint_failed`, guardando prima il context.
 
 ## TO CONFIRM aperti (da riportare all'utente a fine fase)
 - N-014 (S1) Dopo un `rebuild` offline di MusicLib `.maintenance` sparisce ma `library/` resta vuota finché l'app non riparte: in quell'intervallo Vibrance vede tutti gli album non disponibili (poi tornano con gli stessi ID). Riportato all'utente a fine fase 0 (2026-10-01).
@@ -75,7 +81,8 @@ Stati: `todo`, `in-progress`, `done`, `blocked`.
 - (S2, osservazione del revisore, per S22) La tolleranza di arresto di 10 s coincide con il timeout di default di `docker stop` (10 s, poi SIGKILL): da S3 in poi, con uno stream aperto, il SIGKILL diventa probabile (checkpoint saltato; recuperabile perché crash-only). Il servizio Compose del §11.6 non ha `stop_grace_period`: possibile errata per S22, da chiedere all'utente a fine fase A.
 - N-027 (S3) Codici di uscita attorno al database: un SIGTERM durante l'avvio (apertura o migrazione) è un arresto normale con uscita 0; se all'arresto un altro processo legge ancora il database, il checkpoint finale aspetta 5 s, poi `store_close` e uscita 1 (nessun dato perso).
 - (S3, suggerimento del revisore) N-023: tre PRAGMA (`journal_mode`, `optimize`, `wal_checkpoint(TRUNCATE)`) sono costanti in `internal/store/store.go`, fuori da `sql/`, perché sqlc 1.31.1 scarta i PRAGMA; I7 alla lettera ammette solo l'eccezione FTS5. Proporre all'utente un'errata a I7 (tocca un'invariante: serve la sua approvazione, §0.8).
-- N-033 (S4) Codici di problema scelti dove il §6.5 tace: ricevuta oltre 16 MiB → `receipt_too_large`; ricevuta illeggibile, non regolare o link → `receipt_invalid`; cartella album sparita fra elenco e lettura → nessun problema; cartella artista sparita → `listing_failed`; nomi che MusicLib non può scrivere (``, non UTF-8) → esclusi dagli elenchi senza problema.
+- N-033 (S4) Codici di problema scelti dove il §6.5 tace: ricevuta oltre 16 MiB → `receipt_too_large`; ricevuta illeggibile, non regolare o link → `receipt_invalid`; cartella album sparita fra elenco e lettura → nessun problema; cartella artista sparita → `listing_failed`; nomi che MusicLib non può scrivere (barra rovesciata, non UTF-8) → esclusi dagli elenchi senza problema.
+- N-040 (S5) ffprobe non dichiara il bitrate dello stream FLAC: `format.bitrate` di una traccia FLAC sarà `null` nell'API. Alternativa: il bitrate dell'intero file (conta anche cover e tag).
 
 ## Errata al design
 Vedi la sezione «Errata» in fondo a DESIGN.md.

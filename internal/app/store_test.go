@@ -211,7 +211,7 @@ func TestStartupRefusals(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			stateDir := tc.prepare(t, t.TempDir())
 			logs := &syncBuffer{}
-			s := newServer(newLogger(logs), stateDir)
+			s := newServer(newLogger(logs), stateDir, testWorkers)
 			ln := listen(t)
 
 			done := make(chan error, 1)
@@ -255,7 +255,7 @@ func TestStartupRefusals(t *testing.T) {
 func TestStopDuringTheStartup(t *testing.T) {
 	logs := &syncBuffer{}
 	dir := t.TempDir()
-	s := newServer(newLogger(logs), dir)
+	s := newServer(newLogger(logs), dir, testWorkers)
 	ln := listen(t)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()

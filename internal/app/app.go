@@ -14,6 +14,7 @@ import (
 
 	"vibrance/internal/buildinfo"
 	"vibrance/internal/config"
+	"vibrance/internal/media"
 	"vibrance/internal/store"
 )
 
@@ -45,7 +46,8 @@ const (
 const shutdownGrace = 10 * time.Second
 
 // Error is a failure of the server, with its stable code: one of this
-// package, or that of the failure of the store it wraps.
+// package, or that of the failure of the store or of the media tools it
+// wraps.
 type Error struct {
 	Code string
 	Msg  string
@@ -102,7 +104,7 @@ func Run(ctx context.Context, getenv func(string) string, euid, cpus int, stateD
 	if err != nil {
 		return &Error{Code: CodeHTTPListen, Msg: "cannot listen on " + cfg.HTTPAddr, Err: err}
 	}
-	if err := newServer(log, stateDir).run(ctx, ln); err != nil {
+	if err := newServer(log, stateDir, cfg.Workers).run(ctx, ln); err != nil {
 		return err
 	}
 	log.Info("stopped")
@@ -136,12 +138,22 @@ type server struct {
 	stateDir string
 	// store is the database, from step 3 of the startup on.
 	store *store.Store
+	// workers is VIBRANCE_WORKERS: how many ffmpeg and ffprobe processes
+	// run at once.
+	workers int
+	// ffmpegPath and ffprobePath are media.FFmpegPath and
+	// media.FFprobePath; only the tests point them elsewhere.
+	ffmpegPath, ffprobePath string
+	// tools is the adapter of ffmpeg and ffprobe, from step 4 of the
+	// startup on.
+	tools *media.Tools
 	// grace is shutdownGrace; only the tests shorten it.
 	grace time.Duration
 }
 
-func newServer(log *slog.Logger, stateDir string) *server {
-	s := &server{log: log, stateDir: stateDir, grace: shutdownGrace}
+func newServer(log *slog.Logger, stateDir string, workers int) *server {
+	s := &server{log: log, stateDir: stateDir, grace: shutdownGrace,
+		workers: workers, ffmpegPath: media.FFmpegPath, ffprobePath: media.FFprobePath}
 	s.http = &http.Server{
 		Handler:           s.routes(),
 		ReadHeaderTimeout: readHeaderTimeout,
@@ -198,11 +210,11 @@ func (s *server) serveHTTP(ln net.Listener) <-chan error {
 //	Step 3: check that the state folder is writable, open the database,
 //	        apply the migrations (state_unwritable, store_open,
 //	        store_schema_too_new, store_migrate).
+//	Step 4: verify ffmpeg and ffprobe at the pinned version
+//	        (media_tool_unavailable, media_tool_version).
 //
 // The steps below arrive with the components they start:
 //
-//	Step 4: verify ffmpeg and ffprobe at the pinned version
-//	        (media_tool_unavailable, media_tool_version).
 //	Step 5: create the admin if there is no user (admin_password_missing,
 //	        admin_password_invalid).
 //	Step 6: check meta.collate_version and meta.ffmpeg_version; delete the
@@ -213,6 +225,9 @@ func (s *server) serveHTTP(ln net.Listener) <-chan error {
 // the state of the index (I14).
 func (s *server) startup(ctx context.Context) error {
 	if err := s.openStore(ctx); err != nil {
+		return err
+	}
+	if err := s.checkTools(ctx); err != nil {
 		return err
 	}
 	s.state.Store(stateReady)
@@ -231,6 +246,21 @@ func (s *server) openStore(ctx context.Context) error {
 	}
 	s.store = st
 	s.log.Info("database open")
+	return nil
+}
+
+// checkTools is step 4 of the startup: ffmpeg and ffprobe must be there,
+// at the pinned version. They are the tools that verified the audio when
+// MusicLib wrote the library, and a fingerprint is comparable only with
+// those of the same ffmpeg (§5.4): the server does not start with others.
+// The Runner made here is the one of the whole server.
+func (s *server) checkTools(ctx context.Context) error {
+	tools, err := media.NewTools(ctx, media.NewRunner(s.workers), s.ffmpegPath, s.ffprobePath)
+	if err != nil {
+		return &Error{Code: media.Code(err), Msg: "checking ffmpeg and ffprobe", Err: err}
+	}
+	s.tools = tools
+	s.log.Info("media tools verified", "version", tools.Version())
 	return nil
 }
 

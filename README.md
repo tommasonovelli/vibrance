@@ -2,7 +2,7 @@
 
 Vibrance is the listening side of [Vibrance MusicLib](https://github.com/tommasonovelli/vibrance-musiclib). It is a read-only server over the `library/` folder that MusicLib produces, with multiple users, favorites, playlists, full-text search and an HTTP API documented with OpenAPI. The two products share only that folder.
 
-**Status:** in development toward v0.1. So far the server starts, creates and migrates its SQLite database, answers its health endpoints and stops; it has no library and no API yet.
+**Status:** in development toward v0.1. So far the server starts, creates and migrates its SQLite database, checks its `ffmpeg` and `ffprobe`, answers its health endpoints and stops; it has no library and no API yet.
 
 ## Trying it
 
@@ -33,7 +33,7 @@ The server is configured only through its environment. An invalid configuration 
 | `VIBRANCE_PUBLIC_ORIGIN` | none: required | The exact origin clients reach the server with, `scheme://host[:port]`: lowercase, no trailing slash, no default port. |
 | `VIBRANCE_HTTP_ADDR` | `:8080` | The listen address in the container. |
 | `VIBRANCE_SCAN_INTERVAL` | `5m` | A Go duration, `30s` or longer. |
-| `VIBRANCE_WORKERS` | `max(1, min(4, CPUs))` | From 1 to 16. |
+| `VIBRANCE_WORKERS` | `max(1, min(4, CPUs))` | From 1 to 16: the `ffmpeg` and `ffprobe` processes that run at once. |
 
 Logs are JSON lines on stdout. On SIGTERM or SIGINT the server waits up to 10 seconds for the open requests, then closes their connections, closes the database and exits with code 0.
 
@@ -56,6 +56,17 @@ The schema is in `migrations/` (goose, embedded in the binary), the queries in `
 - The gate tests a snapshot of the tree taken when the `test` image is built. `dev.sh` works on the live sources.
 - Two scripts run the real MusicLib 1.1.0, in the Compose project `vibrance-spike` (new volumes, random passwords, no published port), and delete that project when they end; they need network access. `scripts/make-fixture-library.sh` regenerates the fixture library `testdata/library-v1/` (see `testdata/FIXTURE.md`); `scripts/spike.sh` checks what Vibrance assumes about MusicLib and writes `docs/spike-report.md`.
 - The containers run as your uid and gid (`VIBRANCE_DEV_UID`/`VIBRANCE_DEV_GID` override them, `0` is refused). `GATE_TEST_TIMEOUT` sets the `go test -timeout` of the gate (default `15m`).
+
+## The media tools
+
+Vibrance reads the tags of the tracks with `ffprobe` and computes their audio fingerprint with `ffmpeg` (`internal/media`; the scanner that uses them is not there yet). Both are in the image, at `/usr/local/bin`, and are the tools MusicLib verified the audio with. At every start, after the database is open and before it is ready, the server runs `ffmpeg -version` and `ffprobe -version` and refuses any version other than `8.1.3-musiclib1`. A refusal stops it with exit code 1 and one log line:
+
+| `code` | Meaning |
+|---|---|
+| `media_tool_unavailable` | `ffmpeg` or `ffprobe` cannot be started, or does not print its version. |
+| `media_tool_version` | The tool is not the pinned version: the image was built with other binaries. |
+
+At most `VIBRANCE_WORKERS` of these processes run at once. Each one gets the file it reads as an open descriptor, never as a path, runs with a timeout, and is killed with everything it started when the timeout passes, when the server stops, or if the server is killed.
 
 ## Pinned versions
 
