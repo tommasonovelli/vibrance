@@ -70,3 +70,27 @@ Visible effect: between the end of an offline rebuild and MusicLib's re-render, 
 ## N-015 · Facts the spike established for S4 and S5 — DECIDED
 Step: S1. See `docs/spike-report.md`. ffprobe keys: FLAC `TITLE`, `ARTIST`, `album_artist`, `ALBUM`, `track`, `TRACKTOTAL`, `disc`, `DISCTOTAL`, `DATE`, `GENRE`, `COMPILATION`, `REPLAYGAIN_*`; MP3 and M4A lowercase generic keys with the totals inside `track`/`disc` (`2/2`), ReplayGain as `REPLAYGAIN_*` (MP3, TXXX) and `replaygain_*` (M4A). The cover also stays as `Extras/cover.jpg`. An artist rename and a trash/restore each raise `album_revision`; a forced render does not. The hash muxer refuses an MP3 attached picture ("dimensions not set"): do not hash covers with it. The fingerprint costs a SHA-256 of the packets (about 260 ms for 50 MB here).
 Reason: recorded once, for the steps that implement them. Visible effect: none.
+
+## N-016 · Where the first two startup steps live — DECIDED
+Step: S2. `app.Run(ctx, getenv, euid, cpus, log)` runs steps 1 and 2 of §11.2 and the stop; steps 3–7 and the later stop steps are listed as comments in `startup` and `shutdown`, where their code will go. `cmd/vibrance serve` only sets umask 022, turns SIGTERM and SIGINT into a cancelled context, logs the returned error once with its code, and picks the exit code: 2 for `run_as_root` and `config_invalid`, 1 for anything later. Root is refused before the configuration is read (one refusal, one log line). `syscall.Umask` makes `cmd/vibrance` build on Unix only (§3.5: Linux).
+Reason: the step puts steps 1–2 in `internal/app`; signals and the umask belong to the process. Visible effect: none beyond the step.
+
+## N-017 · `http_listen`, and the exit code of a stop that cuts requests — DECIDED
+Step: S2. Context: §11.2 names no code for an address that cannot be listened on, and does not say how the process exits when the 10 seconds pass with requests still open. Choice: `http_listen` with exit 1, as in MusicLib, also when the HTTP server stops by itself. A stop that has to close open connections after the grace period logs one `WARN` line and still exits 0 (MusicLib exits 1 there).
+Reason: §11.2 describes the forced close as part of the normal stop ("gli stream in corso si interrompono"), and a listener in the middle of a track is the usual case for Vibrance. Visible effect: the exit code of `docker stop` with a stream open is 0.
+
+## N-018 · Health and `/` before the HTTP boundary exists — DECIDED
+Step: S2. `/health/ready` answers `503 not_ready` during the startup and `503 shutting_down` once the stop begins (§8.4). The second is hardly ever seen: net/http closes the listener and drops any request it reads after `Shutdown` began, so only a request already in its handler gets it. Bodies are `{"status":…}` or `{code, message, details: {}}` with `Content-Type: application/json`. `GET /` answers `302` to `/api/docs` (not 301: browsers cache it, and `/` is where the web interface will be). Unknown paths and wrong methods still get net/http's plain-text 404 and 405. The headers of §7.6, the JSON 404 and 405, `X-Request-Id` and the access log arrive with the S12 middleware, and `/api/docs` with S20.
+Reason: I16; S12 owns the error model and the boundary. Visible effect: until S12, 404 and 405 are plain text and responses lack the §7.6 headers.
+
+## N-019 · Configuration rules the design leaves open — DECIDED
+Step: S2. An empty variable is an unset one (Compose passes `${VAR:-}`). `VIBRANCE_HTTP_ADDR` is `host:port` with a decimal port in 1..65535 and an optional host, as in MusicLib. `VIBRANCE_SCAN_INTERVAL` is any value `time.ParseDuration` accepts, at least `30s`, with no upper bound. `VIBRANCE_WORKERS` is a plain decimal integer (no sign, no leading zero). An origin with user information is refused without repeating the value, which may hold a password. `ScanInterval` and `Workers` are validated and logged at startup now; S5 and S8 consume them. The admin variables are not read until S13.
+Reason: the most literal reading of §11.1 and MusicLib's rules. Visible effect: none.
+
+## N-020 · `vibrance healthcheck` — DECIDED
+Step: S2. It reads only `VIBRANCE_HTTP_ADDR` (an empty or unspecified host becomes the loopback address), does not follow redirects, uses no proxy, and is healthy only for a `200`. A failure writes one `ERROR` line on stdout with code `unhealthy`, or `config_invalid` for an invalid address, and exits 1 in both cases: Docker defines only 0 and 1 for a healthcheck. `vibrance healthcheck extra` is a usage error, exit 2.
+Reason: §11.3 and MusicLib's subcommand. Visible effect: none.
+
+## N-021 · How S2 tests the process — DECIDED
+Step: S2. The process tests of `cmd/vibrance` build the package once with `go build -race` and run that binary with real signals; a data race in the child shows on its stderr and in its exit code. The uid is a parameter of `run` and `app.Run`, because the gate container runs as an unprivileged user and cannot start a root process: `run_as_root` is tested in-process with uid 0, and was checked by hand with `docker run --user 0:0` on the runtime image. `server.grace` exists so that the in-package test of the forced close takes 300 ms; `TestProcessStopCutsAnOpenRequest` runs the real 10 seconds. The runtime image keeps `CMD ["version"]` until S22, which makes `serve` the default.
+Reason: real processes where they matter (§12.1), without privileges the gate does not have. Visible effect: none.

@@ -149,5 +149,6 @@ COPY --from=build-app --chown=root:root /home/dev/out/vibrance /usr/local/bin/vi
 USER ${APP_UID}:${APP_GID}
 WORKDIR /
 ENTRYPOINT ["/usr/local/bin/vibrance"]
-# For now the only subcommand (DESIGN.md S0); the server replaces it.
+# The server is `vibrance serve`. It becomes the default command together
+# with the Compose stack (DESIGN.md S22).
 CMD ["version"]

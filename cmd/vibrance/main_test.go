@@ -5,16 +5,33 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
+	"net"
 	"os/exec"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 )
 
+// noEnv is an empty environment, and nonRoot the uid of an ordinary user.
+func noEnv(string) string { return "" }
+
+const nonRoot = 1000
+
+func env(m map[string]string) func(string) string {
+	return func(k string) string { return m[k] }
+}
+
+func newLogger(w io.Writer) *slog.Logger {
+	return slog.New(slog.NewJSONHandler(w, nil))
+}
+
 func TestVersion(t *testing.T) {
 	var stdout, logs bytes.Buffer
-	code := run([]string{"version"}, &stdout, slog.New(slog.NewJSONHandler(&logs, nil)))
+	code := run([]string{"version"}, noEnv, nonRoot, &stdout, newLogger(&logs))
 	if code != exitOK {
 		t.Fatalf("exit code %d, want %d", code, exitOK)
 	}
@@ -26,21 +43,27 @@ func TestVersion(t *testing.T) {
 	}
 }
 
-// Anything but exactly `version` is refused before doing anything, with exit
-// code 2 and one error line with the stable code "usage" (§11.4).
+// Anything but exactly one known subcommand is refused before doing
+// anything, with exit code 2 and one error line with the stable code
+// "usage" (§11.4).
 func TestUsage(t *testing.T) {
 	for _, args := range [][]string{
 		nil,
 		{},
 		{""},
-		{"serve"},
 		{"Version"},
 		{"--version"},
+		{"--help"},
 		{"version", "extra"},
 		{"extra", "version"},
+		{"Serve"},
+		{"serve", "extra"},
+		{"serve", "--help"},
+		{"healthcheck", "extra"},
+		{"healthcheck", "serve"},
 	} {
 		var stdout, logs bytes.Buffer
-		code := run(args, &stdout, slog.New(slog.NewJSONHandler(&logs, nil)))
+		code := run(args, noEnv, nonRoot, &stdout, newLogger(&logs))
 		if code != exitUsage {
 			t.Errorf("%q: exit code %d, want %d", args, code, exitUsage)
 		}
@@ -54,7 +77,7 @@ func TestUsage(t *testing.T) {
 // A version that cannot be written is a failure (exit 1), never a success.
 func TestVersionWriteFails(t *testing.T) {
 	var logs bytes.Buffer
-	code := run([]string{"version"}, failingWriter{}, slog.New(slog.NewJSONHandler(&logs, nil)))
+	code := run([]string{"version"}, noEnv, nonRoot, failingWriter{}, newLogger(&logs))
 	if code != exitFailure {
 		t.Fatalf("exit code %d, want %d", code, exitFailure)
 	}
@@ -97,8 +120,8 @@ func TestStampedBinary(t *testing.T) {
 }
 
 // wantLog checks that logs is exactly one JSON line at level ERROR with the
-// given code.
-func wantLog(t *testing.T, logs []byte, code string) {
+// given code, and returns its message.
+func wantLog(t *testing.T, logs []byte, code string) string {
 	t.Helper()
 	lines := bytes.Split(bytes.TrimSuffix(logs, []byte("\n")), []byte("\n"))
 	if len(lines) != 1 {
@@ -106,6 +129,7 @@ func wantLog(t *testing.T, logs []byte, code string) {
 	}
 	var entry struct {
 		Level string `json:"level"`
+		Msg   string `json:"msg"`
 		Code  string `json:"code"`
 	}
 	if err := json.Unmarshal(lines[0], &entry); err != nil {
@@ -114,8 +138,67 @@ func wantLog(t *testing.T, logs []byte, code string) {
 	if entry.Level != "ERROR" || entry.Code != code {
 		t.Fatalf("log line %q: level %q code %q, want ERROR %q", lines[0], entry.Level, entry.Code, code)
 	}
+	return entry.Msg
 }
 
 type failingWriter struct{}
 
 func (failingWriter) Write([]byte) (int, error) { return 0, errors.New("write failed") }
+
+// syncBuffer is an io.Writer safe for the concurrent writes of a child
+// process and the reads of a test.
+type syncBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+
+func (s *syncBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.String()
+}
+
+// events parses the JSON log lines.
+func (s *syncBuffer) events(t *testing.T) []map[string]any {
+	t.Helper()
+	var out []map[string]any
+	for line := range strings.Lines(s.String()) {
+		var ev map[string]any
+		if err := json.Unmarshal([]byte(line), &ev); err != nil {
+			t.Fatalf("log line %q is not JSON: %v", line, err)
+		}
+		out = append(out, ev)
+	}
+	return out
+}
+
+// messages returns the "msg" of every log event, in order.
+func (s *syncBuffer) messages(t *testing.T) []string {
+	t.Helper()
+	var out []string
+	for _, ev := range s.events(t) {
+		msg, _ := ev["msg"].(string)
+		out = append(out, msg)
+	}
+	return out
+}
+
+// freeAddr returns a loopback address with nothing listening on it.
+func freeAddr(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := ln.Addr().String()
+	if err := ln.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return addr
+}
