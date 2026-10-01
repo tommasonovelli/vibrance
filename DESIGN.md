@@ -1676,3 +1676,5 @@ Le voci `TO CONFIRM` si riportano all'utente (§0.11) e, una volta decise, diven
 ## Errata
 
 *(L'orchestratore aggiunge qui, con data, passo e testo, le chiarificazioni decise secondo il §0.10. Non si modifica il testo sopra.)*
+
+- **2026-10-01 · S4 · firma di `Discover`.** Il passo S4 scrive `Discover(ctx, root)`; la firma realizzata e approvata è `Discover(ctx, root, registered)`, dove `registered` è la mappa `album_id → rel_path` delle cartelle già presenti nell'indice. Serve al secondo spareggio del §6.2 («a parità, quella già registrata nell'indice»): `Discover` non accede al database, la mappa la fornisce il chiamante (lo scanner di S8). Nessun effetto su API, invarianti, scope o decisioni (NOTES.md N-032).

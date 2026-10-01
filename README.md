@@ -14,6 +14,7 @@ scripts/check.sh ./internal/media/...   # the gate on one package tree
 scripts/dev.sh                   # a shell in the toolchain container, on the live sources
 scripts/dev.sh go test -race -count=20 -run TestX ./internal/media
 scripts/lint-shell.sh            # shellcheck on every shell script
+scripts/fuzz.sh FuzzParseReceipt 60s ./internal/library   # one fuzz target, for a duration, on the live sources
 scripts/sqlc.sh                  # regenerate internal/store from sql/ and the migrations (sqlc.sh diff: only compare)
 
 docker build --target runtime -t vibrance:local .

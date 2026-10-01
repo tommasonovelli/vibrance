@@ -7,8 +7,8 @@ Design: DESIGN.md (versione 0.1). Orchestratore: aggiorna questo file a ogni pas
 | S0 | Bootstrap del repository e toolchain | done | 2 | b68c8e1 | 2026-09-30 |
 | S1 | Spike: le ipotesi del contratto con MusicLib reale | done | 1 | 438cb1f | 2026-10-01 · H1–H9 confermate, nessun BLOCCO |
 | S2 | Configurazione, avvio, salute e arresto | done | 1 | fb94888 | 2026-10-01 |
-| S3 | Store SQLite, migrazioni, transazioni | done | 2 | (vedi git log: «Step S3») | 2026-10-01 |
-| S4 | Ricevuta, accesso confinato e classificazione | todo | | | |
+| S3 | Store SQLite, migrazioni, transazioni | done | 2 | b318e5b | 2026-10-01 |
+| S4 | Ricevuta, accesso confinato e classificazione | done | 1 | (vedi git log: «Step S4») | 2026-10-01 |
 | S5 | Adapter media: processi, tag, durata, impronta | todo | | | |
 | S6 | Identità e riconciliazione (puro) | todo | | | |
 | S7 | Indicizzare un album | todo | | | |
@@ -62,6 +62,12 @@ Stati: `todo`, `in-progress`, `done`, `blocked`.
 - (S3) `tx.go`: il nome `endOf` dice poco (`withContextErr`); commento a `tx_test.go:264-267` poco leggibile.
 - (S3, per S12+) A context finito l'errore di `fn` soddisfa `errors.Is` sia per il context sia per la causa (p. es. `sql.ErrNoRows`): i handler devono controllare prima il context, altrimenti un client disconnesso può diventare un 404 (N-029).
 - (S3, per S13/S21) Un `BEGIN IMMEDIATE` in attesa del lock di un altro processo non è interrotto dal context e dura fino ai 5 s di `busy_timeout` (N-029); `VACUUM INTO` è rifiutato su una connessione `query_only` (N-028).
+- (S4) `internal/library/root.go:122`: nessun test fallisce se si toglie `io.LimitReader` da `ReadReceipt` (è provato il rifiuto oltre 16 MiB, non che la lettura si ferma). Rimedio: ricevuta sparsa enorme (`os.Truncate`) rifiutata subito.
+- (S4, per S8/S24) `Discovery.Candidates` tiene in memoria le ricevute di tutti gli album (~200 byte per file): da misurare rispetto a T30.
+- (S4) `discover_test.go:515`: in `TestDiscoverWhileAnAlbumIsRenamed` il controllo `count > 1` non può mai scattare (la mappa deduplica).
+- (S4) `receipt.go:102-134`: `schema_version` 2 con una chiave nota ripetuta dà `receipt_invalid` invece di `receipt_schema_unsupported` (il controllo dei doppioni viene prima).
+- (S4) `confinement_test.go`: non vieta `Stat` né `FS()` su `os.Root` (seguirebbero link interni); oggi coperto dai test di comportamento.
+- (S4) Un artista rinominato da MusicLib fra `Artists()` e `Albums()` compare per un ciclo come `listing_failed` (scelta prudente, N-033).
 
 ## TO CONFIRM aperti (da riportare all'utente a fine fase)
 - N-014 (S1) Dopo un `rebuild` offline di MusicLib `.maintenance` sparisce ma `library/` resta vuota finché l'app non riparte: in quell'intervallo Vibrance vede tutti gli album non disponibili (poi tornano con gli stessi ID). Riportato all'utente a fine fase 0 (2026-10-01).
@@ -69,6 +75,8 @@ Stati: `todo`, `in-progress`, `done`, `blocked`.
 - (S2, osservazione del revisore, per S22) La tolleranza di arresto di 10 s coincide con il timeout di default di `docker stop` (10 s, poi SIGKILL): da S3 in poi, con uno stream aperto, il SIGKILL diventa probabile (checkpoint saltato; recuperabile perché crash-only). Il servizio Compose del §11.6 non ha `stop_grace_period`: possibile errata per S22, da chiedere all'utente a fine fase A.
 - N-027 (S3) Codici di uscita attorno al database: un SIGTERM durante l'avvio (apertura o migrazione) è un arresto normale con uscita 0; se all'arresto un altro processo legge ancora il database, il checkpoint finale aspetta 5 s, poi `store_close` e uscita 1 (nessun dato perso).
 - (S3, suggerimento del revisore) N-023: tre PRAGMA (`journal_mode`, `optimize`, `wal_checkpoint(TRUNCATE)`) sono costanti in `internal/store/store.go`, fuori da `sql/`, perché sqlc 1.31.1 scarta i PRAGMA; I7 alla lettera ammette solo l'eccezione FTS5. Proporre all'utente un'errata a I7 (tocca un'invariante: serve la sua approvazione, §0.8).
+- N-033 (S4) Codici di problema scelti dove il §6.5 tace: ricevuta oltre 16 MiB → `receipt_too_large`; ricevuta illeggibile, non regolare o link → `receipt_invalid`; cartella album sparita fra elenco e lettura → nessun problema; cartella artista sparita → `listing_failed`; nomi che MusicLib non può scrivere (``, non UTF-8) → esclusi dagli elenchi senza problema.
 
 ## Errata al design
 Vedi la sezione «Errata» in fondo a DESIGN.md.
+- 2026-10-01 · S4 · firma `Discover(ctx, root, registered)` (N-032).
