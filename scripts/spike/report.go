@@ -1,0 +1,175 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"time"
+)
+
+// Verdicts of a hypothesis (DESIGN.md §14, S1: CONFERMATA / FALSA).
+const (
+	confirmed = "CONFIRMED"
+	falsified = "FALSE"
+)
+
+// fragment is one section of docs/spike-report.md, in Markdown.
+type fragment struct {
+	b strings.Builder
+}
+
+func (f *fragment) heading(format string, args ...any) {
+	fmt.Fprintf(&f.b, "\n### "+format+"\n\n", args...)
+}
+
+func (f *fragment) para(format string, args ...any) {
+	fmt.Fprintf(&f.b, format+"\n\n", args...)
+}
+
+// command records a command line and its real output.
+func (f *fragment) command(cmdline, output string) {
+	output = strings.TrimRight(output, "\n")
+	f.b.WriteString("```console\n$ " + cmdline + "\n")
+	if output != "" {
+		f.b.WriteString(output + "\n")
+	}
+	f.b.WriteString("```\n\n")
+}
+
+// table writes a Markdown table. Cells must not contain newlines; pipes are
+// escaped.
+func (f *fragment) table(header []string, rows [][]string) {
+	esc := func(s string) string { return strings.ReplaceAll(s, "|", `\|`) }
+	f.b.WriteString("| " + strings.Join(header, " | ") + " |\n|")
+	for range header {
+		f.b.WriteString("---|")
+	}
+	f.b.WriteString("\n")
+	for _, r := range rows {
+		cells := make([]string, len(r))
+		for i, c := range r {
+			cells[i] = esc(c)
+		}
+		f.b.WriteString("| " + strings.Join(cells, " | ") + " |\n")
+	}
+	f.b.WriteString("\n")
+}
+
+// save writes the fragment as /work/fragments/<name>.md; the report orders
+// fragments by name.
+func (f *fragment) save(name string) error {
+	return writeWorkFile(filepath.Join("fragments", name+".md"), []byte(f.b.String()))
+}
+
+// verdict records the verdict of one checked claim as
+// /work/verdicts/<name>: "<verdict>\t<summary>".
+func verdict(name string, ok bool, summary string) error {
+	v := confirmed
+	if !ok {
+		v = falsified
+	}
+	return writeWorkFile(filepath.Join("verdicts", name), []byte(v+"\t"+summary))
+}
+
+func writeWorkFile(rel string, data []byte) error {
+	p := filepath.Join(workRoot, rel)
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		return fmt.Errorf("creating %s: %w", filepath.Dir(p), err)
+	}
+	if err := os.WriteFile(p, data, 0o644); err != nil {
+		return fmt.Errorf("writing %s: %w", p, err)
+	}
+	return nil
+}
+
+// reportPath is where `report` writes, relative to the repository.
+const reportPath = "docs/spike-report.md"
+
+// runReport assembles docs/spike-report.md from the verdicts and fragments
+// under /work. It fails if a verdict is missing a fragment or the reverse,
+// so a partial run never produces a complete-looking report.
+func runReport(_ context.Context) error {
+	verdicts, err := readDir(filepath.Join(workRoot, "verdicts"))
+	if err != nil {
+		return err
+	}
+	fragments, err := readDir(filepath.Join(workRoot, "fragments"))
+	if err != nil {
+		return err
+	}
+	if len(verdicts) == 0 || len(fragments) == 0 {
+		return errors.New("no verdicts or fragments under /work: run the other subcommands first")
+	}
+	meta, err := os.ReadFile(filepath.Join(workRoot, "meta.md"))
+	if err != nil {
+		return fmt.Errorf("reading the run metadata: %w", err)
+	}
+
+	var b strings.Builder
+	b.WriteString(reportHeader)
+	b.WriteString(strings.TrimRight(string(meta), "\n") + "\n\n")
+	b.WriteString("## Summary\n\n| Claim | Verdict | Evidence |\n|---|---|---|\n")
+	failed := 0
+	for _, name := range verdicts {
+		raw, err := os.ReadFile(filepath.Join(workRoot, "verdicts", name))
+		if err != nil {
+			return fmt.Errorf("reading verdict %s: %w", name, err)
+		}
+		v, summary, ok := strings.Cut(string(raw), "\t")
+		if !ok || (v != confirmed && v != falsified) {
+			return fmt.Errorf("verdict %s is malformed: %q", name, raw)
+		}
+		if v == falsified {
+			failed++
+		}
+		fmt.Fprintf(&b, "| %s | **%s** | %s |\n", name, v, strings.ReplaceAll(summary, "|", `\|`))
+	}
+	b.WriteString("\n")
+	for _, name := range fragments {
+		raw, err := os.ReadFile(filepath.Join(workRoot, "fragments", name))
+		if err != nil {
+			return fmt.Errorf("reading fragment %s: %w", name, err)
+		}
+		b.WriteString(strings.TrimRight(string(raw), "\n") + "\n")
+	}
+	out := filepath.Join(srcRoot, reportPath)
+	if err := os.WriteFile(out, []byte(b.String()), 0o644); err != nil {
+		return fmt.Errorf("writing %s: %w", out, err)
+	}
+	fmt.Printf("wrote %s: %d claims, %d false\n", reportPath, len(verdicts), failed)
+	if failed > 0 {
+		return fmt.Errorf("%d claims are false: see %s", failed, reportPath)
+	}
+	return nil
+}
+
+// readDir returns the names of the regular files in dir, sorted.
+func readDir(dir string) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, fmt.Errorf("listing %s: %w", dir, err)
+	}
+	var names []string
+	for _, e := range entries {
+		if e.Type().IsRegular() {
+			names = append(names, e.Name())
+		}
+	}
+	slices.Sort(names)
+	return names, nil
+}
+
+const reportHeader = `# Spike S1: the contract with the real MusicLib
+
+This report is generated by ` + "`scripts/spike.sh`" + ` (the program in ` + "`scripts/spike/`" + `), which runs the published MusicLib 1.1.0 in the Compose project ` + "`vibrance-spike`" + `, imports the input albums of ` + "`DESIGN.md`" + ` §12.2, changes them through MusicLib's API and reads the result the way Vibrance will: MusicLib's data volume mounted read-only at ` + "`/musiclib`" + `, and the pinned ` + "`ffmpeg`" + `/` + "`ffprobe`" + `. Every command and output below is real, copied from the run. Do not edit this file by hand: run the script again.
+
+Commands that read a file pass it on descriptor 3, as Vibrance does (` + "`DESIGN.md`" + ` T2); ` + "`3<'path'`" + ` is the equivalent shell redirection, so each command can be repeated as shown inside the tools container (` + "`/musiclib/library/...`" + `).
+
+`
+
+// stamp is the UTC time of the run, for the metadata.
+func stamp() string { return time.Now().UTC().Format(time.RFC3339) }

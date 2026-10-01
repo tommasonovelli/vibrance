@@ -4,8 +4,8 @@ Design: DESIGN.md (versione 0.1). Orchestratore: aggiorna questo file a ogni pas
 
 | Passo | Titolo | Stato | Round | Commit | Note |
 |---|---|---|---|---|---|
-| S0 | Bootstrap del repository e toolchain | done | 2 | (vedi git log: «Step S0») | 2026-09-30 |
-| S1 | Spike: le ipotesi del contratto con MusicLib reale | todo | | | |
+| S0 | Bootstrap del repository e toolchain | done | 2 | b68c8e1 | 2026-09-30 |
+| S1 | Spike: le ipotesi del contratto con MusicLib reale | done | 1 | (vedi git log: «Step S1») | 2026-10-01 · H1–H9 confermate, nessun BLOCCO |
 | S2 | Configurazione, avvio, salute e arresto | todo | | | |
 | S3 | Store SQLite, migrazioni, transazioni | todo | | | |
 | S4 | Ricevuta, accesso confinato e classificazione | todo | | | |
@@ -36,10 +36,19 @@ Stati: `todo`, `in-progress`, `done`, `blocked`.
 ## Debiti (nit non bloccanti del revisore)
 - (S0) CLAUDE.md/AGENTS.md: il riassunto di I13 omette che prima di S25 una migrazione si può correggere dichiarandolo in NOTES (più severo del §2.3).
 - (S0) `.gitignore` senza `/.claude/worktrees/` (MusicLib lo ha; `.dockerignore` esclude già `/.claude/`).
-- (S0) `.gitattributes` senza marcatori `binary` per i fixture audio (da valutare in S1).
+- (S0) ~~`.gitattributes` senza marcatori `binary` per i fixture audio~~ — chiuso in S1 (`/testdata/library-v1/** -text`).
 - (S0) Intestazione di `docker/gate.sh`: non dice che la build scarta l'output.
+- (S1) `scripts/spike/report.go` (`runReport`): frammenti uniti senza riga vuota prima del titolo successivo (estetica del Markdown in `docs/spike-report.md`).
+- (S1) `scripts/spike/inputs.go:89`: snapshot Debian via `http://` mentre MusicLib usa `https://`; il commento dice «the same snapshot».
+- (S1) `scripts/spike/inputs.go` (`ffmpegGenerate`): non azzera `cmd.Env` (eredita `MUSICLIB_PASSWORD`) e non limita stderr.
+- (S1) `scripts/spike/receipt.go:154` (`scanLibrary`): errore se una cartella artista sparisce fra due `ReadDir` (fallimento rumoroso sporadico, mai falso CONFIRMED).
+- (S1) `scripts/spike.sh:104`: `docker stop --time 30` è un alias deprecato; meglio `-t 30`.
+- (S1) `docs/spike-report.md`, H5: non dice che «non aumenta per un cambio di `render_version`» non è verificabile con una sola versione di MusicLib; H6: l'arrotondamento per difetto è provato solo da `TestDurationMS`.
+- (S1) `scripts/spike/rebuild.go:113-116`: qualunque errore di `ReadDir` conta come «absent».
+- (S1, osservazione) I file M4A di due esecuzioni indipendenti hanno SHA-256 diversi a parità di input (impronta identica); origine non indagata.
 
 ## TO CONFIRM aperti (da riportare all'utente a fine fase)
+- N-014 (S1) Dopo un `rebuild` offline di MusicLib `.maintenance` sparisce ma `library/` resta vuota finché l'app non riparte: in quell'intervallo Vibrance vede tutti gli album non disponibili (poi tornano con gli stessi ID). Riportato all'utente a fine fase 0 (2026-10-01).
 
 ## Errata al design
 Vedi la sezione «Errata» in fondo a DESIGN.md.

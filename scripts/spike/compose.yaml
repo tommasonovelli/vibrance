@@ -1,0 +1,132 @@
+# Vibrance: the Compose project of the S1 spike (DESIGN.md §14, S1) and of
+# the fixture library (DESIGN.md §12.2). It runs the REAL MusicLib 1.1.0 next
+# to a toolchain container that reads MusicLib's data volume read-only.
+#
+# Used only by scripts/make-fixture-library.sh and scripts/spike.sh, always
+# as the project `vibrance-spike` (DESIGN.md §3.6), never `musiclib`. The
+# scripts create it with new volumes, random passwords in a temporary .env,
+# no published port, and delete the whole project (volumes included) when
+# they end.
+#
+# The postgres and app services follow MusicLib's own compose.yaml (1.1.0),
+# with these differences: the app image is pinned by digest (DESIGN.md I12, the Dockerfile's pin),
+# no port is published (the tools container reaches the app on the Compose
+# network, so a MusicLib installation on 127.0.0.1:8080 is never in the way),
+# and /import is a named volume that the tools container fills.
+
+name: vibrance-spike
+
+x-hardening: &hardening
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  postgres:
+    # The pin of MusicLib 1.1.0's compose.yaml.
+    image: postgres:17.11-trixie@sha256:f4c66b820c6f974249089d3d16d86a3698eae11e8746eb6644b2271031e91232
+    <<: *hardening
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+    healthcheck:
+      test: ["CMD", "pg_isready", "--host=127.0.0.1", "--port=5432", "--username=musiclib", "--dbname=musiclib"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 60s
+      start_interval: 1s
+    environment:
+      POSTGRES_USER: musiclib
+      POSTGRES_DB: musiclib
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set by the spike scripts}
+    volumes:
+      - db:/var/lib/postgresql/data
+
+  app:
+    # The published MusicLib 1.1.0: the scripts pass the Dockerfile's pin
+    # (ARG MUSICLIB_IMAGE, NOTES.md N-002), so it is written in one place.
+    image: ${MUSICLIB_IMAGE:?set by the spike scripts}
+    init: true
+    user: "1000:1000"
+    <<: *hardening
+    cap_drop: [ALL]
+    read_only: true
+    tmpfs:
+      - /tmp
+    environment:
+      DATABASE_URL: postgres://musiclib@postgres:5432/musiclib?sslmode=disable
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set by the spike scripts}
+      # The tools container calls http://app:8080, so this is the Host the
+      # app must accept.
+      PUBLIC_ORIGIN: http://app:8080
+      HTTP_ADDR: ":8080"
+      MUSICLIB_PASSWORD: ${MUSICLIB_PASSWORD:?set by the spike scripts}
+    volumes:
+      - data:/data
+      - backup:/backup
+      - type: volume
+        source: import
+        target: /import
+        read_only: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/musiclibd", "healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
+      start_interval: 1s
+
+  # The Go toolchain with the pinned ffmpeg/ffprobe (the image of `dev` in
+  # compose.dev.yaml), on the live sources. It sees MusicLib's data volume
+  # read-only at /musiclib, the path Vibrance uses (DESIGN.md §3.4), writes
+  # the inputs into /import and keeps its state in /work.
+  tools:
+    profiles: [tools]
+    build:
+      context: .
+      target: deps
+      args:
+        DEV_UID: ${VIBRANCE_DEV_UID:-10001}
+        DEV_GID: ${VIBRANCE_DEV_GID:-10001}
+    image: vibrance-dev:local
+    init: true
+    <<: *hardening
+    cap_drop: [ALL]
+    environment:
+      MUSICLIB_URL: http://app:8080
+      MUSICLIB_PASSWORD: ${MUSICLIB_PASSWORD:?set by the spike scripts}
+      MUSICLIB_IMAGE: ${MUSICLIB_IMAGE:?set by the spike scripts}
+    working_dir: /src
+    volumes:
+      - type: bind
+        source: .
+        target: /src
+      - type: volume
+        source: data
+        target: /musiclib
+        read_only: true
+      - import:/import
+      - work:/work
+
+  # A disposable Debian with lame and AtomicParsley (DESIGN.md §12.2: the
+  # pinned ffmpeg has no MP3 encoder; NOTES.md explains AtomicParsley).
+  # Packages come from a dated, signed Debian snapshot at exact versions.
+  # The image is the runtime base of the Dockerfile (ARG RUNTIME_IMAGE),
+  # passed by the scripts. It runs as root: apt needs it, and it also gives
+  # /import and /work to the tools user when the project starts.
+  taggers:
+    profiles: [tools]
+    image: ${DEBIAN_IMAGE:?set by the spike scripts}
+    <<: *hardening
+    volumes:
+      - import:/import
+      - work:/work
+
+volumes:
+  db:
+  data:
+  backup:
+  import:
+  work:

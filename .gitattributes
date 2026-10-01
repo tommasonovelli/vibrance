@@ -4,3 +4,8 @@
 # cannot run a script with CRLF line endings, and the gate's gofmt check
 # fails on a Go source that has them.
 * text=auto eol=lf
+
+# The fixture library is MusicLib's output byte for byte: each receipt
+# (.musiclib.json) records the SHA-256 of every file, so Git must never
+# convert a line ending in it (testdata/FIXTURE.md).
+/testdata/library-v1/** -text
