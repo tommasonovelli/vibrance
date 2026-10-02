@@ -4,7 +4,7 @@
 #
 # Usage: scripts/make-fixture-library.sh
 #
-# It starts the published MusicLib 1.1.0 in the Compose project
+# It starts the published MusicLib 1.2.0 in the Compose project
 # `vibrance-spike` (new volumes, random passwords, no published port),
 # creates the input albums A–F, imports them through MusicLib's API, copies
 # library/ into testdata/library-v1/ and writes testdata/FIXTURE.md; then it

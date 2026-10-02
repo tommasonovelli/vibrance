@@ -83,7 +83,7 @@ func replayGain(t trackSpec) [][2]string {
 }
 
 // The Debian snapshot and the exact packages of the taggers container
-// (scripts/spike/compose.yaml): the same snapshot as MusicLib 1.1.0's
+// (scripts/spike/compose.yaml): the same snapshot as MusicLib 1.2.0's
 // Dockerfile.
 const (
 	debianSnapshot = "http://snapshot.debian.org/archive/debian/20260926T000000Z"

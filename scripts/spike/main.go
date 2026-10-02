@@ -1,6 +1,7 @@
-// Command spike is the verification tool of step S1 (DESIGN.md §14): it
+// Command spike is the verification tool of step S1 (DESIGN.md §14) and of
+// the move to MusicLib 1.2.0 (step S6m, in the Errata of DESIGN.md): it
 // checks the hypotheses of the contract with MusicLib (DESIGN.md §4, §5.4)
-// against the real MusicLib 1.1.0 and produces the fixture library
+// against the real MusicLib 1.2.0 and produces the fixture library
 // (DESIGN.md §12.2). It is test tooling, not product code: nothing in
 // Vibrance imports it.
 //
@@ -46,12 +47,13 @@ var commands = map[string]func(ctx context.Context) error{
 	"watch-maintenance": runWatchMaintenance,
 	"after-rebuild":     runAfterRebuild,
 	"rebuild-check":     runRebuildCheck,
+	"moves":             runMoves,
 	"report":            runReport,
 }
 
 func main() {
 	if len(os.Args) != 2 || commands[os.Args[1]] == nil {
-		fmt.Fprintln(os.Stderr, "usage: spike inputs|import|fixture|analyze|edits|tags|online|snapshot|watch-maintenance|after-rebuild|rebuild-check|report")
+		fmt.Fprintln(os.Stderr, "usage: spike inputs|import|fixture|analyze|edits|tags|online|snapshot|watch-maintenance|after-rebuild|rebuild-check|moves|report")
 		os.Exit(2)
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

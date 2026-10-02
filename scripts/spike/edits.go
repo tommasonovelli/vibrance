@@ -229,7 +229,22 @@ func runStep(ctx context.Context, c *client, prev albumState, step editStep) (al
 // MusicLib track id; it returns one line per difference (nil when every
 // track kept its fingerprint).
 func fingerprintDiffs(before, after albumState) []string {
-	var diffs []string
+	diffs, added, removed := trackChanges(before, after)
+	for _, id := range added {
+		diffs = append(diffs, fmt.Sprintf("track %s is new", id))
+	}
+	for _, id := range removed {
+		diffs = append(diffs, fmt.Sprintf("track %s is gone", id))
+	}
+	slices.Sort(diffs)
+	return diffs
+}
+
+// trackChanges compares two states of an album by MusicLib track id: one
+// line for every track of both whose fingerprint changed, and the ids of
+// the tracks that only after has (added) and that only before has
+// (removed), each sorted.
+func trackChanges(before, after albumState) (changed, added, removed []string) {
 	fp := map[string]string{}
 	for _, t := range before.Tracks {
 		fp[t.ID] = t.FP
@@ -238,17 +253,19 @@ func fingerprintDiffs(before, after albumState) []string {
 		old, ok := fp[t.ID]
 		switch {
 		case !ok:
-			diffs = append(diffs, fmt.Sprintf("track %s is new", t.ID))
+			added = append(added, t.ID)
 		case old != t.FP:
-			diffs = append(diffs, fmt.Sprintf("track %s: %s, was %s", t.ID, t.FP, old))
+			changed = append(changed, fmt.Sprintf("track %s: %s, was %s", t.ID, t.FP, old))
 		}
 		delete(fp, t.ID)
 	}
 	for id := range fp {
-		diffs = append(diffs, fmt.Sprintf("track %s is gone", id))
+		removed = append(removed, id)
 	}
-	slices.Sort(diffs)
-	return diffs
+	slices.Sort(changed)
+	slices.Sort(added)
+	slices.Sort(removed)
+	return changed, added, removed
 }
 
 // receiptDiffs checks the receipt of after against before (DESIGN.md §4.2,

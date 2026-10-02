@@ -5,7 +5,7 @@
 #
 # Every base image is pinned by exact version AND by the digest of its
 # multi-arch index (DESIGN.md I12: never `latest`). The Go, Debian and
-# Dockerfile-frontend pins are copied from Vibrance MusicLib 1.1.0 (its
+# Dockerfile-frontend pins are copied from Vibrance MusicLib 1.2.0 (its
 # Dockerfile and docs/docker.md, "Pinned images"). To bump one, resolve the
 # new digest with `docker buildx imagetools inspect <image>:<exact-tag>`.
 #
@@ -21,7 +21,7 @@ ARG GO_IMAGE=golang:1.25.14-trixie@sha256:2c4c60ef415fbfa5e90300722293bef36c5e63
 ARG RUNTIME_IMAGE=debian:trixie-20260918-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a
 # The published MusicLib release whose ffmpeg and ffprobe Vibrance uses
 # (DESIGN.md D18): 8.1.3-musiclib1, fully static, the same bytes everywhere.
-ARG MUSICLIB_IMAGE=ghcr.io/tommasonovelli/musiclib:1.1.0@sha256:14f63bcde28f4c586a775656f6b3e77e3f0129c2e1339f7e957dca04351f9cb1
+ARG MUSICLIB_IMAGE=ghcr.io/tommasonovelli/musiclib:1.2.0@sha256:52204bdf0ca23eeae71453f2ae8a1ee0a8d9b52ef4ce58df42ace369ab8012dd
 
 # UID/GID of the unprivileged `dev` user of the toolchain stages. Declared
 # here so that every stage that uses them sees the same default; a stage must

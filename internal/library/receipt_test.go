@@ -32,7 +32,7 @@ var (
 // escape.
 const lineSep = "\u2028"
 
-// goldenText is a receipt exactly as MusicLib 1.1.0 writes one: its
+// goldenText is a receipt exactly as MusicLib 1.2.0 writes one: its
 // TestReceiptGolden pins this form byte for byte.
 var goldenText = `{"schema_version":1,"album_id":"` + goldenAlbumID + `","build_id":"` + goldenBuildID + `",` +
 	`"album_revision":12,"render_version":"` + goldenRender + `",` +

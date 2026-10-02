@@ -1,5 +1,5 @@
 # Vibrance: the Compose project of the S1 spike (DESIGN.md §14, S1) and of
-# the fixture library (DESIGN.md §12.2). It runs the REAL MusicLib 1.1.0 next
+# the fixture library (DESIGN.md §12.2). It runs the REAL MusicLib 1.2.0 next
 # to a toolchain container that reads MusicLib's data volume read-only.
 #
 # Used only by scripts/make-fixture-library.sh and scripts/spike.sh, always
@@ -8,7 +8,7 @@
 # no published port, and delete the whole project (volumes included) when
 # they end.
 #
-# The postgres and app services follow MusicLib's own compose.yaml (1.1.0),
+# The postgres and app services follow MusicLib's own compose.yaml (1.2.0),
 # with these differences: the app image is pinned by digest (DESIGN.md I12, the Dockerfile's pin),
 # no port is published (the tools container reaches the app on the Compose
 # network, so a MusicLib installation on 127.0.0.1:8080 is never in the way),
@@ -22,7 +22,7 @@ x-hardening: &hardening
 
 services:
   postgres:
-    # The pin of MusicLib 1.1.0's compose.yaml.
+    # The pin of MusicLib 1.2.0's compose.yaml.
     image: postgres:17.11-trixie@sha256:f4c66b820c6f974249089d3d16d86a3698eae11e8746eb6644b2271031e91232
     <<: *hardening
     cap_drop: [ALL]
@@ -42,7 +42,7 @@ services:
       - db:/var/lib/postgresql/data
 
   app:
-    # The published MusicLib 1.1.0: the scripts pass the Dockerfile's pin
+    # The published MusicLib 1.2.0: the scripts pass the Dockerfile's pin
     # (ARG MUSICLIB_IMAGE, NOTES.md N-002), so it is written in one place.
     image: ${MUSICLIB_IMAGE:?set by the spike scripts}
     init: true

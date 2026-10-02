@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
-# The S1 spike (DESIGN.md §14): checks the hypotheses H1–H9 of the contract
-# with MusicLib against the real MusicLib 1.1.0 and writes
-# docs/spike-report.md, with every command and its real output.
+# The spike (DESIGN.md §14, S1; H10–H12 from step S6m, in the Errata): checks
+# the hypotheses H1–H12 of the contract with MusicLib against the real
+# MusicLib 1.2.0 (the Dockerfile's pin) and writes docs/spike-report.md,
+# with every command and its real output.
 #
 # Usage: scripts/spike.sh
 #
 # It starts the published MusicLib in the Compose project `vibrance-spike`
 # (new volumes, random passwords, no published port), imports the input
 # albums of DESIGN.md §12.2, changes them through MusicLib's API, stops
-# MusicLib for an offline rebuild, and reads the result as Vibrance will
+# MusicLib for an offline rebuild, adds tracks and moves tracks between
+# albums, and reads the result as Vibrance will
 # (the program in scripts/spike/, in the tools container). Then it deletes
 # the whole project. It needs network access (images, the Debian snapshot).
 # It exits 1 if a hypothesis is false; the report is written anyway.
@@ -109,4 +111,5 @@ spike_tool edits || die "H2, H5 failed to run"
 spike_tool tags || die "H3 failed to run"
 spike_tool online || die "H7 (online) failed to run"
 check_rebuild
+spike_tool moves || die "H10, H11, H12 failed to run"
 spike_tool report

@@ -45,39 +45,11 @@ func watchLibrary(ctx context.Context, root string) (watchResult, error) {
 
 // watchPass is one pass of watchLibrary over root.
 func watchPass(root string, res *watchResult) error {
-	seen := map[string][]int64{}
-	artists, err := os.ReadDir(root)
+	seen, partial, err := readPass(root)
 	if err != nil {
-		return fmt.Errorf("listing %s: %w", root, err)
+		return err
 	}
-	for _, a := range artists {
-		if !a.IsDir() || strings.HasPrefix(a.Name(), ".") {
-			continue
-		}
-		albums, err := os.ReadDir(filepath.Join(root, a.Name()))
-		if errors.Is(err, fs.ErrNotExist) {
-			continue // an artist folder removed after its last album left
-		}
-		if err != nil {
-			return fmt.Errorf("listing %s: %w", a.Name(), err)
-		}
-		for _, al := range albums {
-			if !al.IsDir() || strings.HasPrefix(al.Name(), ".") {
-				continue
-			}
-			rel := a.Name() + "/" + al.Name()
-			id, rev, problem, err := checkFolder(filepath.Join(root, rel))
-			if err != nil {
-				return fmt.Errorf("%s: %w", rel, err)
-			}
-			if problem != "" {
-				res.Partial = append(res.Partial, rel+": "+problem)
-			}
-			if id != "" {
-				seen[id] = append(seen[id], rev)
-			}
-		}
-	}
+	res.Partial = append(res.Partial, partial...)
 	for id, revs := range seen {
 		if len(revs) > res.MaxFolders[id] {
 			res.MaxFolders[id] = len(revs)
@@ -88,6 +60,46 @@ func watchPass(root string, res *watchResult) error {
 		}
 	}
 	return nil
+}
+
+// readPass reads every album folder under root once: per album_id, the
+// album_revision of each folder that carries it, and one line for every
+// folder seen incomplete.
+func readPass(root string) (seen map[string][]int64, partial []string, err error) {
+	seen = map[string][]int64{}
+	artists, err := os.ReadDir(root)
+	if err != nil {
+		return nil, nil, fmt.Errorf("listing %s: %w", root, err)
+	}
+	for _, a := range artists {
+		if !a.IsDir() || strings.HasPrefix(a.Name(), ".") {
+			continue
+		}
+		albums, err := os.ReadDir(filepath.Join(root, a.Name()))
+		if errors.Is(err, fs.ErrNotExist) {
+			continue // an artist folder removed after its last album left
+		}
+		if err != nil {
+			return nil, nil, fmt.Errorf("listing %s: %w", a.Name(), err)
+		}
+		for _, al := range albums {
+			if !al.IsDir() || strings.HasPrefix(al.Name(), ".") {
+				continue
+			}
+			rel := a.Name() + "/" + al.Name()
+			id, rev, problem, err := checkFolder(filepath.Join(root, rel))
+			if err != nil {
+				return nil, nil, fmt.Errorf("%s: %w", rel, err)
+			}
+			if problem != "" {
+				partial = append(partial, rel+": "+problem)
+			}
+			if id != "" {
+				seen[id] = append(seen[id], rev)
+			}
+		}
+	}
+	return seen, partial, nil
 }
 
 // checkFolder reads the receipt of the album folder dir and checks that

@@ -3,6 +3,7 @@
 `testdata/library-v1/` is a real `library/` folder written by MusicLib (`DESIGN.md` §12.2): tiny synthetic albums (a 2-second sine per track), imported and rendered by the published MusicLib, then copied byte for byte. Tests read it; tests that change albums work on a temporary copy.
 
 - MusicLib: `ghcr.io/tommasonovelli/musiclib:1.1.0@sha256:14f63bcde28f4c586a775656f6b3e77e3f0129c2e1339f7e957dca04351f9cb1`, `render_version` `musiclib-render/3 names/1 go1.25.14 ffmpeg/8.1.3-musiclib1 musiclib-tags/4 taglib/2.3.2-musiclib1`.
+- Still what MusicLib writes: the pin of the `Dockerfile` is now `ghcr.io/tommasonovelli/musiclib:1.2.0@sha256:52204bdf0ca23eeae71453f2ae8a1ee0a8d9b52ef4ce58df42ace369ab8012dd` (step S6m), and MusicLib 1.2.0 writes the same `render_version`, with the same `ffmpeg` and `ffprobe` (the two binaries have the same SHA-256 in both images), so the fixture was not regenerated. The proof is the line `Fixture` at the head of `docs/spike-report.md`: `scripts/spike.sh` compares the `render_version` that the real MusicLib 1.2.0 reports with the one in every receipt of this folder (NOTES.md N-052).
 - Generated: 2026-09-30T22:05:29Z, by `scripts/make-fixture-library.sh`.
 - Input audio: `ffmpeg version 8.1.3-musiclib1 Copyright (c) 2000-2026 the FFmpeg developers` (the pinned ffmpeg); MP3 by `lame=3.100-6+b3` and the M4A ReplayGain atoms by `atomicparsley=20240608.083822.1ed9031-1`, from the Debian snapshot `http://snapshot.debian.org/archive/debian/20260926T000000Z`.
 

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 )
@@ -124,8 +126,12 @@ func writeMeta(ctx context.Context, c *client) error {
 	if err := writeWorkFile("meta.json", raw); err != nil {
 		return err
 	}
-	md := fmt.Sprintf("- Run: %s, MusicLib `%s`.\n- `render_version`: `%s`.\n- Tools: `%s` (the Vibrance toolchain image, copied from MusicLib's image).\n- Inputs: the pinned ffmpeg; MP3 by `%s`, M4A ReplayGain atoms by `%s`, from the Debian snapshot `%s`.\n",
-		m["generated_at"], image, st.Renderer, ff, lamePackage, parsleyPackage, debianSnapshot)
+	fixture, err := fixtureRenderVersion(filepath.Join(srcRoot, fixtureDir), st.Renderer)
+	if err != nil {
+		return err
+	}
+	md := fmt.Sprintf("- Run: %s, MusicLib `%s`.\n- `render_version`: `%s`.\n- Tools: `%s` (the Vibrance toolchain image, copied from MusicLib's image).\n- Inputs: the pinned ffmpeg; MP3 by `%s`, M4A ReplayGain atoms by `%s`, from the Debian snapshot `%s`.\n- Fixture: %s\n",
+		m["generated_at"], image, st.Renderer, ff, lamePackage, parsleyPackage, debianSnapshot, fixture)
 	return writeWorkFile("meta.md", []byte(md))
 }
 
@@ -139,4 +145,27 @@ func toolVersion(ctx context.Context) (string, error) {
 	}
 	first, _, _ := strings.Cut(out, "\n")
 	return first, nil
+}
+
+// fixtureRenderVersion compares the render_version of every receipt of the
+// committed fixture library at dir with current, the one MusicLib writes in
+// this run, and says so in one sentence for the report. While they are
+// equal the fixture is what this MusicLib would write, and need not be
+// regenerated (DESIGN.md §12.2).
+func fixtureRenderVersion(dir, current string) (string, error) {
+	dirs, err := scanLibrary(dir)
+	if err != nil {
+		return "", fmt.Errorf("reading the fixture library: %w", err)
+	}
+	var other []string
+	for _, d := range dirs {
+		if v := d.Receipt.RenderVersion; v != current && !slices.Contains(other, v) {
+			other = append(other, v)
+		}
+	}
+	if len(dirs) > 0 && len(other) == 0 {
+		return fmt.Sprintf("the %d receipts of `%s/` carry this same `render_version`.", len(dirs), fixtureDir), nil
+	}
+	return fmt.Sprintf("the %d receipts of `%s/` carry another `render_version` (`%s`): regenerate it with `scripts/make-fixture-library.sh`.",
+		len(dirs), fixtureDir, strings.Join(other, "`, `")), nil
 }

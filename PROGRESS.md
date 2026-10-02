@@ -11,7 +11,8 @@ Design: DESIGN.md (versione 0.1). Orchestratore: aggiorna questo file a ogni pas
 | S4 | Ricevuta, accesso confinato e classificazione | done | 1 | 653e554 | 2026-10-01 |
 | S5 | Adapter media: processi, tag, durata, impronta | done | 1 | bf75408 | 2026-10-02 |
 | S6 | Identità e riconciliazione (puro) | done | 1 | 3753895 | 2026-10-02 · segue round di errata al §5.4 (S6e) |
-| S6e | Errata al §5.4: planner più robusto (gemelle, impronte fra versioni) | done | 1 | (questo commit) | 2026-10-02 · passo aggiunto dall'errata · 11 mutazioni del revisore, 1 equivalente (N-049) |
+| S6e | Errata al §5.4: planner più robusto (gemelle, impronte fra versioni) | done | 1 | cdf0d4e | 2026-10-02 · passo aggiunto dall'errata · 11 mutazioni del revisore, 1 equivalente (N-049) |
+| S6m | Passaggio a MusicLib 1.2.0: pin, spike H1–H12, documenti | done | 1 | HASH_S6M | 2026-10-02 · passo aggiunto dall'errata · H1–H12 confermate, spike rieseguito dal revisore |
 | S7 | Indicizzare un album | todo | | | |
 | S8 | Scanner: ciclo, trigger, stato | todo | | | |
 | S9 | Cover e miniature | todo | | | |
@@ -80,6 +81,10 @@ Stati: `todo`, `in-progress`, `done`, `blocked`.
 - (S6e) N-050 descrive «prende il numero della cancellata, poi cestino e file riscritto»; il test copre la variante «cestino, poi torna spostata a un numero libero». Il caso esatto della nota non ha un test suo.
 - (S6, per S7) Il fallback della singola traccia senza tag del §5.3 (titolo dal nome del file, `tags_incomplete`) è lasciato a S7 (N-045).
 - (S6, per S8) Nel lavoro del §6.6 la coppia `(fingerprint, occurrence)` nuova può essere già occupata: va presa la prossima libera (N-048 punto 2).
+- (S5, da chiudere in S7 per errata) `internal/media/runner_test.go:22,87-92`: `TestRunCancelKillsTheGroup` ha una corsa nel test (legge il gruppo mentre il figlio `mv` dello script `family` è ancora vivo); fallito una volta nel gate di S6m. Correzione: ripetere `groupMembers` finché coincide con `pids`, con scadenza.
+- (S6m) `scripts/spike/moves_test.go:208-213`: `TestPollMove` dipende da due `time.Sleep(20ms)`.
+- (S6m) `scripts/spike/moves.go:114` (`highest`): nessun test con due cartelle dello stesso `album_id` (mutazione Min/Max sopravvive; tocca solo l'osservazione senza esito).
+- (S6m) `scripts/spike/compose.yaml`: il commento del servizio `app` cita ancora N-002 (il pin ora è in N-051); `report.go` `reportHeader`: il titolo resta «Spike S1».
 
 ## TO CONFIRM aperti (da riportare all'utente a fine fase)
 - N-014 (S1) Dopo un `rebuild` offline di MusicLib `.maintenance` sparisce ma `library/` resta vuota finché l'app non riparte: in quell'intervallo Vibrance vede tutti gli album non disponibili (poi tornano con gli stessi ID). Riportato all'utente a fine fase 0 (2026-10-01).
@@ -90,6 +95,7 @@ Stati: `todo`, `in-progress`, `done`, `blocked`.
 - N-033 (S4) Codici di problema scelti dove il §6.5 tace: ricevuta oltre 16 MiB → `receipt_too_large`; ricevuta illeggibile, non regolare o link → `receipt_invalid`; cartella album sparita fra elenco e lettura → nessun problema; cartella artista sparita → `listing_failed`; nomi che MusicLib non può scrivere (barra rovesciata, non UTF-8) → esclusi dagli elenchi senza problema.
 - N-040 (S5) ffprobe non dichiara il bitrate dello stream FLAC: `format.bitrate` di una traccia FLAC sarà `null` nell'API. Alternativa: il bitrate dell'intero file (conta anche cover e tag).
 - N-045 (S6) Un album senza alcun tag ALBUM prende il titolo visibile `Unknown Album` (il §5.3 tace; con MusicLib non può accadere).
+- N-055 (S6m) `CLAUDE.md` e `AGENTS.md` nominano ancora MusicLib 1.1.0 (righe 16 e 33 di ciascuno): la sessione degli agenti non ammette modifiche a `CLAUDE.md` senza il consenso diretto dell'utente. Da aggiornare a 1.2.0 con il suo consenso.
 
 ## Errata al design
 Vedi la sezione «Errata» in fondo a DESIGN.md.
@@ -99,3 +105,5 @@ Vedi la sezione «Errata» in fondo a DESIGN.md.
 - 2026-10-02 · S8 · §6.6: quando parte il lavoro delle nuove impronte e cosa fa se `(fingerprint, occurrence)` è occupata.
 - 2026-10-02 · S8, S11, S18, S19, S23 · i riferimenti seguono l'audio: in P6 playlist e preferiti di una riga non disponibile passano alla riga disponibile con la stessa impronta (traccia spostata in un altro album da MusicLib 1.2.0); indice `tracks(fingerprint)`; scenari A17–A20. Il planner non cambia.
 - 2026-10-02 · S6e · §5.4: limite noto (d), due gemelle entrambe non disponibili (N-050).
+- 2026-10-02 · S6m · passo nuovo: passaggio a MusicLib 1.2.0 (pin, spike con H10–H12 su spostamento e aggiunta di tracce, libreria di prova, documenti). `.ref/musiclib` è ora il tag `v1.2.0`.
+- 2026-10-02 · S7 · chiude nel passo S7 la corsa del test `TestRunCancelKillsTheGroup` (debito di S5).

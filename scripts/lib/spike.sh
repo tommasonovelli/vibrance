@@ -56,7 +56,7 @@ spike_end() {
   exit "${rc}"
 }
 
-# Starts MusicLib 1.1.0 in the spike project with new volumes and random
+# Starts the pinned MusicLib in the spike project with new volumes and random
 # passwords (a .env in a private temporary folder, never in the
 # repository), prepares /import and /work for the tools user and builds the
 # verification tool into /work/bin/spike.

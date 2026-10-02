@@ -12,7 +12,7 @@ import (
 // other binaries, or none, fails the gate here, before it can fail a start.
 func TestPinnedToolsInstalled(t *testing.T) {
 	if PinnedVersion != "8.1.3-musiclib1" {
-		t.Fatalf("PinnedVersion is %q: DESIGN.md D18 pins 8.1.3-musiclib1, the tools of MusicLib 1.1.0", PinnedVersion)
+		t.Fatalf("PinnedVersion is %q: DESIGN.md D18 pins 8.1.3-musiclib1, the tools of MusicLib 1.2.0", PinnedVersion)
 	}
 	if FFmpegPath != "/usr/local/bin/ffmpeg" || FFprobePath != "/usr/local/bin/ffprobe" {
 		t.Fatalf("the tools are at %s and %s, the image has them in /usr/local/bin", FFmpegPath, FFprobePath)
