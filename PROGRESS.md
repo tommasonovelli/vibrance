@@ -9,8 +9,8 @@ Design: DESIGN.md (versione 0.1). Orchestratore: aggiorna questo file a ogni pas
 | S2 | Configurazione, avvio, salute e arresto | done | 1 | fb94888 | 2026-10-01 |
 | S3 | Store SQLite, migrazioni, transazioni | done | 2 | b318e5b | 2026-10-01 |
 | S4 | Ricevuta, accesso confinato e classificazione | done | 1 | 653e554 | 2026-10-01 |
-| S5 | Adapter media: processi, tag, durata, impronta | done | 1 | (vedi git log: «Step S5») | 2026-10-02 |
-| S6 | Identità e riconciliazione (puro) | todo | | | |
+| S5 | Adapter media: processi, tag, durata, impronta | done | 1 | bf75408 | 2026-10-02 |
+| S6 | Identità e riconciliazione (puro) | done | 1 | (vedi git log: «Step S6») | 2026-10-02 · segue round di errata al §5.4 (S6e) |
 | S7 | Indicizzare un album | todo | | | |
 | S8 | Scanner: ciclo, trigger, stato | todo | | | |
 | S9 | Cover e miniature | todo | | | |
@@ -74,6 +74,12 @@ Stati: `todo`, `in-progress`, `done`, `blocked`.
 - (S5) `TestOnlyTheRunnerStartsProcesses` vieta qualunque selettore `.Name` in `internal/media` (un futuro campo `Name` innocuo lo farebbe fallire).
 - (S5) `TestRunSemaphoreBoundsTheTools`: picco esattamente uguale agli slot con uno sleep di 0,2 s; dipende dai tempi su una macchina molto carica (20/20 con `-race`).
 - (S5, per S7) `Probe` e `Fingerprint` danno codici diversi su un file non audio (`media_not_supported` / `media_tool_failed`, N-043): S7 deve mapparli su `probe_failed` e `fingerprint_failed`, guardando prima il context.
+- (S6) `internal/library/reconcile.go:308`: l'ordine del resto di F2 (per `occurrence`) non è fissato dai test (mutazione sopravvissuta). Rimedio: gemelle con la occurrence 1 nel posto più alto, entrambe spostate. Da chiudere nel round dell'errata al §5.4.
+- (S6) `reconcile.go:211-212`: l'ordine di F1 per `(disc, no)` non è fissato dai test ed è di fatto inerte (file con lo stesso sha hanno gli stessi tag). Superato dall'errata al §5.4.
+- (S6) `reconcile.go:301`: l'ordine nel giro «stesso posto» di F2 è una scelta di N-047 che nessun test fissa.
+- (S6) `reconcile_test.go:203`: commento impreciso (il totale di MusicLib è il numero più alto del disco, non il conteggio).
+- (S6, per S7) Il fallback della singola traccia senza tag del §5.3 (titolo dal nome del file, `tags_incomplete`) è lasciato a S7 (N-045).
+- (S6, per S8) Nel lavoro del §6.6 la coppia `(fingerprint, occurrence)` nuova può essere già occupata: va presa la prossima libera (N-048 punto 2).
 
 ## TO CONFIRM aperti (da riportare all'utente a fine fase)
 - N-014 (S1) Dopo un `rebuild` offline di MusicLib `.maintenance` sparisce ma `library/` resta vuota finché l'app non riparte: in quell'intervallo Vibrance vede tutti gli album non disponibili (poi tornano con gli stessi ID). Riportato all'utente a fine fase 0 (2026-10-01).
@@ -83,6 +89,7 @@ Stati: `todo`, `in-progress`, `done`, `blocked`.
 - (S3, suggerimento del revisore) N-023: tre PRAGMA (`journal_mode`, `optimize`, `wal_checkpoint(TRUNCATE)`) sono costanti in `internal/store/store.go`, fuori da `sql/`, perché sqlc 1.31.1 scarta i PRAGMA; I7 alla lettera ammette solo l'eccezione FTS5. Proporre all'utente un'errata a I7 (tocca un'invariante: serve la sua approvazione, §0.8).
 - N-033 (S4) Codici di problema scelti dove il §6.5 tace: ricevuta oltre 16 MiB → `receipt_too_large`; ricevuta illeggibile, non regolare o link → `receipt_invalid`; cartella album sparita fra elenco e lettura → nessun problema; cartella artista sparita → `listing_failed`; nomi che MusicLib non può scrivere (barra rovesciata, non UTF-8) → esclusi dagli elenchi senza problema.
 - N-040 (S5) ffprobe non dichiara il bitrate dello stream FLAC: `format.bitrate` di una traccia FLAC sarà `null` nell'API. Alternativa: il bitrate dell'intero file (conta anche cover e tag).
+- N-045 (S6) Un album senza alcun tag ALBUM prende il titolo visibile `Unknown Album` (il §5.3 tace; con MusicLib non può accadere).
 
 ## Errata al design
 Vedi la sezione «Errata» in fondo a DESIGN.md.
