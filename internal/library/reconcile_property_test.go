@@ -20,10 +20,13 @@ import (
 //     matches, and the rows that are gone are exactly the available rows
 //     without a file: no row is paired with two files, and none is lost;
 //   - each pair is one its phase allows: F1 the same SHA-256, F2 the same
-//     fingerprint on a row of the current version, F3 the same disc,
-//     number, codec and known duration on a row of another version;
-//   - no phase left a pair it could make to the phases after it, and F2
-//     made the pairs in one place before the others;
+//     fingerprint, of whatever version, F3 the same disc, number, codec
+//     and known duration on a row of another version, which takes another
+//     fingerprint;
+//   - no phase left a pair it could make to the phases after it; F2 paired
+//     no row that is not available while it left an available one with
+//     that fingerprint, and in each of its two rounds it made the pairs in
+//     one place before the others;
 //   - after the plan, (fingerprint, occurrence) names one row of the album,
 //     and a new occurrence is the lowest that was free.
 func verifyPlan(olds []OldTrack, news []NewFile, plan Plan, version string) error {
@@ -62,8 +65,8 @@ func verifyPlan(olds []OldTrack, news []NewFile, plan Plan, version string) erro
 				return fmt.Errorf("F1 paired the row %s with %q: another SHA-256, or another occurrence", o.ID, n.RelPath)
 			}
 		case PhaseFingerprint:
-			if o.FPVersion != version || o.Fingerprint != n.Fingerprint || !keeps {
-				return fmt.Errorf("F2 paired the row %s with %q: another version, fingerprint or occurrence", o.ID, n.RelPath)
+			if o.Fingerprint != n.Fingerprint || !keeps {
+				return fmt.Errorf("F2 paired the row %s with %q: another fingerprint or occurrence", o.ID, n.RelPath)
 			}
 		case PhaseWeak:
 			if o.FPVersion == version {
@@ -72,12 +75,10 @@ func verifyPlan(olds []OldTrack, news []NewFile, plan Plan, version string) erro
 			if !sameSlot(o, n) {
 				return fmt.Errorf("F3 paired the row %s with %q: another disc, number, codec or duration", o.ID, n.RelPath)
 			}
-			if o.Fingerprint == n.Fingerprint && !keeps {
-				return fmt.Errorf("F3 changed the occurrence of the row %s, which keeps its fingerprint", o.ID)
+			if o.Fingerprint == n.Fingerprint {
+				return fmt.Errorf("F3 paired the row %s with %q, which has its fingerprint: F2 pairs those", o.ID, n.RelPath)
 			}
-			if o.Fingerprint != n.Fingerprint {
-				given = append(given, occurrence{n.Fingerprint, m.Occurrence})
-			}
+			given = append(given, occurrence{n.Fingerprint, m.Occurrence})
 		default:
 			return fmt.Errorf("the match %+v has no phase", m)
 		}
@@ -122,22 +123,42 @@ func verifyPlan(olds []OldTrack, news []NewFile, plan Plan, version string) erro
 			}
 			rowAfterF2 := fileOf[i] == -1 || phaseOf[i] == PhaseWeak
 			fileAfterF2 := rowOf[j] < 0 || phaseOf[rowOf[j]] == PhaseWeak
-			if rowAfterF2 && fileAfterF2 && o.FPVersion == version && o.Fingerprint == n.Fingerprint {
+			if rowAfterF2 && fileAfterF2 && o.Fingerprint == n.Fingerprint {
 				return fmt.Errorf("F2 did not pair the row %s and %q, which have one fingerprint", o.ID, n.RelPath)
 			}
 			if fileOf[i] == -1 && rowOf[j] < 0 && o.FPVersion != version && sameSlot(o, n) {
 				return fmt.Errorf("F3 did not pair the row %s and %q, which are in one place", o.ID, n.RelPath)
 			}
-			// F2 first pairs those with one fingerprint in one place: of a
-			// row and a file that F1 left, with one fingerprint and one
-			// (disc, no), at least one is in such a pair.
-			if rowAfterF1 && fileAfterF1 && o.FPVersion == version && o.Fingerprint == n.Fingerprint && o.Disc == n.Disc && o.No == n.No {
+			// Each round of F2 first pairs those with one fingerprint in
+			// one place. Of a row and a file that F1 left, with one
+			// fingerprint and one (disc, no): the row is in such a pair, or
+			// the file is in one with a row of the same round, or the file
+			// went to a row of the round before, an available one.
+			if rowAfterF1 && fileAfterF1 && o.Fingerprint == n.Fingerprint && o.Disc == n.Disc && o.No == n.No {
 				rowInPlace := fileOf[i] >= 0 && phaseOf[i] == PhaseFingerprint && news[fileOf[i]].Disc == o.Disc && news[fileOf[i]].No == o.No
-				fileInPlace := rowOf[j] >= 0 && phaseOf[rowOf[j]] == PhaseFingerprint && olds[rowOf[j]].Disc == n.Disc && olds[rowOf[j]].No == n.No
-				if !rowInPlace && !fileInPlace {
+				fileFirst := false
+				if k := rowOf[j]; k >= 0 && phaseOf[k] == PhaseFingerprint {
+					inPlace := olds[k].Disc == n.Disc && olds[k].No == n.No
+					fileFirst = (olds[k].Available && !o.Available) || (inPlace && olds[k].Available == o.Available)
+				}
+				if !rowInPlace && !fileFirst {
 					return fmt.Errorf("F2 did not pair first the row %s and %q, which have one fingerprint and one place", o.ID, n.RelPath)
 				}
 			}
+		}
+	}
+
+	// F2 pairs the available rows of a fingerprint before the others.
+	late := map[string]string{} // by fingerprint, a row that was not available and that F2 paired
+	for i, o := range olds {
+		if !o.Available && fileOf[i] >= 0 && phaseOf[i] == PhaseFingerprint {
+			late[o.Fingerprint] = o.ID
+		}
+	}
+	for i, o := range olds {
+		other, ok := late[o.Fingerprint]
+		if ok && o.Available && (fileOf[i] == -1 || phaseOf[i] == PhaseWeak) {
+			return fmt.Errorf("F2 paired the row %s, which was not available, and left the row %s, which was and has its fingerprint", other, o.ID)
 		}
 	}
 
@@ -164,6 +185,135 @@ func verifyPlan(olds []OldTrack, news []NewFile, plan Plan, version string) erro
 func sameSlot(o OldTrack, n NewFile) bool {
 	return o.Disc == n.Disc && o.No == n.No && o.Codec == n.Codec &&
 		o.DurationMS != nil && n.DurationMS != nil && *o.DurationMS == *n.DurationMS
+}
+
+// reference computes the plan again, as the erratum of DESIGN.md §5.4
+// writes the rules and with no code of the planner: a step makes one pair
+// at a time, of the first file in its order that a free row can take with
+// the first such row. It is what the plans of the random albums are
+// compared with, so that no order of the planner can change unseen.
+func reference(olds []OldTrack, news []NewFile, version string) outcome {
+	rowOf := make([]int, len(news))
+	fileOf := make([]int, len(olds))
+	phase := make([]Phase, len(news))
+	for j := range rowOf {
+		rowOf[j] = -1
+	}
+	for i := range fileOf {
+		fileOf[i] = -1
+	}
+
+	pathFirst := func(a, b NewFile) bool { return a.RelPath < b.RelPath }
+	placeFirst := func(a, b NewFile) bool {
+		if a.Disc != b.Disc {
+			return a.Disc < b.Disc
+		}
+		if a.No != b.No {
+			return a.No < b.No
+		}
+		return a.RelPath < b.RelPath
+	}
+	occurrenceFirst := func(a, b OldTrack) bool {
+		if a.Occurrence != b.Occurrence {
+			return a.Occurrence < b.Occurrence
+		}
+		return a.ID < b.ID
+	}
+	onDiskFirst := func(a, b OldTrack) bool {
+		if a.Available != b.Available {
+			return a.Available
+		}
+		if a.RelPath != b.RelPath {
+			return a.RelPath < b.RelPath
+		}
+		return a.ID < b.ID
+	}
+
+	step := func(ph Phase, can func(o OldTrack, n NewFile) bool, fileFirst func(a, b NewFile) bool, rowFirst func(a, b OldTrack) bool) {
+		for {
+			file, row := -1, -1
+			for j, n := range news {
+				if rowOf[j] != -1 || (file != -1 && !fileFirst(n, news[file])) {
+					continue
+				}
+				best := -1
+				for i, o := range olds {
+					if fileOf[i] == -1 && can(o, n) && (best == -1 || rowFirst(o, olds[best])) {
+						best = i
+					}
+				}
+				if best != -1 {
+					file, row = j, best
+				}
+			}
+			if file == -1 {
+				return
+			}
+			rowOf[file], fileOf[row], phase[file] = row, file, ph
+		}
+	}
+
+	// F1.
+	step(PhaseContent, func(o OldTrack, n NewFile) bool { return o.FileSHA256 == n.FileSHA256 }, pathFirst, onDiskFirst)
+	// F2: the available rows, then the others; each time the pairs in one
+	// place, then the rest.
+	for _, available := range []bool{true, false} {
+		step(PhaseFingerprint, func(o OldTrack, n NewFile) bool {
+			return o.Available == available && o.Fingerprint == n.Fingerprint && o.Disc == n.Disc && o.No == n.No
+		}, placeFirst, occurrenceFirst)
+		step(PhaseFingerprint, func(o OldTrack, n NewFile) bool {
+			return o.Available == available && o.Fingerprint == n.Fingerprint
+		}, placeFirst, occurrenceFirst)
+	}
+	// F3.
+	step(PhaseWeak, func(o OldTrack, n NewFile) bool { return o.FPVersion != version && sameSlot(o, n) }, placeFirst, onDiskFirst)
+
+	// F4, and the occurrences of the rows of F3.
+	taken := map[occurrence]bool{}
+	for _, o := range olds {
+		taken[occurrence{o.Fingerprint, o.Occurrence}] = true
+	}
+	lowest := func(fingerprint string) int {
+		n := 1
+		for taken[occurrence{fingerprint, n}] {
+			n++
+		}
+		taken[occurrence{fingerprint, n}] = true
+		return n
+	}
+	order := make([]int, len(news))
+	for j := range order {
+		order[j] = j
+	}
+	slices.SortFunc(order, func(a, b int) int {
+		switch {
+		case placeFirst(news[a], news[b]):
+			return -1
+		case placeFirst(news[b], news[a]):
+			return 1
+		}
+		return 0
+	})
+	out := outcome{files: map[string]string{}}
+	for _, j := range order {
+		n := news[j]
+		switch i := rowOf[j]; {
+		case i == -1:
+			out.files[n.RelPath] = fmt.Sprintf("new #%d", lowest(n.Fingerprint))
+		case phase[j] == PhaseWeak:
+			out.files[n.RelPath] = fmt.Sprintf("%s F3 #%d", olds[i].ID, lowest(n.Fingerprint))
+		default:
+			out.files[n.RelPath] = fmt.Sprintf("%s %s #%d", olds[i].ID, phaseName(phase[j]), olds[i].Occurrence)
+		}
+	}
+	// F5.
+	for i, o := range olds {
+		if o.Available && fileOf[i] == -1 {
+			out.gone = append(out.gone, o.ID)
+		}
+	}
+	slices.Sort(out.gone)
+	return out
 }
 
 // ids gives the ids of the new rows: "id-1", "id-2", and so on.
@@ -371,6 +521,9 @@ func checkAlbum(rng *rand.Rand, olds []OldTrack, news []NewFile) (Plan, error) {
 	if err := verifyPlan(olds, news, plan, fpNow); err != nil {
 		return plan, err
 	}
+	if got, want := describe(olds, news, plan), reference(olds, news, fpNow); !reflect.DeepEqual(got, want) {
+		return plan, fmt.Errorf("the plan is\n%s\nand the rules, one pair at a time, give\n%s", got, want)
+	}
 
 	// NeedFingerprint names the files F1 does not pair, and Reconcile needs
 	// the fingerprint of those and of no other.
@@ -389,6 +542,18 @@ func checkAlbum(rng *rand.Rand, olds []OldTrack, news []NewFile) (Plan, error) {
 	}
 	if !slices.Equal(need, unpaired) {
 		return plan, fmt.Errorf("NeedFingerprint = %v, and the files F1 does not pair are %v", need, unpaired)
+	}
+	// It names them from what the index and the receipt say alone: the
+	// SHA-256, the paths, and which rows are available.
+	indexed, listed := make([]OldTrack, len(olds)), make([]NewFile, len(news))
+	for i, o := range olds {
+		indexed[i] = OldTrack{ID: o.ID, RelPath: o.RelPath, FileSHA256: o.FileSHA256, Available: o.Available}
+	}
+	for j, n := range news {
+		listed[j] = NewFile{RelPath: n.RelPath, FileSHA256: n.FileSHA256}
+	}
+	if got := NeedFingerprint(indexed, listed); !slices.Equal(got, need) {
+		return plan, fmt.Errorf("NeedFingerprint = %v before the files are examined, and %v after", got, need)
 	}
 	needed := withFingerprints(news, need)
 	if got, err := Reconcile(olds, needed, fpNow); err != nil || !reflect.DeepEqual(got, plan) {
@@ -470,8 +635,9 @@ func checkAlbum(rng *rand.Rand, olds []OldTrack, news []NewFile) (Plan, error) {
 		return plan, fmt.Errorf("the plan applied twice gives\n%+v\nand applied once\n%+v", again, applied)
 	}
 
-	// Scanning the same files again examines nothing and adds nothing; and
-	// unless two rows have one SHA-256 it changes nothing at all.
+	// Scanning the same files again examines nothing and changes nothing,
+	// even where several rows have one SHA-256: every row has its file
+	// again.
 	if need := NeedFingerprint(applied, news); len(need) != 0 {
 		return plan, fmt.Errorf("after the plan, NeedFingerprint still names %v", need)
 	}
@@ -485,25 +651,17 @@ func checkAlbum(rng *rand.Rand, olds []OldTrack, news []NewFile) (Plan, error) {
 	if len(second.Inserts) != 0 || len(second.Matches) != len(news) {
 		return plan, fmt.Errorf("the second plan has %d new rows and %d matches for %d files", len(second.Inserts), len(second.Matches), len(news))
 	}
-	shas := map[string]bool{}
-	distinct := true
-	for _, r := range applied {
-		distinct = distinct && !shas[r.FileSHA256]
-		shas[r.FileSHA256] = true
+	if len(second.Gone) != 0 {
+		return plan, fmt.Errorf("the second plan makes the rows %v unavailable", second.Gone)
 	}
-	if distinct {
-		if len(second.Gone) != 0 {
-			return plan, fmt.Errorf("the second plan makes the rows %v unavailable", second.Gone)
-		}
-		if again := applyPlan(applied, news, second, fpNow, newIDs().next); !reflect.DeepEqual(again, applied) {
-			return plan, fmt.Errorf("the second plan changes the rows")
-		}
+	if again := applyPlan(applied, news, second, fpNow, newIDs().next); !reflect.DeepEqual(again, applied) {
+		return plan, fmt.Errorf("the second plan changes the rows:\n%+v\nwere\n%+v", again, applied)
 	}
 	return plan, nil
 }
 
 func TestReconcileProperties(t *testing.T) {
-	var content, audio, weak, rekeyed, inserts, gone, back, sharedSHA int
+	var content, audio, otherVersion, audioBack, weak, rekeyed, inserts, gone, back, sharedSHA int
 	for seed := range uint64(30000) {
 		g := newAlbums(seed)
 		olds, news := g.album()
@@ -517,6 +675,12 @@ func TestReconcileProperties(t *testing.T) {
 				content++
 			case PhaseFingerprint:
 				audio++
+				if olds[m.Old].FPVersion != fpNow {
+					otherVersion++
+				}
+				if !olds[m.Old].Available {
+					audioBack++
+				}
 			case PhaseWeak:
 				weak++
 				if m.Occurrence != olds[m.Old].Occurrence {
@@ -539,7 +703,9 @@ func TestReconcileProperties(t *testing.T) {
 	}
 	// The generator must reach every rule, or the properties say nothing.
 	for name, n := range map[string]int{
-		"F1 matches": content, "F2 matches": audio, "F3 matches": weak, "F3 matches that change the occurrence": rekeyed,
+		"F1 matches": content, "F2 matches": audio, "F2 matches of a row of another version": otherVersion,
+		"F2 matches of a row that was not available": audioBack,
+		"F3 matches": weak, "F3 matches that change the occurrence": rekeyed,
 		"new rows": inserts, "rows that are gone": gone, "rows that come back": back, "rows that share a SHA-256": sharedSHA,
 	} {
 		if n < 300 {
@@ -572,6 +738,9 @@ type model struct {
 	audios  int
 	shas    int
 	log     []string
+	// stable is true when every ffmpeg computes the same fingerprint of an
+	// audio; if it is false each version computes its own.
+	stable bool
 }
 
 func newModel(t *testing.T, seed uint64) *model {
@@ -620,6 +789,13 @@ func (l *model) add(audio int) {
 // for another.
 func fingerprintOf(version string, audio int) string {
 	return fmt.Sprintf("%s:audio-%d", version, audio)
+}
+
+func (l *model) fingerprint(version string, audio int) string {
+	if l.stable {
+		return fingerprintOf("every version", audio)
+	}
+	return fingerprintOf(version, audio)
 }
 func durationOf(audio int) *int64 { return msec(int64(60000 + audio)) }
 
@@ -684,7 +860,7 @@ func (l *model) scan(version string, files []diskTrack) {
 		news[j] = NewFile{RelPath: f.path, FileSHA256: f.sha, Disc: f.disc, No: f.no, DurationMS: durationOf(f.audio), Codec: "flac"}
 	}
 	for _, j := range NeedFingerprint(l.rows, news) {
-		news[j].Fingerprint = fingerprintOf(version, files[j].audio)
+		news[j].Fingerprint = l.fingerprint(version, files[j].audio)
 	}
 	plan, err := Reconcile(l.rows, news, version)
 	if err != nil {
@@ -783,7 +959,7 @@ func TestIDsFollowTheAudioWhenFFmpegChanges(t *testing.T) {
 		l.log = append(l.log, "ffmpeg changes version")
 		for i := range l.rows {
 			if r := &l.rows[i]; r.Available && l.chance(0.4) {
-				r.Fingerprint, r.FPVersion = fingerprintOf(fpNow, l.audioOf[r.ID]), fpNow
+				r.Fingerprint, r.FPVersion = l.fingerprint(fpNow, l.audioOf[r.ID]), fpNow
 				l.log = append(l.log, fmt.Sprintf("the job computes the fingerprint of audio %d again", l.audioOf[r.ID]))
 			}
 		}
@@ -791,5 +967,259 @@ func TestIDsFollowTheAudioWhenFFmpegChanges(t *testing.T) {
 		l.scan(fpNow, l.disk)
 		// And a render that changes no byte.
 		l.scan(fpNow, l.disk)
+	}
+}
+
+// The promise of D6 when ffmpeg changes version and the new one computes
+// the fingerprints the old one computed. The album changes in every way,
+// and the tracks that move, and those that were deleted before the change
+// and are imported again, keep their ids, whether the job of §6.6 reached
+// their row or not: two equal fingerprints are the same audio.
+func TestIDsFollowTheAudioWhenOnlyTheVersionOfFFmpegChanges(t *testing.T) {
+	for seed := range uint64(1500) {
+		l := newModel(t, seed)
+		l.stable = true
+		for range 2 + l.rng.IntN(5) {
+			l.audios++
+			l.add(l.audios)
+		}
+		l.scan(fpBefore, l.disk)
+		for range 3 {
+			l.edit(false)
+			l.scan(fpBefore, l.disk)
+		}
+
+		l.log = append(l.log, "ffmpeg changes version")
+		for i := range l.rows {
+			if r := &l.rows[i]; r.Available && l.chance(0.4) {
+				r.FPVersion = fpNow
+				l.log = append(l.log, fmt.Sprintf("the job computes the fingerprint of audio %d again", l.audioOf[r.ID]))
+			}
+		}
+		for range 6 {
+			l.edit(false)
+			if l.chance(0.1) {
+				l.log = append(l.log, "trash")
+				l.scan(fpNow, nil)
+			}
+			l.scan(fpNow, l.disk)
+		}
+	}
+}
+
+// twin is a file on disk in the test of the tracks with one audio.
+type twin struct {
+	audio    int
+	disc, no int
+	title    int
+	path     string
+	sha      string
+	// row is the id of the row of the file, from the first scan that sees
+	// it.
+	row string
+}
+
+// twins is an album where several tracks have the same audio, as MusicLib
+// changes it and the indexer follows it.
+type twins struct {
+	t       *testing.T
+	rng     *rand.Rand
+	seed    uint64
+	disk    []twin
+	rows    []OldTrack
+	ids     *ids
+	version string
+	// peak is, for each audio, the most files that had it at one time.
+	peak map[int]int
+	shas int
+	log  []string
+}
+
+func (w *twins) failf(format string, args ...any) {
+	w.t.Helper()
+	w.t.Fatalf("seed %d: %s\nsteps:\n  %s\nrows:\n%s", w.seed, fmt.Sprintf(format, args...),
+		strings.Join(w.log, "\n  "), showCase(w.rows, nil))
+}
+
+// place returns a (disc, no) that no file on disk has. Half the times it
+// is the place of a row that is not available, if there is one: the place
+// where the rules could take a track for another.
+func (w *twins) place() (int, int) {
+	free := func(disc, no int) bool {
+		return !slices.ContainsFunc(w.disk, func(f twin) bool { return f.disc == disc && f.no == no })
+	}
+	var left [][2]int
+	for _, r := range w.rows {
+		if !r.Available && free(r.Disc, r.No) {
+			left = append(left, [2]int{r.Disc, r.No})
+		}
+	}
+	if len(left) > 0 && w.rng.IntN(2) == 0 {
+		at := left[w.rng.IntN(len(left))]
+		return at[0], at[1]
+	}
+	for {
+		if disc, no := 1+w.rng.IntN(2), 1+w.rng.IntN(12); free(disc, no) {
+			return disc, no
+		}
+	}
+}
+
+// write rewrites a file as MusicLib does: other bytes, and half the times
+// another title, so another name.
+func (w *twins) write(f *twin) {
+	w.shas++
+	f.sha = fmt.Sprintf("sha-%d", w.shas)
+	if w.rng.IntN(2) == 0 {
+		f.title = w.shas
+	}
+	f.path = fmt.Sprintf("Disc %d/%02d - audio %d, title %d.flac", f.disc, f.no, f.audio, f.title)
+}
+
+// retag rewrites some of the files, where they are; never the file at the
+// index except.
+func (w *twins) retag(except int) {
+	for i := range w.disk {
+		if i != except && w.rng.IntN(3) == 0 {
+			w.log = append(w.log, fmt.Sprintf("retag %d-%d", w.disk[i].disc, w.disk[i].no))
+			w.write(&w.disk[i])
+		}
+	}
+}
+
+func (w *twins) add() {
+	f := twin{audio: 1 + w.rng.IntN(2)}
+	f.disc, f.no = w.place()
+	w.write(&f)
+	w.log = append(w.log, fmt.Sprintf("add a copy of audio %d at %d-%d", f.audio, f.disc, f.no))
+	w.disk = append(w.disk, f)
+}
+
+// edit changes the album between two scans in one of the ways after which
+// every track can still be told from its twins: tracks are deleted, or one
+// track moves, or one is added, and the others stay where they are,
+// rewritten or not.
+func (w *twins) edit() {
+	switch kind := w.rng.IntN(4); {
+	case kind == 0 && len(w.disk) > 0:
+		for i := len(w.disk) - 1; i >= 0; i-- {
+			if w.rng.IntN(3) == 0 {
+				w.log = append(w.log, fmt.Sprintf("delete %d-%d", w.disk[i].disc, w.disk[i].no))
+				w.disk = slices.Delete(w.disk, i, i+1)
+			}
+		}
+		w.retag(-1)
+	case kind == 1 && len(w.disk) > 0:
+		i := w.rng.IntN(len(w.disk))
+		f := &w.disk[i]
+		disc, no := w.place()
+		w.log = append(w.log, fmt.Sprintf("move %d-%d to %d-%d", f.disc, f.no, disc, no))
+		f.disc, f.no = disc, no
+		w.write(f)
+		w.retag(i)
+	case kind == 2 && len(w.disk) < 8:
+		w.retag(-1)
+		w.add()
+	default:
+		w.retag(-1)
+	}
+}
+
+// scan indexes the files on disk, or none if the album is in the trash, and
+// checks that every file has the row it had, that a file seen for the
+// first time took no row of a file on disk, and that no audio has more
+// rows than it ever had files.
+func (w *twins) scan(trash bool) {
+	w.t.Helper()
+	disk := w.disk
+	if trash {
+		disk = nil
+	}
+	news := make([]NewFile, len(disk))
+	for j, f := range disk {
+		news[j] = NewFile{RelPath: f.path, FileSHA256: f.sha, Disc: f.disc, No: f.no, DurationMS: durationOf(f.audio), Codec: "flac"}
+	}
+	for _, j := range NeedFingerprint(w.rows, news) {
+		news[j].Fingerprint = fmt.Sprintf("audio-%d", disk[j].audio)
+	}
+	plan, err := Reconcile(w.rows, news, w.version)
+	if err != nil {
+		w.failf("Reconcile: %v", err)
+	}
+	if err := verifyPlan(w.rows, news, plan, w.version); err != nil {
+		w.failf("the plan breaks a rule: %v", err)
+	}
+	wasAvailable := map[string]bool{}
+	for _, r := range w.rows {
+		wasAvailable[r.ID] = r.Available
+	}
+	w.rows = applyPlan(w.rows, news, plan, w.version, w.ids.next)
+	w.log = append(w.log, fmt.Sprintf("scan %d files with ffmpeg %s: %d matches, %d new, %d gone",
+		len(disk), w.version, len(plan.Matches), len(plan.Inserts), len(plan.Gone)))
+
+	rowAt := map[string]OldTrack{}
+	rowsOf := map[string]int{}
+	for _, r := range w.rows {
+		rowsOf[r.Fingerprint]++
+		if r.Available {
+			rowAt[r.RelPath] = r
+		}
+	}
+	if len(rowAt) != len(disk) {
+		w.failf("%d rows are available for %d files", len(rowAt), len(disk))
+	}
+	files := map[int]int{}
+	for j := range disk {
+		f := &disk[j]
+		files[f.audio]++
+		r, ok := rowAt[f.path]
+		switch {
+		case !ok:
+			w.failf("the file %q has no available row", f.path)
+		case f.row == "" && wasAvailable[r.ID]:
+			w.failf("the new file %q took the row %s, which was the track of a file on disk", f.path, r.ID)
+		case f.row != "" && f.row != r.ID:
+			w.failf("the track %s, now in %q, became the track %s", f.row, f.path, r.ID)
+		}
+		f.row = r.ID
+	}
+	for audio, n := range files {
+		w.peak[audio] = max(w.peak[audio], n)
+	}
+	for audio, n := range w.peak {
+		if got := rowsOf[fmt.Sprintf("audio-%d", audio)]; got != n {
+			w.failf("audio %d has %d rows, and never had more than %d files at a time", audio, got, n)
+		}
+	}
+}
+
+// Two tracks with the same audio are told apart only by their places and
+// by what the index remembers of them. As long as the scanner sees a
+// deletion, a move and an import one at a time, that is enough: a track
+// keeps its id when it moves, also to the number of a deleted twin and
+// also after ffmpeg changed; the row of a deleted track waits, and takes a
+// file only when a copy more is imported.
+func TestTwinsKeepTheirIDs(t *testing.T) {
+	for seed := range uint64(3000) {
+		w := &twins{t: t, rng: rand.New(rand.NewPCG(seed, 8)), seed: seed, ids: newIDs(), version: fpBefore, peak: map[int]int{}}
+		for range 2 + w.rng.IntN(3) {
+			w.add()
+		}
+		w.scan(false)
+		changes := 2 + w.rng.IntN(12)
+		for step := range 14 {
+			if step == changes {
+				w.log = append(w.log, "ffmpeg changes version")
+				w.version = fpNow
+			}
+			w.edit()
+			w.scan(false)
+			if w.rng.IntN(8) == 0 {
+				// The trash and the restore, which changes no byte.
+				w.log = append(w.log, "trash")
+				w.scan(true)
+				w.scan(false)
+			}
+		}
 	}
 }

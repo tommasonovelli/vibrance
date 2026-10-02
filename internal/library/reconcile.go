@@ -28,8 +28,8 @@ type OldTrack struct {
 	DurationMS *int64
 	Codec      string
 	// Fingerprint is the fingerprint of the audio, as the ffmpeg of
-	// FPVersion computed it. Two fingerprints are compared only if they
-	// have one version.
+	// FPVersion computed it. Two equal fingerprints are the same audio,
+	// whatever ffmpeg computed them.
 	Fingerprint string
 	FPVersion   string
 	// Occurrence tells apart the rows of the album with one fingerprint.
@@ -59,12 +59,12 @@ const (
 	// PhaseContent is F1: the file has the SHA-256 of the row, so it is
 	// the same file, byte for byte.
 	PhaseContent Phase = iota + 1
-	// PhaseFingerprint is F2: the file has the fingerprint of the row,
-	// computed by the same ffmpeg, so it has the same audio.
+	// PhaseFingerprint is F2: the file has the fingerprint of the row, so
+	// it has the same audio.
 	PhaseFingerprint
 	// PhaseWeak is F3: the fingerprint of the row was computed by another
-	// ffmpeg and cannot be compared, and the file has its disc, number,
-	// codec and duration.
+	// ffmpeg and no file has it, and the file has the disc, number, codec
+	// and duration of the row.
 	PhaseWeak
 )
 
@@ -80,7 +80,8 @@ type Match struct {
 	// the current version.
 	Phase Phase
 	// Occurrence is the occurrence of the row from now on. It is the one
-	// the row had, unless PhaseWeak changed its fingerprint.
+	// the row had, except after PhaseWeak, which changes the fingerprint
+	// of the row.
 	Occurrence int
 }
 
@@ -111,10 +112,10 @@ type Plan struct {
 // before Reconcile is called. The others are, byte for byte, files the
 // index already knows.
 //
-// It reads only the SHA-256, the disc, the number and the path of the rows
-// and of the files. Reconcile pairs the same files in F1 if it is given the
-// same values of them. The disc and the number only matter where several
-// files have one SHA-256.
+// It reads only what the index and the receipt say: the SHA-256 and the
+// path of the rows and of the files, and which rows are available. So it
+// can be called before any file is examined, and Reconcile pairs the same
+// files in F1 whatever the tags of the files turn out to be.
 func NeedFingerprint(olds []OldTrack, news []NewFile) []int {
 	p := newPairing(olds, news)
 	p.pairContent()
@@ -128,36 +129,52 @@ func NeedFingerprint(olds []OldTrack, news []NewFile) []int {
 }
 
 // Reconcile pairs the rows of an album with the files of its new receipt,
-// by the rules of DESIGN.md §5.4. fpVersion is the version of the ffmpeg
-// that computed the fingerprints of the files, the current one. The phases
-// run in their order, and each sees only what the ones before left:
+// by the rules of DESIGN.md §5.4 and of its erratum. fpVersion is the
+// version of the ffmpeg that computed the fingerprints of the files, the
+// current one. The phases run in their order, and each sees only what the
+// ones before left:
 //
 //   - F1, same content: a file and a row with one SHA-256. If several have
-//     it, they are paired in the order (disc, no, rel_path).
-//   - F2, same audio: a file and a row with one fingerprint, if that of the
-//     row has the version fpVersion. Among those with one fingerprint, the
-//     pairs with the same (disc, no) come first; then the rest, the files
-//     in the order of (disc, no) and the rows in that of their occurrence.
+//     it, the available rows come before the others, then the rows are in
+//     the order of their paths, and so are the files. The disc and the
+//     number have no part in it.
+//   - F2, same audio: a file and a row with one fingerprint, whatever the
+//     version of the fingerprint of the row. Among those with one
+//     fingerprint, the available rows are paired first, and the others
+//     only with the files that are left: a track on disk keeps its id
+//     before a deleted one takes it back. Each of the two rounds first
+//     makes the pairs with the same (disc, no), the rows in the order of
+//     their occurrences; then the rest, the files in the order (disc, no,
+//     rel_path) and the rows in that of their occurrences.
 //   - F3, the weak one, only for the rows whose fingerprint has another
-//     version: a file and a row with the same disc, number, codec and
-//     duration, which both must know. A row with the version fpVersion and
-//     another fingerprint is not paired: the audio in that place changed.
+//     version than fpVersion and that F2 left: a file and a row with the
+//     same disc, number, codec and duration, which both must know. The
+//     files are in the order (disc, no, rel_path); of the rows in one
+//     place the available ones come first. A row with the version
+//     fpVersion and another fingerprint is not paired: the audio in that
+//     place changed.
 //   - F4: a file without a row becomes a new row. Its occurrence is the
 //     lowest number above zero that no row of the album has for that
 //     fingerprint, available or not, and that this plan has not given.
 //   - F5: an available row without a file becomes unavailable.
 //
-// A row that F3 pairs with a file of another fingerprint leaves its
-// occurrence and takes one by the rule of F4, so that (fingerprint,
-// occurrence) names one row of the album. The plan never gives an
-// occurrence that a row had before it, so its changes can be applied in
-// any order.
+// A row that F2 pairs keeps its occurrence and takes the version
+// fpVersion. A row that F3 pairs takes another fingerprint (F2 leaves no
+// row and file with the same one), so it leaves its occurrence and takes
+// one by the rule of F4: (fingerprint, occurrence) names one row of the
+// album. The plan never gives an occurrence that a row had before it, so
+// its changes can be applied in any order.
 //
 // The rows must be those of one album: no two with one id, no two with one
 // (fingerprint, occurrence). No two files have one path. Where the rules
-// leave two rows in one place, an available row comes before one that is
-// not, and then the lower id: the plan does not depend on the order of the
-// arguments.
+// leave two rows in one place, the lower id comes first: the plan does not
+// depend on the order of the arguments.
+//
+// Two things the rules cannot know. If two available rows have one audio
+// and only one file with that audio is left, moved to another number,
+// either row may be the one that stays. And F3 trusts the place and the
+// exact duration: a new track with the disc, number, codec and duration in
+// milliseconds of a row of another version takes its id.
 //
 // A file without a fingerprint that F1 does not pair is an error: the
 // caller did not examine a file NeedFingerprint named.
@@ -169,7 +186,7 @@ func Reconcile(olds []OldTrack, news []NewFile, fpVersion string) (Plan, error) 
 			return Plan{}, fmt.Errorf("the file %q has no fingerprint, and no row of the album has its SHA-256", news[j].RelPath)
 		}
 	}
-	p.pairFingerprint(fpVersion)
+	p.pairFingerprint()
 	p.pairWeak(fpVersion)
 	return p.plan(), nil
 }
@@ -204,15 +221,21 @@ func newPairing(olds []OldTrack, news []NewFile) *pairing {
 	return p
 }
 
-// byPlace is the order (disc, no, rel_path) of the rows. Two rows in one
-// place are a row and what was there before it: the available one first.
-func byPlace(a, b OldTrack) int {
+// availableFirst is the order of the rows that F1 and F3 choose among:
+// the available ones, then the others, each in the order of their paths.
+func availableFirst(a, b OldTrack) int {
 	return cmp.Or(
-		cmp.Compare(a.Disc, b.Disc),
-		cmp.Compare(a.No, b.No),
+		cmp.Compare(rank(a.Available), rank(b.Available)),
 		cmp.Compare(a.RelPath, b.RelPath),
-		availableFirst(a, b),
 		cmp.Compare(a.ID, b.ID))
+}
+
+// rank is 0 for an available row and 1 for one that is not.
+func rank(available bool) int {
+	if available {
+		return 0
+	}
+	return 1
 }
 
 // byOccurrence is the order of the rows with one fingerprint.
@@ -220,18 +243,13 @@ func byOccurrence(a, b OldTrack) int {
 	return cmp.Or(cmp.Compare(a.Occurrence, b.Occurrence), cmp.Compare(a.ID, b.ID))
 }
 
-func availableFirst(a, b OldTrack) int {
-	switch {
-	case a.Available && !b.Available:
-		return -1
-	case b.Available && !a.Available:
-		return 1
-	}
-	return 0
+// byPath is the order of the files with one SHA-256. It reads no tag.
+func byPath(a, b NewFile) int {
+	return cmp.Compare(a.RelPath, b.RelPath)
 }
 
-// fileOrder is the order (disc, no, rel_path) of the files.
-func fileOrder(a, b NewFile) int {
+// byPlace is the order (disc, no, rel_path) of the files.
+func byPlace(a, b NewFile) int {
 	return cmp.Or(cmp.Compare(a.Disc, b.Disc), cmp.Compare(a.No, b.No), cmp.Compare(a.RelPath, b.RelPath))
 }
 
@@ -247,16 +265,16 @@ func (p *pairing) unpairedRows(order func(a, b OldTrack) int) []int {
 	return rows
 }
 
-// files returns the indexes of the files in fileOrder: all of them, or
-// only those without a row.
-func (p *pairing) files(onlyUnpaired bool) []int {
+// files returns the indexes of the files in order: all of them, or only
+// those without a row.
+func (p *pairing) files(order func(a, b NewFile) int, onlyUnpaired bool) []int {
 	var files []int
 	for j, i := range p.oldOf {
 		if i < 0 || !onlyUnpaired {
 			files = append(files, j)
 		}
 	}
-	slices.SortStableFunc(files, func(a, b int) int { return fileOrder(p.news[a], p.news[b]) })
+	slices.SortStableFunc(files, func(a, b int) int { return order(p.news[a], p.news[b]) })
 	return files
 }
 
@@ -265,7 +283,8 @@ func (p *pairing) files(onlyUnpaired bool) []int {
 // first file in fileOrder, the second with the second, until the rows or
 // the files with that key end. A row or a file whose key function answers
 // false takes no part.
-func pair[K comparable](p *pairing, phase Phase, rowOrder func(a, b OldTrack) int,
+func pair[K comparable](p *pairing, phase Phase,
+	rowOrder func(a, b OldTrack) int, fileOrder func(a, b NewFile) int,
 	rowKey func(OldTrack) (K, bool), fileKey func(NewFile) (K, bool)) {
 	rows := map[K][]int{}
 	for _, i := range p.unpairedRows(rowOrder) {
@@ -273,7 +292,7 @@ func pair[K comparable](p *pairing, phase Phase, rowOrder func(a, b OldTrack) in
 			rows[key] = append(rows[key], i)
 		}
 	}
-	for _, j := range p.files(true) {
+	for _, j := range p.files(fileOrder, true) {
 		key, ok := fileKey(p.news[j])
 		if !ok || len(rows[key]) == 0 {
 			continue
@@ -284,30 +303,34 @@ func pair[K comparable](p *pairing, phase Phase, rowOrder func(a, b OldTrack) in
 	}
 }
 
-// pairContent is F1.
+// pairContent is F1. It must read nothing that comes from the tags of a
+// file: NeedFingerprint runs it before the files are examined.
 func (p *pairing) pairContent() {
-	pair(p, PhaseContent, byPlace,
+	pair(p, PhaseContent, availableFirst, byPath,
 		func(o OldTrack) (string, bool) { return o.FileSHA256, true },
 		func(n NewFile) (string, bool) { return n.FileSHA256, true })
 }
 
-// pairFingerprint is F2: first the pairs with one fingerprint and one
-// place, then the rest of those with one fingerprint.
-func (p *pairing) pairFingerprint(fpVersion string) {
+// pairFingerprint is F2: a round for the available rows and one for the
+// others, and in each first the pairs with one fingerprint and one place,
+// then the rest of those with one fingerprint.
+func (p *pairing) pairFingerprint() {
 	type audioAt struct {
 		fingerprint string
 		disc, no    int
 	}
-	pair(p, PhaseFingerprint, byOccurrence,
-		func(o OldTrack) (audioAt, bool) {
-			return audioAt{o.Fingerprint, o.Disc, o.No}, o.FPVersion == fpVersion
-		},
-		func(n NewFile) (audioAt, bool) {
-			return audioAt{n.Fingerprint, n.Disc, n.No}, true
-		})
-	pair(p, PhaseFingerprint, byOccurrence,
-		func(o OldTrack) (string, bool) { return o.Fingerprint, o.FPVersion == fpVersion },
-		func(n NewFile) (string, bool) { return n.Fingerprint, true })
+	for _, available := range []bool{true, false} {
+		pair(p, PhaseFingerprint, byOccurrence, byPlace,
+			func(o OldTrack) (audioAt, bool) {
+				return audioAt{o.Fingerprint, o.Disc, o.No}, o.Available == available
+			},
+			func(n NewFile) (audioAt, bool) {
+				return audioAt{n.Fingerprint, n.Disc, n.No}, true
+			})
+		pair(p, PhaseFingerprint, byOccurrence, byPlace,
+			func(o OldTrack) (string, bool) { return o.Fingerprint, o.Available == available },
+			func(n NewFile) (string, bool) { return n.Fingerprint, true })
+	}
 }
 
 // pairWeak is F3.
@@ -317,7 +340,7 @@ func (p *pairing) pairWeak(fpVersion string) {
 		codec      string
 		durationMS int64
 	}
-	pair(p, PhaseWeak, byPlace,
+	pair(p, PhaseWeak, availableFirst, byPlace,
 		func(o OldTrack) (slot, bool) {
 			if o.FPVersion == fpVersion || o.DurationMS == nil {
 				return slot{}, false
@@ -333,19 +356,19 @@ func (p *pairing) pairWeak(fpVersion string) {
 }
 
 // plan turns the pairs into the plan: it gives their occurrences to the
-// new rows (F4) and to the rows whose fingerprint changes, and finds the
-// rows that are gone (F5).
+// new rows (F4) and to the rows that F3 paired, whose fingerprint changes,
+// in the order (disc, no, rel_path) of their files; and it finds the rows
+// that are gone (F5).
 func (p *pairing) plan() Plan {
 	taken := newOccurrences(p.olds)
 	changed := map[int]int{} // the new occurrence of a row
 	var plan Plan
-	for _, j := range p.files(false) {
-		file := p.news[j]
+	for _, j := range p.files(byPlace, false) {
 		switch i := p.oldOf[j]; {
 		case i < 0:
-			plan.Inserts = append(plan.Inserts, Insert{New: j, Occurrence: taken.next(file.Fingerprint)})
-		case p.phase[j] == PhaseWeak && p.olds[i].Fingerprint != file.Fingerprint:
-			changed[i] = taken.next(file.Fingerprint)
+			plan.Inserts = append(plan.Inserts, Insert{New: j, Occurrence: taken.next(p.news[j].Fingerprint)})
+		case p.phase[j] == PhaseWeak:
+			changed[i] = taken.next(p.news[j].Fingerprint)
 		}
 	}
 	for i, j := range p.newOf {

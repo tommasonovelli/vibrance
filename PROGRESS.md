@@ -10,7 +10,8 @@ Design: DESIGN.md (versione 0.1). Orchestratore: aggiorna questo file a ogni pas
 | S3 | Store SQLite, migrazioni, transazioni | done | 2 | b318e5b | 2026-10-01 |
 | S4 | Ricevuta, accesso confinato e classificazione | done | 1 | 653e554 | 2026-10-01 |
 | S5 | Adapter media: processi, tag, durata, impronta | done | 1 | bf75408 | 2026-10-02 |
-| S6 | Identità e riconciliazione (puro) | done | 1 | (vedi git log: «Step S6») | 2026-10-02 · segue round di errata al §5.4 (S6e) |
+| S6 | Identità e riconciliazione (puro) | done | 1 | 3753895 | 2026-10-02 · segue round di errata al §5.4 (S6e) |
+| S6e | Errata al §5.4: planner più robusto (gemelle, impronte fra versioni) | done | 1 | (questo commit) | 2026-10-02 · passo aggiunto dall'errata · 11 mutazioni del revisore, 1 equivalente (N-049) |
 | S7 | Indicizzare un album | todo | | | |
 | S8 | Scanner: ciclo, trigger, stato | todo | | | |
 | S9 | Cover e miniature | todo | | | |
@@ -74,10 +75,9 @@ Stati: `todo`, `in-progress`, `done`, `blocked`.
 - (S5) `TestOnlyTheRunnerStartsProcesses` vieta qualunque selettore `.Name` in `internal/media` (un futuro campo `Name` innocuo lo farebbe fallire).
 - (S5) `TestRunSemaphoreBoundsTheTools`: picco esattamente uguale agli slot con uno sleep di 0,2 s; dipende dai tempi su una macchina molto carica (20/20 con `-race`).
 - (S5, per S7) `Probe` e `Fingerprint` danno codici diversi su un file non audio (`media_not_supported` / `media_tool_failed`, N-043): S7 deve mapparli su `probe_failed` e `fingerprint_failed`, guardando prima il context.
-- (S6) `internal/library/reconcile.go:308`: l'ordine del resto di F2 (per `occurrence`) non è fissato dai test (mutazione sopravvissuta). Rimedio: gemelle con la occurrence 1 nel posto più alto, entrambe spostate. Da chiudere nel round dell'errata al §5.4.
-- (S6) `reconcile.go:211-212`: l'ordine di F1 per `(disc, no)` non è fissato dai test ed è di fatto inerte (file con lo stesso sha hanno gli stessi tag). Superato dall'errata al §5.4.
-- (S6) `reconcile.go:301`: l'ordine nel giro «stesso posto» di F2 è una scelta di N-047 che nessun test fissa.
-- (S6) `reconcile_test.go:203`: commento impreciso (il totale di MusicLib è il numero più alto del disco, non il conteggio).
+- (S6e) `reconcile.go:173-177`: il commento sui limiti cita 6(a) e 6(b) ma non il limite di N-050 (gemelle entrambe non disponibili).
+- (S6e) `reconcile_property_test.go:~792-800`: manca una riga vuota fra `fingerprintOf`, `(*model).fingerprint` e `durationOf`.
+- (S6e) N-050 descrive «prende il numero della cancellata, poi cestino e file riscritto»; il test copre la variante «cestino, poi torna spostata a un numero libero». Il caso esatto della nota non ha un test suo.
 - (S6, per S7) Il fallback della singola traccia senza tag del §5.3 (titolo dal nome del file, `tags_incomplete`) è lasciato a S7 (N-045).
 - (S6, per S8) Nel lavoro del §6.6 la coppia `(fingerprint, occurrence)` nuova può essere già occupata: va presa la prossima libera (N-048 punto 2).
 
@@ -94,3 +94,8 @@ Stati: `todo`, `in-progress`, `done`, `blocked`.
 ## Errata al design
 Vedi la sezione «Errata» in fondo a DESIGN.md.
 - 2026-10-01 · S4 · firma `Discover(ctx, root, registered)` (N-032).
+- 2026-10-02 · §0 · il design si può correggere per robustezza; agenti come `vibrance-worker` (Opus 5.5, effort medium).
+- 2026-10-02 · S6 · §5.4: firme del planner, ordine di F1 senza `(disc, no)`, F2 abbina impronte uguali di qualunque versione e preferisce gli `old` disponibili, `occurrence` dopo F3, limiti noti.
+- 2026-10-02 · S8 · §6.6: quando parte il lavoro delle nuove impronte e cosa fa se `(fingerprint, occurrence)` è occupata.
+- 2026-10-02 · S8, S11, S18, S19, S23 · i riferimenti seguono l'audio: in P6 playlist e preferiti di una riga non disponibile passano alla riga disponibile con la stessa impronta (traccia spostata in un altro album da MusicLib 1.2.0); indice `tracks(fingerprint)`; scenari A17–A20. Il planner non cambia.
+- 2026-10-02 · S6e · §5.4: limite noto (d), due gemelle entrambe non disponibili (N-050).
