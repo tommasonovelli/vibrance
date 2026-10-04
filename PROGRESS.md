@@ -18,8 +18,8 @@ Design: DESIGN.md (versione 0.1). Orchestratore: aggiorna questo file a ogni pas
 | S9 | Cover e miniature | done | 2 | 82f6736 | 2026-10-04 · round 1: CHANGES REQUIRED (cover illeggibile scoperta dopo ffprobe; N-078 da marcare TO CONFIRM) · round 2 approvato |
 | S10 | Testi LRC | done | 1 | c3cc104 | 2026-10-04 · fuzz 60 s rieseguito dal revisore, 3 file LRC sporchi provati · fine fase A |
 | S11 | OpenAPI completa e pipeline di generazione | done | 1 | 8de3cbd | 2026-10-04 · specifica confrontata con il §8 riga per riga dal revisore |
-| S12 | Confine HTTP e modello degli errori | done | 1 | HASH_S12 | 2026-10-04 · 33 richieste ostili provate dal revisore sul server vero |
-| S13 | Autenticazione: nucleo | todo | | | |
+| S12 | Confine HTTP e modello degli errori | done | 1 | 1e7043a | 2026-10-04 · 33 richieste ostili provate dal revisore sul server vero |
+| S13 | Autenticazione: nucleo | done | 2 | HASH_S13 | 2026-10-04 · round 1: CHANGES REQUIRED (errore d'uso che registra gli argomenti, I5) · round 2 approvato |
 | S14 | Endpoint di autenticazione, account e amministrazione utenti | todo | | | |
 | S15 | Catalogo: artisti, album, tracce | todo | | | |
 | S16 | Endpoint media: audio, cover, testi | todo | | | |
@@ -97,9 +97,11 @@ Stati: `todo`, `in-progress`, `done`, `blocked`.
 - (S11) Più robusto dichiarare l'header `ETag` su ogni risposta che restituisce una `Playlist` (`updatePlaylist`, `removePlaylistItem`, `movePlaylistItem`, `addPlaylistItems`): oggi il client lo trova solo nel corpo. `getArtist` non dice l'ordine degli album; `listAlbums?artist=` non dice cosa risponde con un artista inesistente. Il README parla del 501 quando l'API non è ancora servita. L'incoerenza §6.5/§8.2 sui contatori «ignorati» merita una riga in NOTES.md.
 - (S12) `httpx/contract.go:110`: `http.MaxBytesReader` riceve un wrapper, quindi net/http non marca la connessione da chiudere dopo un 413; con un corpo chunked che si ferma oltre il limite il 413 arriva solo allo scadere di `ReadTimeout` (30 s). Miglioria: `Connection: close` sul 413 o il writer più interno.
 - (S12) `OPTIONS *` è servito da net/http fuori dall'handler (200 senza `X-Request-Id` né header di sicurezza): `http.Server.DisableGeneralOptionsHandler = true` lo porterebbe dentro il confine. Le risposte che net/http scrive prima di ogni handler (431, 400 per `Host` malformato) sono testo semplice senza `X-Request-Id`: inevitabili, da dire nel README.
-- (S12, per S13) `user_id` nel log degli accessi manca (il log sta fuori dal middleware di autenticazione). Il codice generato applica i middleware in ordine inverso: l'autenticazione va messa nella lista prima di `Contract.Check` perché giri dopo. `Recover` registra il valore del panic: nessun passo deve fare panic con valori che contengono segreti.
 - (S12, per S14) Nulla fa rispondere `503 not_ready` o `shutting_down` alle rotte API durante avvio e arresto: il primo handler che usa un servizio creato all'avvio deve aggiungere il controllo. `assertConforms` vive in `internal/app/boundary_test.go`: S14 può spostarlo come helper riusabile.
 - (S12, per S16/S24) I wrapper di `ResponseWriter` nascondono `io.ReaderFrom`: niente sendfile per l'audio. Da misurare.
+- (S13, per S14) `cmd/vibrance/user.go:49-56`: `reset-password` con un nome non valido apre (e se manca crea) il database, calcola un hash di produzione e poi esce 1 con `user_not_found`, invece di uscire 2 come `create` (§11.4). `ResetPassword` (`service.go:550`) non porta il nome in minuscolo come fa il login: `--username Anna` dà `user_not_found`.
+- (S13) `cmd/vibrance/user_test.go:179` stampa l'intero log in caso di fallimento; `internal/auth/phc_test.go:45,51,54,58` stampa `v.encoded` (vettori pubblici). Contro la lettera di I5 sui messaggi dei test.
+- (S13) Un client che si disconnette mentre `Authenticate` legge il database produce un 500 con ERROR nel log (solo rumore). Il caso peggiore di un hash PHC ammesso (256 MiB, 16 passate) costa circa 20 volte uno di produzione e tiene lo slot globale per quel tempo.
 
 ## TO CONFIRM aperti (da riportare all'utente a fine fase)
 - N-014 (S1) Dopo un `rebuild` offline di MusicLib `.maintenance` sparisce ma `library/` resta vuota finché l'app non riparte: in quell'intervallo Vibrance vede tutti gli album non disponibili (poi tornano con gli stessi ID). Riportato all'utente a fine fase 0 (2026-10-01).
@@ -120,6 +122,9 @@ Stati: `todo`, `in-progress`, `done`, `blocked`.
 - (S11) `CLAUDE.md` e `AGENTS.md` non nominano `scripts/generate.sh` né il `generate diff` nel gate: l'ingegnere propone due righe (rapporto di S11), da aggiungere con il consenso dell'utente.
 - N-091 (S12) Un id ha una sola grafia: maiuscole, forma senza trattini, graffe e `urn:uuid:` danno `400 invalid_request` (prima il binding le accettava).
 - N-093 (S12) Il log degli accessi delle sonde di salute è a DEBUG (il §11.5 nomina solo audio e cover; la sonda chiede ogni 10 s). Il server logga a INFO, quindi quelle righe non compaiono mai.
+- N-099 (S13) Come una richiesta presenta la sessione: vince il bearer; un bearer non valido non è salvato dal cookie; una sessione si usa solo nel modo in cui è nata (un token di `/auth/tokens` inviato come cookie dà 401, e viceversa).
+- N-100 (S13) Uno slot di capacità 1 per ogni calcolo argon2id (non solo il login); ritardo di 1 s sui rifiuti; `current_password_invalid` arriva dopo 1 s; i rifiuti di login registrano nome (solo se ha la forma di un nome) e indirizzo.
+- N-102 (S13) Codice d'errore nuovo `admin_username_invalid`, che il design non elenca; uscita 2 per i tre codici `admin_*` del primo admin.
 
 ## Errata al design
 Vedi la sezione «Errata» in fondo a DESIGN.md.
@@ -136,3 +141,4 @@ Vedi la sezione «Errata» in fondo a DESIGN.md.
 - 2026-10-04 · S9 · §6.3: la cover si valida prima di `ffprobe` e impronte (passo 5 prima del passo 4).
 - 2026-10-04 · S19 · §8.2/§8.6: `item_count` di una playlist conta tutti gli elementi; solo `duration_ms` esclude le tracce non disponibili (N-088).
 - 2026-10-04 · S12 · §2.4 e passo S12: la validazione OpenAPI non usa `ValidateRequest` né `nethttp-middleware` (leggono il corpo senza limite); un solo router, quello di net/http.
+- 2026-10-04 · S13 · §7.2: costo di argon2id come parametro del servizio; limiti di costo del decodificatore PHC.

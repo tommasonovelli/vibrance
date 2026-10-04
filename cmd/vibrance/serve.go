@@ -8,12 +8,15 @@ import (
 	"syscall"
 
 	"vibrance/internal/app"
+	"vibrance/internal/auth"
 	"vibrance/internal/config"
 )
 
 // serve is `vibrance serve`: the server, until SIGTERM or SIGINT. A
-// refusal before anything is opened (running as root, an invalid
-// configuration) exits 2; any later failure exits 1.
+// refusal of what the operator configured exits 2: running as root, an
+// invalid configuration, and the variables of the first admin, which are
+// read only when the database has no account (DESIGN.md §7.4). Any other
+// failure exits 1.
 func serve(getenv func(string) string, euid int, stateDir, musiclibDir string, log *slog.Logger) int {
 	// Whatever the runtime or the entrypoint set: files the server creates
 	// are never writable by group or others.
@@ -29,7 +32,9 @@ func serve(getenv func(string) string, euid int, stateDir, musiclibDir string, l
 	}
 	code := app.Code(err)
 	log.Error(err.Error(), "code", code)
-	if code == app.CodeRunAsRoot || code == config.Code {
+	switch code {
+	case app.CodeRunAsRoot, config.Code,
+		auth.CodeAdminPasswordMissing, auth.CodeAdminPasswordInvalid, auth.CodeAdminUsernameInvalid:
 		return exitUsage
 	}
 	return exitFailure

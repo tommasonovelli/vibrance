@@ -20,7 +20,8 @@ scripts/generate.sh              # regenerate internal/api from api/openapi.yaml
 
 docker build --target runtime -t vibrance:local .
 docker run --rm vibrance:local   # prints: version: devel
-docker run --rm --init -p 127.0.0.1:8090:8080 -e VIBRANCE_PUBLIC_ORIGIN=http://127.0.0.1:8090 vibrance:local serve
+docker run --rm --init -p 127.0.0.1:8090:8080 -e VIBRANCE_PUBLIC_ORIGIN=http://127.0.0.1:8090 \
+  -e VIBRANCE_ADMIN_PASSWORD='choose a long password' vibrance:local serve
 ```
 
 The last command runs the server until Ctrl-C. It keeps its state in `/var/lib/vibrance` (the database `vibrance.db`), which lasts as long as the container unless a volume is mounted there, and it reads the library from `/musiclib`, which is empty unless the data volume of MusicLib is mounted there (read-only). `http://127.0.0.1:8090/health/live` answers `{"status":"live"}`, and `/health/ready` answers `{"status":"ready"}` once the startup is complete. In the container, `vibrance healthcheck` asks `/health/ready` and exits 0 or 1.
@@ -33,6 +34,8 @@ The server is configured only through its environment. An invalid configuration 
 |---|---|---|
 | `VIBRANCE_PUBLIC_ORIGIN` | none: required | The exact origin clients reach the server with, `scheme://host[:port]`: lowercase, no trailing slash, no default port. |
 | `VIBRANCE_HTTP_ADDR` | `:8080` | The listen address in the container. |
+| `VIBRANCE_ADMIN_USERNAME` | `admin` | The name of the first admin, read only while the database has no account. |
+| `VIBRANCE_ADMIN_PASSWORD` | empty | The password of the first admin (12 to 1024 bytes, no control characters): required while the database has no account, and ignored once it has one. |
 | `VIBRANCE_SCAN_INTERVAL` | `5m` | The time between two scans of the library: a Go duration, `30s` or longer. |
 | `VIBRANCE_WORKERS` | `max(1, min(4, CPUs))` | From 1 to 16: the `ffmpeg` and `ffprobe` processes that run at once, and the albums that are indexed at once. |
 
@@ -81,7 +84,31 @@ The two health endpoints are outside the first three checks: a probe asks the co
 
 Every response carries `X-Request-Id` (a UUIDv7 the server makes), `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer`; a JSON response also `Cache-Control: private, no-store` and `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`. An unexpected failure, a panic included, answers `500 internal` and nothing else: its cause is in the log, under the same `request_id`.
 
-The access log is one line per request, with `request_id`, `method`, `route` (the pattern of the router, such as `GET /api/v1/tracks/{id}`, never the path), `status`, `duration_ms` and `bytes`. It never holds a path, a query string, a header or a body. It is at `INFO`, and at `DEBUG` (not written by default) for the audio, the covers and the health endpoints, which are asked all the time.
+The access log is one line per request, with `request_id`, `method`, `route` (the pattern of the router, such as `GET /api/v1/tracks/{id}`, never the path), `status`, `duration_ms` and `bytes`, and `user_id` when the request carried a session. It never holds a path, a query string, a header or a body. It is at `INFO`, and at `DEBUG` (not written by default) for the audio, the covers and the health endpoints, which are asked all the time.
+
+## Accounts and sessions
+
+Accounts are made by an admin; there is no self sign-up. At its first start, on a database without accounts, the server creates the admin from `VIBRANCE_ADMIN_USERNAME` and `VIBRANCE_ADMIN_PASSWORD`; once an account exists the two variables are ignored, and changing them changes nothing. Without a valid password for the first admin the server does not start, with exit code 2:
+
+| `code` | Meaning |
+|---|---|
+| `admin_password_missing` | The database has no account and `VIBRANCE_ADMIN_PASSWORD` is not set. |
+| `admin_password_invalid` | It is shorter than 12 bytes, longer than 1024, not UTF-8, or holds a control character (a line break left in `.env`). |
+| `admin_username_invalid` | `VIBRANCE_ADMIN_USERNAME` is not 3 to 32 characters among `a-z`, `0-9`, `.`, `_`, `-`, beginning with a letter or a digit. |
+
+Passwords are stored as argon2id hashes in the PHC format (64 MiB, 3 passes), and checked one at a time: a refused sign-in holds the turn for one second, and a name that no account has costs the same as a wrong password and gets the same answer. A session is a random token of 32 bytes: the cookie `vibrance_session` of a browser (30 days) or the bearer token of another client (90 days), renewed to a full lifetime when it is used after half of it. The database keeps only its SHA-256. A change of password signs out the other sessions of the account; a reset signs out all of them. Expired sessions are deleted at the start and every hour.
+
+Every operation of the API but `GET /server`, `POST /auth/login` and `POST /auth/tokens` needs a session: `401 login_required` without one, and `403 forbidden` for an account that is not an admin on the operations under `/admin/`. When a request carries both a bearer token and the cookie, the bearer token counts. A session is used the way it was made: the token of `POST /auth/tokens` as a bearer token, the cookie of `POST /auth/login` as the cookie. Until the server is ready the operations answer `503 not_ready`. The access log has the `user_id` of a request that carried a session.
+
+The accounts can also be managed from the machine of the server, while it runs:
+
+```sh
+printf '%s' "$PASSWORD" | docker exec -i <container> vibrance user create --username anna --role user --password-stdin
+printf '%s' "$PASSWORD" | docker exec -i <container> vibrance user reset-password --username anna --password-stdin
+docker exec <container> vibrance user list
+```
+
+The password is read from standard input only, never from the command line; a final line break is dropped. A reset signs the user out at once. The exit code is 0 when done, 2 for arguments, a name or a password that are not valid, and 1 otherwise (`username_taken`, `user_not_found`).
 
 ## The media tools
 

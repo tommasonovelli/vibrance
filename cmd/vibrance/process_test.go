@@ -123,13 +123,18 @@ type process struct {
 	done   chan struct{} // closed when the child has been waited for
 }
 
+// adminPassword is the password of the first admin of the servers the
+// tests start. It protects nothing.
+const adminPassword = "the password of the test admin"
+
 // startServe starts the server on addr with only the variables it needs,
 // plus extraEnv, which wins. The child inherits umask.
 func startServe(t *testing.T, addr string, umask int, extraEnv ...string) *process {
 	t.Helper()
 	cmd := exec.Command(vibranceBinary(t), "serve")
 	// Later entries win (os/exec keeps the last value of a duplicate).
-	cmd.Env = append([]string{"VIBRANCE_PUBLIC_ORIGIN=http://127.0.0.1:8090", "VIBRANCE_HTTP_ADDR=" + addr}, extraEnv...)
+	cmd.Env = append([]string{"VIBRANCE_PUBLIC_ORIGIN=http://127.0.0.1:8090", "VIBRANCE_HTTP_ADDR=" + addr,
+		"VIBRANCE_ADMIN_PASSWORD=" + adminPassword}, extraEnv...)
 	p := &process{cmd: cmd, stdout: &syncBuffer{}, stderr: &syncBuffer{}, addr: addr, done: make(chan struct{})}
 	cmd.Stdout, cmd.Stderr = p.stdout, p.stderr
 	// Tests of this package do not run in parallel, so changing the umask
@@ -254,13 +259,17 @@ func runHealthcheck(t *testing.T, addr string) (int, []byte) {
 // wantCleanRun checks the output of a server that started and stopped
 // without incident: nothing on stderr (the race detector reports there),
 // and on stdout the events of the startup and of the stop, in order, as
-// JSON lines at level INFO.
-func wantCleanRun(t *testing.T, p *process) {
+// JSON lines at level INFO. A server that started on a database without
+// accounts created the first admin.
+func wantCleanRun(t *testing.T, p *process, firstStart bool) {
 	t.Helper()
 	if p.stderr.String() != "" {
 		t.Fatalf("the server wrote to stderr:\n%s", p.stderr)
 	}
 	want := []string{"starting", "http listening", "database open", "media tools verified", "scanner started", "ready", "stopping", "http server stopped", "scanner stopped", "database closed", "stopped"}
+	if firstStart {
+		want = slices.Insert(want, 4, "first admin created")
+	}
 	if got := p.stdout.messages(t); !slices.Equal(got, want) {
 		t.Fatalf("log events %q, want %q", got, want)
 	}
@@ -307,7 +316,7 @@ func TestProcessLifecycle(t *testing.T) {
 
 	p.signal(t, syscall.SIGTERM)
 	p.wantExit(t, exitOK)
-	wantCleanRun(t, p)
+	wantCleanRun(t, p, true)
 	// A clean stop leaves the database as one complete file.
 	if got := stateFiles(t, state); !slices.Equal(got, []string{"vibrance.db"}) {
 		t.Fatalf("the state folder holds %q after the stop, want only the database", got)
@@ -339,7 +348,7 @@ func TestProcessSIGINT(t *testing.T) {
 	p.waitReady(t)
 	p.signal(t, syscall.SIGINT)
 	p.wantExit(t, exitOK)
-	wantCleanRun(t, p)
+	wantCleanRun(t, p, true)
 }
 
 // Crash-only (DESIGN.md §2.1): a killed server leaves nothing behind that
@@ -356,7 +365,7 @@ func TestProcessKilledAndStartedAgain(t *testing.T) {
 	if ws := killed.wait(t); !ws.Signaled() || ws.Signal() != syscall.SIGKILL {
 		t.Fatalf("the server ended with %v, want killed", killed.cmd.ProcessState)
 	}
-	if got := killed.stdout.messages(t); !slices.Equal(got, []string{"starting", "http listening", "database open", "media tools verified", "scanner started", "ready"}) {
+	if got := killed.stdout.messages(t); !slices.Equal(got, []string{"starting", "http listening", "database open", "media tools verified", "first admin created", "scanner started", "ready"}) {
 		t.Fatalf("log events of the killed server: %q", got)
 	}
 	if code, _ := runHealthcheck(t, addr); code != exitFailure {
@@ -374,7 +383,7 @@ func TestProcessKilledAndStartedAgain(t *testing.T) {
 	}
 	again.signal(t, syscall.SIGTERM)
 	again.wantExit(t, exitOK)
-	wantCleanRun(t, again)
+	wantCleanRun(t, again, false)
 	if got := stateFiles(t, state); !slices.Equal(got, []string{"vibrance.db"}) {
 		t.Fatalf("the state folder holds %q after the stop, want only the database", got)
 	}
@@ -523,7 +532,7 @@ func TestProcessAddressInUse(t *testing.T) {
 	}
 	first.signal(t, syscall.SIGTERM)
 	first.wantExit(t, exitOK)
-	wantCleanRun(t, first)
+	wantCleanRun(t, first, true)
 }
 
 // DESIGN.md T27 with the real grace period: a request that stays open
@@ -579,7 +588,7 @@ func TestProcessStopCutsAnOpenRequest(t *testing.T) {
 	if p.stderr.String() != "" {
 		t.Fatalf("the server wrote to stderr:\n%s", p.stderr)
 	}
-	want := []string{"starting", "http listening", "database open", "media tools verified", "scanner started", "ready", "stopping",
+	want := []string{"starting", "http listening", "database open", "media tools verified", "first admin created", "scanner started", "ready", "stopping",
 		"requests still open after the grace period: closing their connections", "http server stopped", "scanner stopped", "database closed", "stopped"}
 	if got := p.stdout.messages(t); !slices.Equal(got, want) {
 		t.Fatalf("log events %q, want %q", got, want)
@@ -618,4 +627,156 @@ func processUmask(t *testing.T, pid int) int {
 	}
 	t.Fatalf("no Umask line in /proc/%d/status", pid)
 	return 0
+}
+
+// DESIGN.md §7.4: with no account in the database and no valid password
+// for the first admin the server does not start, with exit code 2 and the
+// code of the refusal, and never repeats the value. Once an account exists
+// the two variables are ignored, whatever they say.
+func TestProcessFirstAdmin(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		env  []string
+		code string
+	}{
+		{"no password", []string{"VIBRANCE_ADMIN_PASSWORD="}, "admin_password_missing"},
+		{"a short password", []string{"VIBRANCE_ADMIN_PASSWORD=short-pw"}, "admin_password_invalid"},
+		{"a name that cannot be one", []string{"VIBRANCE_ADMIN_USERNAME=The Admin"}, "admin_username_invalid"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			state := resetState(t)
+			p := startServe(t, freeAddr(t), 0o022, tc.env...)
+			p.wantExit(t, exitUsage)
+			if p.stderr.String() != "" {
+				t.Fatalf("the server wrote to stderr:\n%s", p.stderr)
+			}
+			want := []string{"starting", "http listening", "database open", "media tools verified", "http server stopped", "database closed"}
+			if msgs := p.stdout.messages(t); len(msgs) != len(want)+1 || !slices.Equal(msgs[:len(want)], want) {
+				t.Fatalf("log events %q, want %q and the error", msgs, want)
+			}
+			if last := lastEvent(t, p); last["level"] != "ERROR" || last["code"] != tc.code {
+				t.Fatalf("the server logged %v, want an error with code %s", last, tc.code)
+			}
+			for _, secret := range []string{"short-pw", "The Admin"} {
+				if strings.Contains(p.stdout.String(), secret) {
+					t.Fatal("the log repeats the value of a variable")
+				}
+			}
+			// No account was created: a start with a valid password makes
+			// the admin.
+			if got := stateFiles(t, state); !slices.Equal(got, []string{"vibrance.db"}) {
+				t.Fatalf("the state folder holds %q", got)
+			}
+		})
+	}
+
+	state := resetState(t)
+	first := startServe(t, freeAddr(t), 0o022, "VIBRANCE_ADMIN_USERNAME=root")
+	first.waitReady(t)
+	first.signal(t, syscall.SIGTERM)
+	first.wantExit(t, exitOK)
+	if !strings.Contains(first.stdout.String(), `"msg":"first admin created","username":"root"`) {
+		t.Fatalf("the first admin was not created as root:\n%s", first.stdout)
+	}
+	// The server hashes with the production cost of §7.2, not a cheaper one.
+	db, err := sql.Open("sqlite", filepath.Join(state, "vibrance.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var hash string
+	scanErr := db.QueryRowContext(t.Context(), `SELECT password_hash FROM users WHERE username = 'root'`).Scan(&hash)
+	if err := errors.Join(scanErr, db.Close()); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(hash, "$argon2id$v=19$m=65536,t=3,p=1$") {
+		t.Fatal("the hash of the first admin is not of the production cost")
+	}
+	again := startServe(t, freeAddr(t), 0o022, "VIBRANCE_ADMIN_PASSWORD=", "VIBRANCE_ADMIN_USERNAME=Not A Name")
+	again.waitReady(t)
+	again.signal(t, syscall.SIGTERM)
+	again.wantExit(t, exitOK)
+	wantCleanRun(t, again, false)
+}
+
+// runUserProcess runs `vibrance user args...` as a process, on the state
+// folder of the binary, with stdin as its standard input.
+func runUserProcess(t *testing.T, stdin string, args ...string) (int, string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, vibranceBinary(t), append([]string{"user"}, args...)...)
+	cmd.Env = []string{}
+	cmd.Stdin = strings.NewReader(stdin)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	err := cmd.Run()
+	if stderr.Len() != 0 {
+		t.Fatalf("vibrance user wrote to stderr: %s", stderr.String())
+	}
+	var exitErr *exec.ExitError
+	switch {
+	case err == nil:
+		return 0, stdout.String()
+	case errors.As(err, &exitErr) && exitErr.Exited():
+		return exitErr.ExitCode(), stdout.String()
+	default:
+		t.Fatalf("vibrance user: %v", err)
+		return 0, ""
+	}
+}
+
+// §7.4: the subcommands work while the server runs, and a reset of the
+// password signs the user out of the running server at once.
+func TestProcessUserWhileTheServerRuns(t *testing.T) {
+	state := resetState(t)
+	p := startServe(t, freeAddr(t), 0o022)
+	p.waitReady(t)
+
+	const password = "the password of anna, first"
+	if code, out := runUserProcess(t, password+"\n", "create", "--username", "anna", "--role", "user", "--password-stdin"); code != exitOK {
+		t.Fatalf("user create: exit %d\n%s", code, out)
+	}
+	if code, out := runUserProcess(t, "", "list"); code != exitOK || !strings.Contains(out, "anna ") || !strings.Contains(out, "admin ") {
+		t.Fatalf("user list: exit %d\n%s", code, out)
+	}
+	// A session of anna, made on the database the server serves.
+	s := accounts(t, state)
+	in, err := s.CreateToken(t.Context(), "anna", password, "phone", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	me := func() int {
+		t.Helper()
+		req, err := http.NewRequestWithContext(t.Context(), "GET", "http://"+p.addr+"/api/v1/me", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Host = "127.0.0.1:8090"
+		req.Header.Set("Authorization", "Bearer "+in.Token)
+		client := &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{DisableKeepAlives: true}}
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := errors.Join(func() error { _, err := io.Copy(io.Discard, resp.Body); return err }(), resp.Body.Close()); err != nil {
+			t.Fatal(err)
+		}
+		return resp.StatusCode
+	}
+	// The operation is not implemented yet (S14): reaching it is 501.
+	if got := me(); got != http.StatusNotImplemented {
+		t.Fatalf("GET /me with the session of anna: %d, want 501", got)
+	}
+	if code, out := runUserProcess(t, "the password of anna, second", "reset-password", "--username", "anna", "--password-stdin"); code != exitOK {
+		t.Fatalf("user reset-password: exit %d\n%s", code, out)
+	}
+	if got := me(); got != http.StatusUnauthorized {
+		t.Fatalf("GET /me after the reset: %d, want 401", got)
+	}
+
+	p.signal(t, syscall.SIGTERM)
+	p.wantExit(t, exitOK)
+	if strings.Contains(p.stdout.String(), in.Token) || strings.Contains(p.stdout.String(), password) {
+		t.Fatal("the log of the server holds a token or a password")
+	}
 }

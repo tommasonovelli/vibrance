@@ -72,7 +72,7 @@ func TestHealthcheckExitCodes(t *testing.T) {
 			var stdout, logs bytes.Buffer
 			// Only VIBRANCE_HTTP_ADDR is read: the rest of the server's
 			// configuration is absent, and the uid does not matter.
-			got := run([]string{"healthcheck"}, env(map[string]string{"VIBRANCE_HTTP_ADDR": tc.addr}), 0, &stdout, newLogger(&logs))
+			got := run([]string{"healthcheck"}, env(map[string]string{"VIBRANCE_HTTP_ADDR": tc.addr}), 0, noInput(), &stdout, newLogger(&logs))
 			if got != tc.want {
 				t.Fatalf("exit %d, want %d; logs: %s", got, tc.want, logs.String())
 			}
@@ -102,7 +102,7 @@ func TestHealthcheckTimeout(t *testing.T) {
 	var stdout, logs bytes.Buffer
 	start := time.Now()
 	got := run([]string{"healthcheck"}, env(map[string]string{"VIBRANCE_HTTP_ADDR": srv.Listener.Addr().String()}),
-		nonRoot, &stdout, newLogger(&logs))
+		nonRoot, noInput(), &stdout, newLogger(&logs))
 	elapsed := time.Since(start)
 	if got != exitFailure {
 		t.Fatalf("exit %d, want %d", got, exitFailure)

@@ -55,7 +55,7 @@ func TestServeExitCodes(t *testing.T) {
 				e[k] = v
 			}
 			var stdout, logs bytes.Buffer
-			if got := run([]string{"serve"}, env(e), tc.euid, &stdout, newLogger(&logs)); got != tc.exit {
+			if got := run([]string{"serve"}, env(e), tc.euid, noInput(), &stdout, newLogger(&logs)); got != tc.exit {
 				t.Fatalf("exit code %d, want %d; logs:\n%s", got, tc.exit, logs.String())
 			}
 			if stdout.Len() != 0 {

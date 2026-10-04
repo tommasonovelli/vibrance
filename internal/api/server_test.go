@@ -26,7 +26,8 @@ const someID = "0199a5c0-7b1e-7c3a-9d2f-4b6a8c0e1f23"
 // testHandler is a router with the operations of the specification the
 // binary carries, on srv, and its log. Every other path is a 404, as in the
 // server. The checks of Host, Origin and X-Vibrance-Request are not here:
-// they are in front of the router (internal/app).
+// they are in front of the router (internal/app). Nor is the authentication:
+// every request reaches its operation, as one with a session would.
 func testHandler(t *testing.T, srv StrictServerInterface) (http.Handler, *bytes.Buffer) {
 	t.Helper()
 	logs := &bytes.Buffer{}
@@ -36,7 +37,7 @@ func testHandler(t *testing.T, srv StrictServerInterface) (http.Handler, *bytes.
 		t.Fatal(err)
 	}
 	mux := http.NewServeMux()
-	Register(mux, doc, srv, log)
+	Register(mux, doc, srv, func(next http.Handler) http.Handler { return next }, log)
 	mux.Handle("/", httpx.NotFound(log))
 	return mux, logs
 }

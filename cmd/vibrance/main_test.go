@@ -21,6 +21,9 @@ func noEnv(string) string { return "" }
 
 const nonRoot = 1000
 
+// noInput is an empty standard input.
+func noInput() io.Reader { return strings.NewReader("") }
+
 func env(m map[string]string) func(string) string {
 	return func(k string) string { return m[k] }
 }
@@ -31,7 +34,7 @@ func newLogger(w io.Writer) *slog.Logger {
 
 func TestVersion(t *testing.T) {
 	var stdout, logs bytes.Buffer
-	code := run([]string{"version"}, noEnv, nonRoot, &stdout, newLogger(&logs))
+	code := run([]string{"version"}, noEnv, nonRoot, noInput(), &stdout, newLogger(&logs))
 	if code != exitOK {
 		t.Fatalf("exit code %d, want %d", code, exitOK)
 	}
@@ -47,7 +50,7 @@ func TestVersion(t *testing.T) {
 // anything, with exit code 2 and one error line with the stable code
 // "usage" (§11.4).
 func TestUsage(t *testing.T) {
-	for _, args := range [][]string{
+	for i, args := range [][]string{
 		nil,
 		{},
 		{""},
@@ -61,23 +64,34 @@ func TestUsage(t *testing.T) {
 		{"serve", "--help"},
 		{"healthcheck", "extra"},
 		{"healthcheck", "serve"},
+		{"usr", "create", "--username", "anna", "--password", usageSecret},
+		{"serve", "--password", usageSecret},
+		{"--password=" + usageSecret},
 	} {
 		var stdout, logs bytes.Buffer
-		code := run(args, noEnv, nonRoot, &stdout, newLogger(&logs))
+		code := run(args, noEnv, nonRoot, noInput(), &stdout, newLogger(&logs))
 		if code != exitUsage {
-			t.Errorf("%q: exit code %d, want %d", args, code, exitUsage)
+			t.Errorf("case %d: exit code %d, want %d", i, code, exitUsage)
 		}
 		if stdout.Len() != 0 {
-			t.Errorf("%q: unexpected stdout %q", args, stdout.String())
+			t.Errorf("case %d: unexpected stdout", i)
+		}
+		// A mistyped command line can hold a password: the log never
+		// repeats an argument (I5).
+		if strings.Contains(logs.String(), usageSecret) {
+			t.Fatalf("case %d: the usage error logs an argument", i)
 		}
 		wantLog(t, logs.Bytes(), "usage")
 	}
 }
 
+// usageSecret stands for a password typed on a mistyped command line.
+const usageSecret = "typed-secret-0123"
+
 // A version that cannot be written is a failure (exit 1), never a success.
 func TestVersionWriteFails(t *testing.T) {
 	var logs bytes.Buffer
-	code := run([]string{"version"}, noEnv, nonRoot, failingWriter{}, newLogger(&logs))
+	code := run([]string{"version"}, noEnv, nonRoot, noInput(), failingWriter{}, newLogger(&logs))
 	if code != exitFailure {
 		t.Fatalf("exit code %d, want %d", code, exitFailure)
 	}

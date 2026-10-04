@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3filter"
@@ -17,7 +20,9 @@ import (
 	"github.com/google/uuid"
 
 	"vibrance/internal/api"
+	"vibrance/internal/auth"
 	"vibrance/internal/httpx"
+	"vibrance/internal/store"
 )
 
 // The public origin of the servers of these tests, and its host.
@@ -30,12 +35,53 @@ const (
 const someID = "0199a5c0-7b1e-7c3a-9d2f-4b6a8c0e1f23"
 
 // apiHandler is the handler of a server for apiOrigin, as net/http would call
-// it, and its log. The server is not started: nothing here needs the
-// database.
+// it, and its log. The server is not started: it has only its service of
+// the sessions, on a database of its own, with one admin. A request that
+// carries no credentials of its own is sent with the bearer token of that
+// admin, so that it reaches its operation; one that carries some is sent
+// as it is.
 func apiHandler(t *testing.T) (http.Handler, *syncBuffer) {
 	t.Helper()
 	logs := &syncBuffer{}
-	return mustServer(t, newLogger(logs), apiOrigin, t.TempDir(), t.TempDir()).http.Handler, logs
+	s := mustServer(t, newLogger(logs), apiOrigin, t.TempDir(), t.TempDir())
+	token := publishSessions(t, s)
+	h := s.http.Handler
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") == "" && r.Header.Get("Cookie") == "" {
+			r.Header.Set("Authorization", "Bearer "+token)
+		}
+		h.ServeHTTP(w, r)
+	}), logs
+}
+
+// publishSessions gives s, which is not started, the service of the
+// sessions that its startup would publish, on a new database with one
+// admin, and returns a token of that admin. What the service logs is not
+// in the log of s.
+func publishSessions(t *testing.T, s *server) string {
+	t.Helper()
+	st, err := store.Open(t.Context(), filepath.Join(t.TempDir(), databaseFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := st.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	sessions, err := auth.NewService(st, testCost, time.Now, slog.New(slog.DiscardHandler))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sessions.Bootstrap(t.Context(), env(adminEnv)); err != nil {
+		t.Fatal(err)
+	}
+	in, err := sessions.CreateToken(t.Context(), adminName, adminPassword, "tests", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.sessions.Store(sessions)
+	return in.Token
 }
 
 // operation is one operation of the specification.
@@ -516,11 +562,14 @@ func TestLogHoldsNoSecrets(t *testing.T) {
 
 	text := logs.String()
 	if len(logs.events(t)) != 17 {
-		t.Fatalf("%d log lines, want one per request:\n%s", len(logs.events(t)), text)
+		t.Fatalf("%d log lines, want one per request", len(logs.events(t)))
 	}
-	for _, secret := range []string{password, "correct", "battery", token, session, "Bearer", "vibrance_session", "private-search-words", "anna", "?", "evil"} {
+	// The message names the forbidden value by its position: printing it, or
+	// the log that holds it, would put a credential in the output of the
+	// tests (I5).
+	for i, secret := range []string{password, "correct", "battery", token, session, "Bearer", "vibrance_session", "private-search-words", "anna", "?", "evil"} {
 		if strings.Contains(text, secret) {
-			t.Errorf("the log holds %q:\n%s", secret, text)
+			t.Errorf("the log holds forbidden value #%d", i)
 		}
 	}
 	for _, ev := range logs.events(t) {
@@ -528,7 +577,7 @@ func TestLogHoldsNoSecrets(t *testing.T) {
 			switch key {
 			case "time", "level", "msg", "request_id", "method", "route", "status", "duration_ms", "bytes":
 			default:
-				t.Errorf("the access log has the field %q: %v", key, ev)
+				t.Errorf("the access log has the field %q", key)
 			}
 		}
 	}

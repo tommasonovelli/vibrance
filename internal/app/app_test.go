@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"vibrance/internal/auth"
 	"vibrance/internal/buildinfo"
 	"vibrance/internal/config"
 	"vibrance/internal/httpx"
@@ -80,14 +81,28 @@ func (s *syncBuffer) messages(t *testing.T) []string {
 // gives its server the address it listens on instead.
 const testOrigin = "http://vibrance.test"
 
-// mustServer is newServer with the workers and the scan interval of the
-// tests.
+// The first admin of the servers of the tests, and the cost of their
+// password hashes: argon2id as in production, with little memory and one
+// pass, so that a test does not wait for a hash.
+const (
+	adminName     = "admin"
+	adminPassword = "the password of the test admin"
+)
+
+var (
+	adminEnv = map[string]string{"VIBRANCE_ADMIN_PASSWORD": adminPassword}
+	testCost = auth.Cost{MemoryKiB: 64, Time: 1, Threads: 1}
+)
+
+// mustServer is newServer with the workers, the scan interval, the admin
+// and the password cost of the tests.
 func mustServer(t *testing.T, log *slog.Logger, origin, stateDir, musiclibDir string) *server {
 	t.Helper()
-	s, err := newServer(log, origin, stateDir, musiclibDir, testWorkers, testScanInterval)
+	s, err := newServer(log, origin, stateDir, musiclibDir, testWorkers, testScanInterval, env(adminEnv))
 	if err != nil {
 		t.Fatal(err)
 	}
+	s.passwordCost = testCost
 	return s
 }
 
@@ -272,7 +287,7 @@ func TestReadinessFollowsTheStartup(t *testing.T) {
 	// already read, so only the handler can be asked.
 	wantJSON(t, serveDirectly(s, "/health/live"), 200, liveJSON)
 	wantJSON(t, serveDirectly(s, "/health/ready"), 503, shuttingDownJSON)
-	want := []string{"http listening", "database open", "media tools verified", "scanner started", "ready", "http server stopped", "scanner stopped", "database closed"}
+	want := []string{"http listening", "database open", "media tools verified", "first admin created", "scanner started", "ready", "http server stopped", "scanner stopped", "database closed"}
 	if got := logs.messages(t); !slices.Equal(got, want) {
 		t.Fatalf("log events %q, want %q", got, want)
 	}
@@ -354,7 +369,7 @@ func TestStopWithNothingOpen(t *testing.T) {
 	if elapsed := time.Since(start); elapsed > shutdownGrace/2 {
 		t.Fatalf("the stop took %s with nothing open", elapsed)
 	}
-	want := []string{"http listening", "database open", "media tools verified", "scanner started", "ready", "stopping", "http server stopped", "scanner stopped", "database closed"}
+	want := []string{"http listening", "database open", "media tools verified", "first admin created", "scanner started", "ready", "stopping", "http server stopped", "scanner stopped", "database closed"}
 	if got := r.logs.messages(t); !slices.Equal(got, want) {
 		t.Fatalf("log events %q, want %q", got, want)
 	}
@@ -611,10 +626,11 @@ func TestRequestHeadLimit(t *testing.T) {
 // validEnv is a complete, valid environment that listens on addr.
 func validEnv(addr string) map[string]string {
 	return map[string]string{
-		"VIBRANCE_PUBLIC_ORIGIN": "http://127.0.0.1:8090",
-		"VIBRANCE_HTTP_ADDR":     addr,
-		"VIBRANCE_SCAN_INTERVAL": "45s",
-		"VIBRANCE_WORKERS":       "3",
+		"VIBRANCE_PUBLIC_ORIGIN":  "http://127.0.0.1:8090",
+		"VIBRANCE_HTTP_ADDR":      addr,
+		"VIBRANCE_SCAN_INTERVAL":  "45s",
+		"VIBRANCE_WORKERS":        "3",
+		"VIBRANCE_ADMIN_PASSWORD": adminPassword,
 	}
 }
 
@@ -729,7 +745,7 @@ func TestRun(t *testing.T) {
 		t.Fatalf("Run did not end within 30s; logs:\n%s", &logs)
 	}
 
-	want := []string{"starting", "http listening", "database open", "media tools verified", "scanner started", "ready", "stopping", "http server stopped", "scanner stopped", "database closed", "stopped"}
+	want := []string{"starting", "http listening", "database open", "media tools verified", "first admin created", "scanner started", "ready", "stopping", "http server stopped", "scanner stopped", "database closed", "stopped"}
 	if got := logs.messages(t); !slices.Equal(got, want) {
 		t.Fatalf("log events %q, want %q", got, want)
 	}

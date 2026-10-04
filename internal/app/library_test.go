@@ -86,7 +86,7 @@ func TestStartupStartsTheScanner(t *testing.T) {
 	}
 
 	msgs := r.logs.messages(t)
-	want := []string{"http listening", "database open", "media tools verified", "scanner started", "ready",
+	want := []string{"http listening", "database open", "media tools verified", "first admin created", "scanner started", "ready",
 		"stopping", "http server stopped", "scanner stopped", "database closed"}
 	if !slices.Equal(msgs, want) {
 		t.Fatalf("log events %q, want %q", msgs, want)
@@ -163,7 +163,7 @@ func TestStartupRefusesAMissingMusicLibFolder(t *testing.T) {
 	if !strings.Contains(err.Error(), "opening the folder of MusicLib "+missing) {
 		t.Fatalf("the error does not name the folder: %v", err)
 	}
-	want := []string{"http listening", "database open", "media tools verified", "http server stopped", "database closed"}
+	want := []string{"http listening", "database open", "media tools verified", "first admin created", "http server stopped", "database closed"}
 	if msgs := logs.messages(t); !slices.Equal(msgs, want) {
 		t.Fatalf("log events %q, want %q", msgs, want)
 	}

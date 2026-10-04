@@ -11,6 +11,7 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 
 	apispec "vibrance/api"
+	"vibrance/internal/auth"
 	"vibrance/internal/httpx"
 )
 
@@ -49,24 +50,51 @@ func LoadSpec() (*openapi3.T, error) {
 	return doc, nil
 }
 
+// Access says what each operation of doc asks of a request (DESIGN.md §8.3),
+// by the pattern the router serves it at. An operation is for admins when
+// its path is under /admin/, whatever else the specification says of it;
+// public when the specification gives it no security requirement
+// (`security: []`); and for any signed-in user otherwise.
+func Access(doc *openapi3.T) map[string]auth.Access {
+	access := map[string]auth.Access{}
+	for path, item := range doc.Paths.Map() {
+		for method, op := range item.Operations() {
+			needs := auth.Authenticated
+			switch {
+			case strings.HasPrefix(path, "/admin/"):
+				needs = auth.AdminOnly
+			case op.Security != nil && len(*op.Security) == 0:
+				needs = auth.Public
+			}
+			access[method+" "+BasePath+path] = needs
+		}
+	}
+	return access
+}
+
 // Register routes the operations of doc, under BasePath, to srv on mux.
 //
 // Every operation is behind httpx.Contract: the body limit, strict JSON and
-// the validation of the request against doc. A request the generated code
-// cannot bind (a path id that is not a UUID, a parameter of the wrong type
-// or sent twice) answers 400 invalid_request before that. A path of the
-// specification asked with a method it does not have answers
-// 405 method_not_allowed, with Allow. Every other path is left to mux.
-func Register(mux *http.ServeMux, doc *openapi3.T, srv StrictServerInterface, log *slog.Logger) {
+// the validation of the request against doc. Then comes authenticate, the
+// authentication of the request (auth.Service.Middleware): a request that
+// is not well formed is refused before anyone asks who sent it. A request
+// the generated code cannot bind (a path id that is not a UUID, a parameter
+// of the wrong type or sent twice) answers 400 invalid_request before
+// both. A path of the specification asked with a method it does not have
+// answers 405 method_not_allowed, with Allow. Every other path is left to
+// mux.
+func Register(mux *http.ServeMux, doc *openapi3.T, srv StrictServerInterface, authenticate MiddlewareFunc, log *slog.Logger) {
 	e := errorWriter{log: log}
 	strict := NewStrictHandlerWithOptions(srv, nil, StrictHTTPServerOptions{
 		RequestErrorHandlerFunc:  e.badBody,
 		ResponseErrorHandlerFunc: e.failed,
 	})
 	HandlerWithOptions(strict, StdHTTPServerOptions{
-		BaseURL:          BasePath,
-		BaseRouter:       mux,
-		Middlewares:      []MiddlewareFunc{httpx.NewContract(doc, BasePath, log).Check},
+		BaseURL:    BasePath,
+		BaseRouter: mux,
+		// The generated code wraps the handler with each middleware in turn:
+		// the last of the list runs first.
+		Middlewares:      []MiddlewareFunc{authenticate, httpx.NewContract(doc, BasePath, log).Check},
 		ErrorHandlerFunc: e.badParameter,
 	})
 	for path, item := range doc.Paths.Map() {

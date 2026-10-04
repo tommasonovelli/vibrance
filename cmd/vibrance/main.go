@@ -4,6 +4,7 @@
 //	vibrance serve        run the server until SIGTERM or SIGINT
 //	vibrance healthcheck  query /health/ready on VIBRANCE_HTTP_ADDR; exit 0 or 1
 //	vibrance version      print the version stamped at build time
+//	vibrance user ...     create an account, reset a password, list the accounts
 //
 // Configuration comes only from the environment (§11.1). Logs are JSON
 // lines on stdout (§11.5).
@@ -37,11 +38,11 @@ var musiclibDir = "/musiclib"
 
 func main() {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	os.Exit(run(os.Args[1:], os.Getenv, os.Geteuid(), os.Stdout, log))
+	os.Exit(run(os.Args[1:], os.Getenv, os.Geteuid(), os.Stdin, os.Stdout, log))
 }
 
 // run is the whole program. euid is the effective user id of the process.
-func run(args []string, getenv func(string) string, euid int, stdout io.Writer, log *slog.Logger) int {
+func run(args []string, getenv func(string) string, euid int, stdin io.Reader, stdout io.Writer, log *slog.Logger) int {
 	switch {
 	case len(args) == 1 && args[0] == "serve":
 		return serve(getenv, euid, stateDir, musiclibDir, log)
@@ -49,8 +50,12 @@ func run(args []string, getenv func(string) string, euid int, stdout io.Writer, 
 		return healthcheck(getenv, log)
 	case len(args) == 1 && args[0] == "version":
 		return printVersion(stdout, log)
+	case len(args) >= 1 && args[0] == "user":
+		return user(args[1:], euid, stdin, stdout, stateDir, log)
 	default:
-		log.Error("usage: vibrance serve|healthcheck|version", "code", "usage", "args", args)
+		// Only the number of the arguments: a mistyped command line can hold
+		// a password, and the log is kept (I5).
+		log.Error("usage: vibrance serve|healthcheck|version|user", "code", "usage", "args", len(args))
 		return exitUsage
 	}
 }

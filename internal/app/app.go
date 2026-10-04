@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"vibrance/internal/auth"
 	"vibrance/internal/buildinfo"
 	"vibrance/internal/config"
 	"vibrance/internal/covers"
@@ -116,7 +117,7 @@ func Run(ctx context.Context, getenv func(string) string, euid, cpus int, stateD
 	log.Info("starting", "version", buildinfo.Version, "public_origin", cfg.PublicOrigin,
 		"http_addr", cfg.HTTPAddr, "scan_interval", cfg.ScanInterval.String(), "workers", cfg.Workers)
 
-	srv, err := newServer(log, cfg.PublicOrigin, stateDir, musiclibDir, cfg.Workers, cfg.ScanInterval)
+	srv, err := newServer(log, cfg.PublicOrigin, stateDir, musiclibDir, cfg.Workers, cfg.ScanInterval, getenv)
 	if err != nil {
 		return err
 	}
@@ -129,6 +130,23 @@ func Run(ctx context.Context, getenv func(string) string, euid, cpus int, stateD
 	}
 	log.Info("stopped")
 	return nil
+}
+
+// OpenAccounts opens the accounts of the server whose state is in stateDir,
+// for a subcommand that manages them (§7.4). The server may be running: the
+// database takes several processes (§3.4). The function returned closes the
+// database; with the server running it may report that the write-ahead log
+// could not be emptied, which loses nothing.
+func OpenAccounts(ctx context.Context, stateDir string, log *slog.Logger) (*auth.Service, func() error, error) {
+	st, err := store.Open(ctx, filepath.Join(stateDir, databaseFile))
+	if err != nil {
+		return nil, nil, &Error{Code: store.Code(err), Msg: "opening the database", Err: err}
+	}
+	accounts, err := auth.NewService(st, auth.ProductionCost(), time.Now, log)
+	if err != nil {
+		return nil, nil, errors.Join(err, st.Close())
+	}
+	return accounts, st.Close, nil
 }
 
 // checkNotRoot refuses uid 0: root bypasses the permission checks the
@@ -175,17 +193,33 @@ type server struct {
 	// startup on; stopScanner stops it and waits for it.
 	scanner     *library.Scanner
 	stopScanner func() error
+	// getenv reads the environment, for the two variables of the first
+	// admin, which only the code that creates it reads (§7.4).
+	getenv func(string) string
+	// passwordCost is auth.ProductionCost; only the tests lower it.
+	passwordCost auth.Cost
+	// access is what each operation asks of a request, by its route.
+	access map[string]auth.Access
+	// sessions is the accounts and their sessions, published when the
+	// startup is complete: until then the operations answer 503. A startup
+	// that fails never publishes it.
+	sessions atomic.Pointer[auth.Service]
+	// stopSessions stops the hourly cleanup of the sessions and waits for
+	// it.
+	stopSessions func()
 	// grace is shutdownGrace; only the tests shorten it.
 	grace time.Duration
 }
 
 // newServer prepares a server that answers for publicOrigin, which is
-// VIBRANCE_PUBLIC_ORIGIN. It fails only if the HTTP boundary cannot be built:
-// the specification the binary carries does not parse, which the tests of
-// internal/api exclude.
-func newServer(log *slog.Logger, publicOrigin, stateDir, musiclibDir string, workers int, scanInterval time.Duration) (*server, error) {
+// VIBRANCE_PUBLIC_ORIGIN. getenv is the environment. It fails only if the
+// HTTP boundary cannot be built: the specification the binary carries does
+// not parse, which the tests of internal/api exclude.
+func newServer(log *slog.Logger, publicOrigin, stateDir, musiclibDir string, workers int, scanInterval time.Duration,
+	getenv func(string) string) (*server, error) {
 	s := &server{log: log, stateDir: stateDir, musiclibDir: musiclibDir, grace: shutdownGrace,
-		workers: workers, scanInterval: scanInterval, ffmpegPath: media.FFmpegPath, ffprobePath: media.FFprobePath}
+		workers: workers, scanInterval: scanInterval, ffmpegPath: media.FFmpegPath, ffprobePath: media.FFprobePath,
+		getenv: getenv, passwordCost: auth.ProductionCost()}
 	handler, err := s.routes(publicOrigin)
 	if err != nil {
 		return nil, fmt.Errorf("building the HTTP boundary: %w", err)
@@ -248,22 +282,19 @@ func (s *server) serveHTTP(ln net.Listener) <-chan error {
 //	        store_schema_too_new, store_migrate).
 //	Step 4: verify ffmpeg and ffprobe at the pinned version
 //	        (media_tool_unavailable, media_tool_version).
-//
-//	Step 6: compute the sort keys again if the collation changed
-//	        (library_index). The fingerprints of another ffmpeg are computed
-//	        again by the scanner, in the background.
-//	Step 7: start the scanner, and with it the making of the thumbnails
-//	        of new covers (musiclib_folder).
-//
-// What is left of those steps arrives with the components it belongs to:
-//
 //	Step 5: create the admin if there is no user (admin_password_missing,
-//	        admin_password_invalid).
-//	Step 6: delete the expired sessions.
-//	Step 7: start the hourly cleanup of the sessions.
+//	        admin_password_invalid, admin_username_invalid).
+//	Step 6: compute the sort keys again if the collation changed
+//	        (library_index), and delete the expired sessions. The
+//	        fingerprints of another ffmpeg are computed again by the
+//	        scanner, in the background.
+//	Step 7: start the scanner, and with it the making of the thumbnails
+//	        of new covers (musiclib_folder), and the hourly cleanup of the
+//	        sessions.
 //
-// Readiness turns positive last. It depends neither on MusicLib nor on
-// the state of the index (I14).
+// Readiness turns positive last, and with it the operations of the API,
+// which answer 503 not_ready until then. It depends neither on MusicLib nor
+// on the state of the index (I14).
 func (s *server) startup(ctx context.Context) error {
 	if err := s.openStore(ctx); err != nil {
 		return err
@@ -271,12 +302,21 @@ func (s *server) startup(ctx context.Context) error {
 	if err := s.checkTools(ctx); err != nil {
 		return err
 	}
+	sessions, err := s.openAccounts(ctx)
+	if err != nil {
+		return err
+	}
 	if err := s.prepareIndex(ctx); err != nil {
+		return err
+	}
+	if _, err := sessions.CleanupExpired(ctx); err != nil {
 		return err
 	}
 	if err := s.startScanner(); err != nil {
 		return err
 	}
+	s.startCleanup(sessions)
+	s.sessions.Store(sessions)
 	s.state.Store(stateReady)
 	s.log.Info("ready")
 	return nil
@@ -309,6 +349,37 @@ func (s *server) checkTools(ctx context.Context) error {
 	s.tools = tools
 	s.log.Info("media tools verified", "version", tools.Version())
 	return nil
+}
+
+// openAccounts is step 5 of the startup: the service of the accounts and of
+// their sessions and, in a database without accounts, the first admin
+// (§7.4). Without a valid password for it the server does not start: it
+// would be a server nobody can sign in to.
+func (s *server) openAccounts(ctx context.Context) (*auth.Service, error) {
+	sessions, err := auth.NewService(s.store, s.passwordCost, time.Now, s.log)
+	if err != nil {
+		return nil, err
+	}
+	if err := sessions.Bootstrap(ctx, s.getenv); err != nil {
+		var refusal *auth.BootstrapError
+		if errors.As(err, &refusal) {
+			return nil, &Error{Code: refusal.Code, Msg: "creating the first admin", Err: err}
+		}
+		return nil, err
+	}
+	return sessions, nil
+}
+
+// startCleanup is the part of step 7 that deletes the expired sessions
+// every hour (§7.3), until the stop.
+func (s *server) startCleanup(sessions *auth.Service) {
+	ctx, cancel := context.WithCancel(context.Background())
+	var running sync.WaitGroup
+	running.Go(func() { sessions.Run(ctx) })
+	s.stopSessions = func() {
+		cancel()
+		running.Wait()
+	}
 }
 
 // prepareIndex is what step 6 of the startup does to the index before the
@@ -390,9 +461,9 @@ func checkWritable(dir string) error {
 //     at most the grace period; then it closes their connections. A
 //     request cut this way is not a failure of the stop: streams outlive
 //     any grace period.
-//  3. The scanner, its job and the making of thumbnails are cancelled,
-//     which ends the child processes, and waited for: nothing uses the
-//     database after this.
+//  3. The scanner, its job, the making of thumbnails and the cleanup of
+//     the sessions are cancelled, which ends the child processes, and
+//     waited for: nothing uses the database after this.
 //  4. PRAGMA optimize and wal_checkpoint(TRUNCATE); close the database.
 func (s *server) shutdown() error {
 	s.state.Store(stateStopping)
@@ -400,6 +471,9 @@ func (s *server) shutdown() error {
 	var scannerErr error
 	if s.stopScanner != nil {
 		scannerErr = s.stopScanner()
+	}
+	if s.stopSessions != nil {
+		s.stopSessions()
 	}
 	return errors.Join(httpErr, scannerErr, s.closeStore())
 }

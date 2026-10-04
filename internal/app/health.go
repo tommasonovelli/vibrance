@@ -3,6 +3,7 @@ package app
 import (
 	"net/http"
 	"path"
+	"sync"
 
 	"vibrance/internal/api"
 	"vibrance/internal/httpx"
@@ -45,7 +46,8 @@ func (s *server) routes(publicOrigin string) (http.Handler, error) {
 	health.Handle(readyPath, getOnly)
 
 	mux := http.NewServeMux()
-	api.Register(mux, doc, api.Server{}, s.log)
+	s.access = api.Access(doc)
+	api.Register(mux, doc, api.Server{}, s.authenticated, s.log)
 	// 302, not 301: browsers cache a permanent redirect, and `/` is where
 	// the web interface will be.
 	mux.Handle("GET /{$}", http.RedirectHandler("/api/docs", http.StatusFound))
@@ -64,6 +66,36 @@ func (s *server) routes(publicOrigin string) (http.Handler, error) {
 	// DEBUG, like that of the audio and of the covers.
 	quiet := append(api.QuietRoutes(), "GET "+livePath, "GET "+readyPath)
 	return httpx.Recover(s.log)(httpx.RequestID(s.log)(httpx.AccessLog(s.log, quiet)(httpx.SecurityHeaders(all)))), nil
+}
+
+// authenticated is the authentication of an operation (auth.Service.
+// Middleware). The service of the sessions needs the database, which is
+// opened after HTTP answers: until the startup is complete, and after one
+// that failed, every operation answers 503 not_ready or shutting_down
+// (§8.4), the public ones included.
+func (s *server) authenticated(next http.Handler) http.Handler {
+	var (
+		once   sync.Once
+		authed http.Handler
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sessions := s.sessions.Load()
+		if sessions == nil {
+			httpx.WriteError(w, r, s.log, s.notServing())
+			return
+		}
+		once.Do(func() { authed = sessions.Middleware(s.access, s.log)(next) })
+		authed.ServeHTTP(w, r)
+	})
+}
+
+// notServing is the 503 of a server that is not ready: not_ready while it
+// starts, shutting_down once the stop has begun.
+func (s *server) notServing() *httpx.Error {
+	if s.state.Load() == stateStarting {
+		return &httpx.Error{Status: http.StatusServiceUnavailable, Code: "not_ready", Message: "the server is starting"}
+	}
+	return &httpx.Error{Status: http.StatusServiceUnavailable, Code: "shutting_down", Message: "the server is shutting down"}
 }
 
 // canonical answers with notFound a path that is not in its canonical form:
@@ -91,14 +123,9 @@ func (s *server) handleLive(w http.ResponseWriter, _ *http.Request) {
 // handleReady is positive only once the startup is complete and until the
 // stop begins.
 func (s *server) handleReady(w http.ResponseWriter, r *http.Request) {
-	switch s.state.Load() {
-	case stateReady:
+	if s.state.Load() == stateReady {
 		httpx.WriteJSON(w, s.log, http.StatusOK, healthBody{Status: "ready"})
-	case stateStopping:
-		httpx.WriteError(w, r, s.log, &httpx.Error{Status: http.StatusServiceUnavailable,
-			Code: "shutting_down", Message: "the server is shutting down"})
-	default:
-		httpx.WriteError(w, r, s.log, &httpx.Error{Status: http.StatusServiceUnavailable,
-			Code: "not_ready", Message: "the server is starting"})
+		return
 	}
+	httpx.WriteError(w, r, s.log, s.notServing())
 }

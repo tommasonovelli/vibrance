@@ -125,9 +125,22 @@ func (w *identified) Write(b []byte) (int, error) {
 // Unwrap lets http.ResponseController reach the connection (DESIGN.md T12).
 func (w *identified) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
+type userKey struct{}
+
+// SetUser tells the access log which user the request of ctx is from, once
+// the authentication knows: the access log is around it, and writes its
+// line when the request is over. Only the id of the user, never a
+// credential.
+func SetUser(ctx context.Context, userID string) {
+	if user, ok := ctx.Value(userKey{}).(*string); ok {
+		*user = userID
+	}
+}
+
 // AccessLog writes one line per request (DESIGN.md §11.5): the id of the
-// request, the method, the route, the status, the duration and the bytes of
-// the body. The route is the pattern the router matched, never the path:
+// request, the method, the route, the status, the duration, the bytes of
+// the body and, for a request that was authenticated, the id of its user
+// (SetUser). The route is the pattern the router matched, never the path:
 // neither the path nor the query string nor any header is logged (T28).
 // The line is at INFO, and at DEBUG for the routes in quiet, which are
 // asked too often to be worth a line each.
@@ -137,6 +150,10 @@ func AccessLog(log *slog.Logger, quiet []string) func(http.Handler) http.Handler
 			start := time.Now()
 			counted := &counted{ResponseWriter: w}
 			returned := false
+			// Written by SetUser and read below by the same goroutine, the
+			// one of the request.
+			var user string
+			r = r.WithContext(context.WithValue(r.Context(), userKey{}, &user))
 			defer func() {
 				status := counted.status
 				switch {
@@ -152,9 +169,13 @@ func AccessLog(log *slog.Logger, quiet []string) func(http.Handler) http.Handler
 				if slices.Contains(quiet, r.Pattern) {
 					level = slog.LevelDebug
 				}
-				log.Log(r.Context(), level, "request", "request_id", requestID(r.Context()), "method", r.Method,
+				attrs := []any{"request_id", requestID(r.Context()), "method", r.Method,
 					"route", r.Pattern, "status", status, "duration_ms", time.Since(start).Milliseconds(),
-					"bytes", counted.bytes)
+					"bytes", counted.bytes}
+				if user != "" {
+					attrs = append(attrs, "user_id", user)
+				}
+				log.Log(r.Context(), level, "request", attrs...)
 			}()
 			// The routers below write the pattern they match into this
 			// same request.
