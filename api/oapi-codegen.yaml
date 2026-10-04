@@ -1,0 +1,19 @@
+# oapi-codegen configuration (DESIGN.md §3.2, D5): api/openapi.yaml is written
+# by hand, before the code, and internal/api/api.gen.go is generated from it
+# and committed. The tool is pinned as a `tool` directive of go.mod.
+# Run through Docker only: scripts/generate.sh (generate) and scripts/check.sh
+# (diff). The generator writes to its standard output: docker/generate.sh
+# decides where that goes.
+#
+# std-http-server: a router on net/http's ServeMux, no framework.
+# strict-server: one typed request and response per operation, so a handler
+# cannot answer something the specification does not describe.
+package: api
+generate:
+  std-http-server: true
+  strict-server: true
+  models: true
+compatibility:
+  # RoleAdmin, not Admin: every enum constant carries the name of its type,
+  # whether or not it collides with another name today.
+  always-prefix-enum-values: true

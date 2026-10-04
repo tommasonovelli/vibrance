@@ -1,0 +1,3131 @@
+openapi: 3.0.3
+info:
+  title: Vibrance API
+  version: "1"
+  description: |
+    Vibrance is a read-only listening server over the `library/` folder that
+    Vibrance MusicLib produces. This API serves the catalog (artists, albums,
+    tracks), the audio, the covers and the lyrics, a full-text search, and the
+    favorites and private playlists of each user.
+
+    ## Rules for every request
+
+    - **Base path.** Every path of this document is under `/api/v1`. Within
+      version 1 only compatible additions are made: new operations, new
+      optional request fields, new response fields, new error codes.
+    - **`Host`** must be the host and port of the public origin the server is
+      configured with (`VIBRANCE_PUBLIC_ORIGIN`); otherwise the answer is
+      `421 host_not_allowed`.
+    - **`Origin`**, if sent, must be exactly that origin; otherwise the answer
+      is `403 origin_not_allowed`. No CORS header is ever sent: the API is used
+      from its own origin, or by clients that are not browsers.
+    - **`X-Vibrance-Request: 1`** is required on every request other than GET
+      and HEAD, signing in included; without it the answer is
+      `403 request_header_required`.
+    - **A session.** Every operation needs a live session, except the ones
+      marked as public. A session is the cookie `vibrance_session` that
+      `POST /auth/login` sets, or a token of `POST /auth/tokens` sent as
+      `Authorization: Bearer vb_...`. When a request carries both, the bearer
+      token counts. Without a live session the answer is `401 login_required`.
+    - **JSON bodies** are sent with `Content-Type: application/json`, are at
+      most 1 MiB (`413 body_too_large`), hold exactly one JSON value, and have
+      no unknown and no duplicate keys (`400 invalid_request`). Every field a
+      request schema lists as required must be present; `null` is accepted only
+      where the schema says so.
+    - **GET and HEAD** change nothing a client can see. HEAD is answered
+      wherever GET is, for the audio, the covers and the lyrics.
+
+    ## Responses
+
+    - JSON is UTF-8 with keys in `snake_case`. Ids are lowercase UUIDs.
+      Durations are integers of milliseconds. Dates are RFC 3339 in UTC with
+      exactly three digits of milliseconds and `Z`, for example
+      `2026-09-30T12:34:56.000Z`. A field marked nullable is always present,
+      with `null` when it has no value.
+    - Every response carries `X-Request-Id`, errors included. JSON responses
+      carry `Cache-Control: private, no-store`.
+    - **Errors** are `{"code": ..., "message": ..., "details": {...}}`. The
+      `code` is stable and is what a client should test; the `message` is for
+      people and may change. `400` is a malformed request (JSON, a parameter,
+      an enum, a cursor), `422` content that is well formed and not valid,
+      `409` a conflict, `404` a resource that does not exist **or belongs to
+      another user**, `503` something temporary.
+    - A path this document does not list answers `404 not_found`; a method a
+      path does not accept answers `405 method_not_allowed`, with `Allow`.
+
+    ## Lists and cursors
+
+    A paginated list takes `limit` (default 50, at most 200) and `after`, and
+    answers `{"<name>": [...], "next": "<cursor>" | null}`. To read the next
+    page send the value of `next` as `after`, with the same other parameters;
+    `next` is `null` on the last page. A cursor is opaque: it names the last
+    row of the page and the order it was read in, so it stays valid when that
+    row is removed, and it is refused with `400 invalid_cursor` when it is not
+    one the server wrote or belongs to another `sort` or `order`.
+
+    ## Availability
+
+    The catalog is an index of what the scanner found in the library. Nothing
+    is ever deleted from it: when the files of an album or of a track are no
+    longer there, it becomes *unavailable*, and it becomes available again,
+    with the same id, when they come back. Unavailable albums are left out of
+    the lists and of the search and answer `404 album_not_found`. Unavailable
+    tracks are left out of the albums and of the search, but stay in
+    playlists and favorites and can be read with `GET /tracks/{id}`, with
+    `"available": false` and the last data known; their audio answers
+    `404 track_unavailable`.
+
+    A track id never changes while the track stays in its album. When
+    MusicLib moves a track to another album, or an album is deleted and
+    imported again, the track gets a new id: the playlist items and the
+    favorites that pointed to the old one then point to the track that has
+    the same audio, and the old id stays readable, unavailable.
+
+    ## Playlists, `ETag` and `If-Match`
+
+    Every change of a playlist, of its name or of its items, gives it a new
+    `revision`. Its entity tag is the strong `"playlist:<id>:<revision>"`,
+    quotes included, given both in the `ETag` header and in the `etag` field
+    of the body (a proxy may weaken or drop the header; the field is always
+    right). Send it back as `If-Match` to make a change only if nobody changed
+    the playlist in between: a tag of an older revision answers
+    `412 precondition_failed`, and nothing is changed. A `W/` prefix is
+    ignored. `If-Match` is required where a change depends on positions
+    (inserting at a position, moving an item): without it the answer is
+    `428 precondition_required`. Elsewhere it is optional, and checked when
+    sent.
+
+    ## Outside this document
+
+    `GET /health/live`, `GET /health/ready`, `GET /api/openapi.yaml`,
+    `GET /api/docs` and `GET /` are not under `/api/v1` and need no session.
+servers:
+  - url: /api/v1
+tags:
+  - name: Server
+    description: What the server is.
+  - name: Auth
+    description: Signing in and out.
+  - name: Account
+    description: The account and the sessions of the user of the request.
+  - name: Users
+    description: Administration of the accounts. Admins only.
+  - name: Library
+    description: The state of the scanner. Admins only.
+  - name: Catalog
+    description: Artists, albums and tracks.
+  - name: Search
+    description: Full-text search of the catalog.
+  - name: Media
+    description: Audio, covers and lyrics.
+  - name: Favorites
+    description: The favorite tracks of the user of the request.
+  - name: Playlists
+    description: The private playlists of the user of the request.
+security:
+  - bearerAuth: []
+  - cookieAuth: []
+paths:
+  /server:
+    get:
+      operationId: getServerInfo
+      tags: [Server]
+      summary: Name and version of the server
+      description: Public. Tells a client what it is talking to before it signs in.
+      security: []
+      responses:
+        "200":
+          description: The server.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServerInfo"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /auth/login:
+    post:
+      operationId: login
+      tags: [Auth]
+      summary: Sign in with a cookie
+      description: |
+        Public. Checks the name and the password and starts a session of kind
+        `cookie`, which lasts 30 days and is renewed while it is used. The
+        cookie `vibrance_session` is `HttpOnly`, `SameSite=Strict`, `Path=/`,
+        and `Secure` when the public origin is `https`.
+
+        Passwords are checked one at a time, and a refused attempt takes about
+        one second. A wrong name, a wrong password and a disabled account all
+        answer `401 invalid_credentials`, so the answer does not tell whether
+        the account exists.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Signed in. The session cookie is set.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+            Set-Cookie:
+              description: The session cookie `vibrance_session`.
+              required: true
+              schema:
+                type: string
+                example: vibrance_session=vb_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA; Path=/; Max-Age=2592000; HttpOnly; SameSite=Strict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/InvalidCredentials"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /auth/tokens:
+    post:
+      operationId: createToken
+      tags: [Auth]
+      summary: Sign in with a token
+      description: |
+        Public. For clients that are not browsers. Checks the name and the
+        password as `POST /auth/login` does, with the same
+        `401 invalid_credentials`, and starts a session of kind `token`,
+        which lasts 90 days and is renewed while it is used. The
+        token is in the answer, **once**: the server keeps only its hash. Send
+        it as `Authorization: Bearer <token>`.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTokenRequest"
+      responses:
+        "201":
+          description: Signed in. The token is in the body.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/InvalidCredentials"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [Auth]
+      summary: Sign out
+      description: |
+        Revokes the session of the request, cookie or token, at once, and
+        tells the browser to drop the cookie.
+      responses:
+        "204":
+          description: Signed out.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+            Set-Cookie:
+              description: The cookie `vibrance_session`, emptied and expired.
+              schema:
+                type: string
+                example: vibrance_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /me:
+    get:
+      operationId: getMe
+      tags: [Account]
+      summary: The user of the request
+      description: The account the session of the request belongs to. A client asks this to learn who is signed in and whether it is an admin.
+      responses:
+        "200":
+          description: The user.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /me/password:
+    put:
+      operationId: changePassword
+      tags: [Account]
+      summary: Change the password
+      description: |
+        Changes the password of the user of the request and revokes every
+        **other** session of that user; the session of the request stays.
+
+        `422 current_password_invalid`: the current password is wrong (the
+        check takes about one second, as a refused sign-in does).
+        `422 password_invalid`: the new password is not 12 to 1024 bytes, or
+        has control characters.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordRequest"
+      responses:
+        "204":
+          description: Changed.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /me/sessions:
+    get:
+      operationId: listSessions
+      tags: [Account]
+      summary: The live sessions of the user
+      description: Every session of the user of the request that has not expired, the one of the request marked `current`.
+      responses:
+        "200":
+          description: The sessions.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /me/sessions/{id}:
+    delete:
+      operationId: revokeSession
+      tags: [Account]
+      summary: Revoke a session
+      description: |
+        Revokes one session of the user of the request, at once: a device that
+        was lost, a token no longer needed. A session that does not exist, or
+        is of another user, answers `404 session_not_found`.
+      parameters:
+        - $ref: "#/components/parameters/PathId"
+      responses:
+        "204":
+          description: Revoked.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /admin/users:
+    get:
+      operationId: listUsers
+      tags: [Users]
+      summary: Every account
+      description: Admins only (`403 forbidden` otherwise).
+      responses:
+        "200":
+          description: The accounts.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+    post:
+      operationId: createUser
+      tags: [Users]
+      summary: Create an account
+      description: |
+        Admins only (`403 forbidden` otherwise). There is no self-registration:
+        an admin creates every account.
+
+        `409 username_taken`: the name is in use.
+        `422 username_invalid`: the name is not 3 to 32 characters of
+        `a-z 0-9 . _ -` beginning with a letter or a digit.
+        `422 password_invalid`: the password is not 12 to 1024 bytes, or has
+        control characters.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserRequest"
+      responses:
+        "201":
+          description: Created.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /admin/users/{id}:
+    get:
+      operationId: getUser
+      tags: [Users]
+      summary: One account
+      description: Admins only (`403 forbidden` otherwise). `404 user_not_found` when there is no such account.
+      parameters:
+        - $ref: "#/components/parameters/PathId"
+      responses:
+        "200":
+          description: The account.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+    put:
+      operationId: updateUser
+      tags: [Users]
+      summary: Change the role of an account, or disable it
+      description: |
+        Admins only (`403 forbidden` otherwise). Both fields are sent, with
+        the values the account must have. A disabled account cannot sign in,
+        and loses its sessions at once.
+
+        `404 user_not_found`: there is no such account.
+        `409 last_admin`: the change would leave no enabled admin.
+        `409 cannot_modify_self`: an admin cannot disable their own account.
+      parameters:
+        - $ref: "#/components/parameters/PathId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserRequest"
+      responses:
+        "200":
+          description: The account, as it is now.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+    delete:
+      operationId: deleteUser
+      tags: [Users]
+      summary: Delete an account
+      description: |
+        Admins only (`403 forbidden` otherwise). Deletes the account with its
+        sessions, its favorites and its playlists. It cannot be undone.
+
+        `404 user_not_found`: there is no such account.
+        `409 last_admin`: it is the last enabled admin.
+        `409 cannot_modify_self`: an admin cannot delete their own account.
+      parameters:
+        - $ref: "#/components/parameters/PathId"
+      responses:
+        "204":
+          description: Deleted.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /admin/users/{id}/password:
+    put:
+      operationId: resetUserPassword
+      tags: [Users]
+      summary: Set the password of an account
+      description: |
+        Admins only (`403 forbidden` otherwise). Sets a new password and
+        revokes every session of that account. An admin changes their own
+        password with `PUT /me/password`.
+
+        `404 user_not_found`: there is no such account.
+        `422 password_invalid`: the password is not 12 to 1024 bytes, or has
+        control characters.
+      parameters:
+        - $ref: "#/components/parameters/PathId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResetUserPasswordRequest"
+      responses:
+        "204":
+          description: Set.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /admin/library:
+    get:
+      operationId: getLibraryStatus
+      tags: [Library]
+      summary: The state of the library and of the scanner
+      description: |
+        Admins only (`403 forbidden` otherwise). What the scanner is doing,
+        how its last cycle went, how many albums and tracks the index holds,
+        and the album folders it could not index.
+      responses:
+        "200":
+          description: The state.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LibraryStatus"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /admin/library/scan:
+    post:
+      operationId: scanLibrary
+      tags: [Library]
+      summary: Ask for a scan of the library
+      description: |
+        Admins only (`403 forbidden` otherwise). Queues one cycle of the
+        scanner and answers at once with the state as it is, without waiting
+        for the cycle. Requests coalesce: it answers `202` also when a cycle
+        is running or waiting, and at most one cycle waits. A scan is always
+        safe to ask for: it deletes nothing.
+      responses:
+        "202":
+          description: Queued. The state as it is now.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LibraryStatus"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /artists:
+    get:
+      operationId: listArtists
+      tags: [Catalog]
+      summary: The artists, in alphabetical order
+      description: |
+        The artists that have at least one available album, ordered by name
+        (case, accents and leading articles do not count; numbers in a name
+        are ordered as numbers). Paginated.
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/After"
+      responses:
+        "200":
+          description: One page of artists.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArtistList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /artists/{id}:
+    get:
+      operationId: getArtist
+      tags: [Catalog]
+      summary: One artist, with its albums
+      description: |
+        The artist and its available albums. `404 artist_not_found` when there
+        is no such artist. An artist id is derived from the name: when
+        MusicLib renames an artist, its albums pass to an artist with another
+        id.
+      parameters:
+        - $ref: "#/components/parameters/PathId"
+      responses:
+        "200":
+          description: The artist.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArtistDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /albums:
+    get:
+      operationId: listAlbums
+      tags: [Catalog]
+      summary: The albums, in a chosen order
+      description: |
+        The available albums. Paginated. `sort` chooses the order:
+
+        - `title`: by title;
+        - `artist`: by artist, then year, then title;
+        - `year`: by year, then title; albums without a year come last in
+          ascending order;
+        - `added`: by the moment Vibrance first saw the album.
+
+        `order=desc` reverses the whole order. `artist` keeps only the albums
+        of one artist. A cursor belongs to the `sort` and the `order` it was
+        read with: with others it answers `400 invalid_cursor`.
+      parameters:
+        - name: sort
+          in: query
+          description: The order of the list.
+          schema:
+            type: string
+            enum: [title, artist, year, added]
+            default: title
+        - name: order
+          in: query
+          description: The direction of the order.
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: asc
+        - name: artist
+          in: query
+          description: The id of an artist, to list only its albums.
+          schema:
+            type: string
+            format: uuid
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/After"
+      responses:
+        "200":
+          description: One page of albums.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlbumList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /albums/{id}:
+    get:
+      operationId: getAlbum
+      tags: [Catalog]
+      summary: One album, with its tracks
+      description: |
+        The album and its available tracks, ordered by disc and number.
+        `404 album_not_found` when there is no such album or it is not
+        available. An album keeps its id when MusicLib renames it, edits it,
+        or moves it to another artist.
+      parameters:
+        - $ref: "#/components/parameters/PathId"
+      responses:
+        "200":
+          description: The album.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlbumDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /tracks/{id}:
+    get:
+      operationId: getTrack
+      tags: [Catalog]
+      summary: One track
+      description: |
+        The track, available or not: an unavailable track answers `200` with
+        `"available": false` and the last data known. `404 track_not_found`
+        when there is no such track.
+      parameters:
+        - $ref: "#/components/parameters/PathId"
+      responses:
+        "200":
+          description: The track.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Track"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /search:
+    get:
+      operationId: search
+      tags: [Search]
+      summary: Search artists, albums and tracks
+      description: |
+        Full-text search of what is available. `q` is split into words at
+        every character that is not a letter or a digit; at most 8 words of at
+        most 64 characters count. A result has **every** word, each as the
+        beginning of one of its words, so the search works while the user
+        types (`mil dav` finds Miles Davis). Case and accents do not count.
+        Nothing in `q` is an operator. A `q` without letters or digits finds
+        nothing, and is not an error.
+
+        Artists match by name; albums by title and artist; tracks by title,
+        artist and album. Each kind is ordered by relevance, a match in the
+        title or the name first. `limit` counts for each kind. The three keys
+        are always in the answer; a kind that `types` leaves out is an empty
+        list.
+
+        Known limits: no tolerance for typing mistakes; a run of Chinese or
+        Japanese characters is one word, found only from its beginning.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: What to search for, 1 to 100 characters; anything else answers `400 invalid_request`.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 100
+          example: mil dav
+        - name: types
+          in: query
+          description: The kinds to search, separated by commas.
+          style: form
+          explode: false
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [artist, album, track]
+            default: [artist, album, track]
+        - name: limit
+          in: query
+          description: The most results of each kind.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+      responses:
+        "200":
+          description: The results, by kind.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /tracks/{id}/audio:
+    get:
+      operationId: getTrackAudio
+      tags: [Media]
+      summary: The audio file of a track
+      description: |
+        The file MusicLib wrote, as it is: nothing is transcoded. The
+        `Content-Type` follows the codec of the track: `audio/flac` (flac),
+        `audio/mpeg` (mp3), `audio/mp4` (aac, alac). HEAD is answered too. The
+        session cookie is enough, so `<audio src>` works without code.
+
+        `Range` is honored (`206`), so a player can seek. The `ETag` is the
+        SHA-256 of the file. When MusicLib writes the album again the file
+        and its `ETag` change: a request with `Range` and an `If-Range` that
+        names the old `ETag` gets the **whole** new file (`200`), never bytes
+        of two versions. The response is `Cache-Control: private, no-cache`:
+        a client may keep the file and must revalidate it with
+        `If-None-Match` (`304`).
+
+        `404 track_not_found`: there is no such track.
+        `404 track_unavailable`: the track is not available.
+        `400 unsupported_profile`: `profile` is something other than
+        `original`.
+        `503 library_changing`, with `Retry-After`: the file on disk is not
+        the one the index describes, because MusicLib has just replaced the
+        album. A scan starts by itself: ask again after the delay, and read
+        the track again if it still fails.
+      parameters:
+        - $ref: "#/components/parameters/PathId"
+        - name: profile
+          in: query
+          description: |
+            Reserved for transcoding, which this version does not have. Leave
+            it out, or send `original`; any other value answers
+            `400 unsupported_profile`.
+          schema:
+            type: string
+          example: original
+        - name: Range
+          in: header
+          description: A byte range of the file, as in RFC 9110.
+          schema:
+            type: string
+          example: bytes=0-65535
+        - name: If-Range
+          in: header
+          description: The `ETag` the range belongs to. When it is not the current one, the range is ignored and the whole file is sent.
+          schema:
+            type: string
+        - $ref: "#/components/parameters/IfNoneMatch"
+      responses:
+        "200":
+          description: The whole file.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            audio/flac:
+              schema:
+                type: string
+                format: binary
+            audio/mpeg:
+              schema:
+                type: string
+                format: binary
+            audio/mp4:
+              schema:
+                type: string
+                format: binary
+        "206":
+          description: The range asked for.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Content-Range:
+              description: The bytes sent and the size of the file.
+              required: true
+              schema:
+                type: string
+                example: bytes 0-65535/31415926
+          content:
+            audio/flac:
+              schema:
+                type: string
+                format: binary
+            audio/mpeg:
+              schema:
+                type: string
+                format: binary
+            audio/mp4:
+              schema:
+                type: string
+                format: binary
+        "304":
+          $ref: "#/components/responses/NotModified"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "416":
+          description: The range is outside the file. The body is not an error of this API.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+            Content-Range:
+              description: The size of the file.
+              schema:
+                type: string
+                example: bytes */31415926
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/UnavailableOrChanging"
+  /albums/{id}/cover:
+    get:
+      operationId: getAlbumCover
+      tags: [Media]
+      summary: The cover of an album
+      description: |
+        A cover belongs to an album; a track shows the cover of its album.
+        HEAD is answered too.
+
+        `size` is `original` (the file MusicLib wrote, JPEG or PNG) or the
+        side in pixels of the square a thumbnail fits in, `256` or `640`. A
+        thumbnail is a JPEG with the proportions of the cover, **not cropped
+        and never enlarged**: `size` is the most its longer side can be, so a
+        cover of 1200 x 800 gives 256 x 171, and a cover smaller than the
+        square keeps its size. A transparent cover is put on white. When a
+        thumbnail cannot be made (a cover over 20 MiB or 40 megapixels, or
+        one that cannot be decoded) the original is sent in its place, so
+        `Content-Type` can be `image/png` for a thumbnail too.
+
+        Use the `url` of the `cover` object of an album: it carries `v`, the
+        hash of the cover. When `v` is the hash of the current cover the
+        response is `Cache-Control: private, max-age=31536000, immutable`.
+        Without `v`, or with the hash of an older cover, the **current** cover
+        is sent with `Cache-Control: private, no-cache`. The `ETag` is
+        `"<hash>-<size>"`; `If-None-Match` answers `304`.
+
+        `404 album_not_found`: there is no such album or it is not available.
+        `404 cover_not_found`: the album has no cover.
+        `503 library_changing`, with `Retry-After`: the cover on disk is not
+        the one the index describes, because MusicLib has just replaced the
+        album. A scan starts by itself: ask again after the delay, and read
+        the album again if it still fails.
+      parameters:
+        - $ref: "#/components/parameters/PathId"
+        - name: size
+          in: query
+          description: The original file, or the square in pixels a thumbnail fits in.
+          schema:
+            type: string
+            enum: ["256", "640", original]
+            default: "640"
+        - name: v
+          in: query
+          description: The hash of the cover the client knows, from `cover.hash`. It only chooses how long the response may be cached.
+          schema:
+            type: string
+          example: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+        - $ref: "#/components/parameters/IfNoneMatch"
+      responses:
+        "200":
+          description: The image.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+        "304":
+          $ref: "#/components/responses/NotModified"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/UnavailableOrChanging"
+  /tracks/{id}/lyrics:
+    get:
+      operationId: getTrackLyrics
+      tags: [Media]
+      summary: The lyrics of a track
+      description: |
+        The `.lrc` file of the track, read on the server and given as lines.
+        HEAD is answered too. `has_lyrics` of a track tells whether to ask.
+        The `ETag` is the SHA-256 of the file.
+
+        `404 track_not_found`: there is no such track.
+        `404 lyrics_not_found`: the track has no lyrics, or is not available,
+        or its lyrics file is gone or is over 2 MiB.
+        `503 library_changing`, with `Retry-After`: the lyrics on disk are
+        not the ones the index describes, because MusicLib has just replaced
+        the album. A scan starts by itself: ask again after the delay.
+      parameters:
+        - $ref: "#/components/parameters/PathId"
+      responses:
+        "200":
+          description: The lyrics.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lyrics"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/UnavailableOrChanging"
+  /me/favorites/tracks:
+    get:
+      operationId: listFavoriteTracks
+      tags: [Favorites]
+      summary: The favorite tracks, the most recent first
+      description: |
+        The favorite tracks of the user of the request. Paginated. A track
+        that is no longer available stays in the list, with
+        `"available": false` and the last data known.
+
+        A favorite follows the audio: when MusicLib moves the track to
+        another album, the favorite passes to the track with the same audio
+        there, with the same `favorited_at`, and `track.id` is a new id.
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/After"
+      responses:
+        "200":
+          description: One page of favorites.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FavoriteList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /me/favorites/tracks/{id}:
+    put:
+      operationId: addFavoriteTrack
+      tags: [Favorites]
+      summary: Make a track a favorite
+      description: |
+        Idempotent: a track that is a favorite already stays one, with the
+        date it had, and the answer is `204` all the same.
+        `404 track_not_found` when there is no such track.
+      parameters:
+        - $ref: "#/components/parameters/PathId"
+      responses:
+        "204":
+          description: The track is a favorite.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+    delete:
+      operationId: removeFavoriteTrack
+      tags: [Favorites]
+      summary: Make a track no longer a favorite
+      description: |
+        Idempotent: a track that is not a favorite answers `204` all the
+        same. `404 track_not_found` when there is no such track.
+      parameters:
+        - $ref: "#/components/parameters/PathId"
+      responses:
+        "204":
+          description: The track is not a favorite.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /playlists:
+    get:
+      operationId: listPlaylists
+      tags: [Playlists]
+      summary: The playlists of the user
+      description: Every playlist of the user of the request, without its items. Not paginated; a user has at most 500.
+      responses:
+        "200":
+          description: The playlists.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaylistList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+    post:
+      operationId: createPlaylist
+      tags: [Playlists]
+      summary: Create a playlist
+      description: |
+        Creates an empty playlist of the user of the request. Two playlists
+        may have the same name.
+
+        `422 invalid_request`: the name is not 1 to 200 characters, or the
+        description is over 2000.
+        `422 too_many_playlists`: the user has 500 playlists already.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlaylistInput"
+      responses:
+        "201":
+          description: Created.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Playlist"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /playlists/{id}:
+    get:
+      operationId: getPlaylist
+      tags: [Playlists]
+      summary: One playlist, without its items
+      description: |
+        `404 playlist_not_found` when there is no such playlist **or it is of
+        another user**: playlists are private, for admins too.
+      parameters:
+        - $ref: "#/components/parameters/PathId"
+      responses:
+        "200":
+          description: The playlist.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Playlist"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+    put:
+      operationId: updatePlaylist
+      tags: [Playlists]
+      summary: Change the name and the description of a playlist
+      description: |
+        Both fields are sent, with the values the playlist must have. The
+        playlist gets a new `revision`. `If-Match` is optional, and checked
+        when sent.
+
+        `404 playlist_not_found`: there is no such playlist, or it is of
+        another user.
+        `412 precondition_failed`: `If-Match` names an older revision; nothing
+        is changed.
+        `422 invalid_request`: the name is not 1 to 200 characters, or the
+        description is over 2000.
+      parameters:
+        - $ref: "#/components/parameters/PathId"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlaylistInput"
+      responses:
+        "200":
+          description: The playlist, as it is now.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Playlist"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "412":
+          $ref: "#/components/responses/PreconditionFailed"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+    delete:
+      operationId: deletePlaylist
+      tags: [Playlists]
+      summary: Delete a playlist
+      description: |
+        Deletes the playlist and its items. It cannot be undone. `If-Match`
+        is optional, and checked when sent.
+
+        `404 playlist_not_found`: there is no such playlist, or it is of
+        another user.
+        `412 precondition_failed`: `If-Match` names an older revision; nothing
+        is deleted.
+      parameters:
+        - $ref: "#/components/parameters/PathId"
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "204":
+          description: Deleted.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "412":
+          $ref: "#/components/responses/PreconditionFailed"
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /playlists/{id}/items:
+    get:
+      operationId: listPlaylistItems
+      tags: [Playlists]
+      summary: The items of a playlist, in order
+      description: |
+        The items by position. Paginated. The `ETag` is the one of the
+        playlist: a change between two pages gives another `ETag`, and the
+        client knows to read again. A cursor stays valid when the item it
+        names is removed.
+
+        A track that is no longer available stays in the playlist, with
+        `"available": false` and the last data known.
+
+        `404 playlist_not_found`: there is no such playlist, or it is of
+        another user.
+      parameters:
+        - $ref: "#/components/parameters/PathId"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/After"
+      responses:
+        "200":
+          description: One page of items.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+            ETag:
+              $ref: "#/components/headers/ETag"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaylistItemList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+    post:
+      operationId: addPlaylistItems
+      tags: [Playlists]
+      summary: Add tracks to a playlist
+      description: |
+        Adds the tracks as a block, in the order given. The same track may be
+        in a playlist more than once: each item has its own id. All of them
+        are added, or none.
+
+        With `"position": null` the block goes at the end, and `If-Match` is
+        not needed: adding a track from anywhere is one request. With a
+        position the block goes **before** the item that is at that position,
+        and `If-Match` is required, because a position means something only
+        for a known revision. Positions count **every** item of the playlist,
+        also the ones whose track is not available: with `n` items they go
+        from `0` to `n`, and `n` is the end.
+
+        `404 playlist_not_found`: there is no such playlist, or it is of
+        another user.
+        `412 precondition_failed`: `If-Match` names an older revision; nothing
+        is added.
+        `422 unknown_track`: some ids are not tracks; `details.track_ids`
+        lists them.
+        `422 track_unavailable`: some tracks are not available;
+        `details.track_ids` lists them.
+        `422 invalid_position`: the position is not from `0` to the number of
+        items.
+        `422 too_many_items`: the playlist would have more than 10000 items.
+        `428 precondition_required`: a position without `If-Match`.
+      parameters:
+        - $ref: "#/components/parameters/PathId"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddPlaylistItemsRequest"
+      responses:
+        "200":
+          description: Added. The playlist as it is now, and the new items.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AddPlaylistItemsResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "412":
+          $ref: "#/components/responses/PreconditionFailed"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /playlists/{id}/items/{item_id}:
+    delete:
+      operationId: removePlaylistItem
+      tags: [Playlists]
+      summary: Remove an item from a playlist
+      description: |
+        Removes one item, by its id and not by its position, and closes the
+        gap. `If-Match` is optional, and checked when sent.
+
+        `404 playlist_not_found`: there is no such playlist, or it is of
+        another user.
+        `404 item_not_found`: the playlist has no such item.
+        `412 precondition_failed`: `If-Match` names an older revision; nothing
+        is removed.
+      parameters:
+        - $ref: "#/components/parameters/PathId"
+        - $ref: "#/components/parameters/PathItemId"
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "200":
+          description: Removed. The playlist as it is now.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Playlist"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "412":
+          $ref: "#/components/responses/PreconditionFailed"
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /playlists/{id}/items/{item_id}/move:
+    post:
+      operationId: movePlaylistItem
+      tags: [Playlists]
+      summary: Move an item inside a playlist
+      description: |
+        Moves one item so that `position` is where it is **after** the move;
+        the other items keep their order. Positions count every item of the
+        playlist, also the ones whose track is not available: with `n` items
+        they go from `0` to `n - 1`.
+        `If-Match` is required.
+
+        `404 playlist_not_found`: there is no such playlist, or it is of
+        another user.
+        `404 item_not_found`: the playlist has no such item.
+        `412 precondition_failed`: `If-Match` names an older revision; nothing
+        is moved.
+        `422 invalid_position`: the position is not from `0` to the number of
+        items less one.
+        `428 precondition_required`: no `If-Match`.
+      parameters:
+        - $ref: "#/components/parameters/PathId"
+        - $ref: "#/components/parameters/PathItemId"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MovePlaylistItemRequest"
+      responses:
+        "200":
+          description: Moved. The playlist as it is now.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Playlist"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "412":
+          $ref: "#/components/responses/PreconditionFailed"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "428":
+          $ref: "#/components/responses/PreconditionRequired"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: vibrance_session
+      description: The session cookie that `POST /auth/login` sets. It lasts 30 days and is renewed while it is used.
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: A token of `POST /auth/tokens`, `vb_` and 43 characters. It lasts 90 days and is renewed while it is used.
+  parameters:
+    PathId:
+      name: id
+      in: path
+      required: true
+      description: The id of the resource, a UUID. Anything else answers `400 invalid_request`.
+      schema:
+        type: string
+        format: uuid
+      example: 0199a5c0-7b1e-7c3a-9d2f-4b6a8c0e1f23
+    PathItemId:
+      name: item_id
+      in: path
+      required: true
+      description: The id of the playlist item, a UUID. Anything else answers `400 invalid_request`.
+      schema:
+        type: string
+        format: uuid
+      example: 0199a5c4-2f6b-7a90-b1c3-5d7e9f1a3b5c
+    Limit:
+      name: limit
+      in: query
+      description: The most rows in a page.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    After:
+      name: after
+      in: query
+      description: |
+        The `next` of the page before, to read the page after it. Opaque: do
+        not build or change one. `400 invalid_cursor` when it is not a cursor
+        of this list with these parameters.
+      schema:
+        type: string
+    IfMatch:
+      name: If-Match
+      in: header
+      description: |
+        The `etag` of the playlist the change was prepared on,
+        `"playlist:<id>:<revision>"` with its quotes. The change is made only
+        if the playlist is still at that revision (`412 precondition_failed`
+        otherwise). The operation says whether it is required
+        (`428 precondition_required` without it) or optional.
+      schema:
+        type: string
+      example: '"playlist:0199a5c3-51d0-7e42-8a6b-9c0d1e2f3a4b:7"'
+    IfNoneMatch:
+      name: If-None-Match
+      in: header
+      description: The `ETag` of the copy the client holds. When it is still the current one the answer is `304`, without a body.
+      schema:
+        type: string
+  headers:
+    X-Request-Id:
+      description: The id of this request, a UUID the server makes for each one. It is on every response, errors included, and in the log of the server.
+      required: true
+      schema:
+        type: string
+        format: uuid
+        example: 0199a5c8-6d3e-7f10-a2b4-c6d8e0f2a4b6
+    ETag:
+      description: |
+        The strong entity tag of what is sent. For a playlist it is
+        `"playlist:<id>:<revision>"`; for audio and lyrics, the SHA-256 of the
+        file; for a cover, `"<hash>-<size>"`.
+      required: true
+      schema:
+        type: string
+        example: '"playlist:0199a5c3-51d0-7e42-8a6b-9c0d1e2f3a4b:7"'
+    Retry-After:
+      description: The seconds to wait before asking again. Sent with `library_changing`.
+      schema:
+        type: integer
+        example: 5
+  responses:
+    NotModified:
+      description: The copy the client holds, named by `If-None-Match`, is the current one. No body.
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/X-Request-Id"
+        ETag:
+          $ref: "#/components/headers/ETag"
+    BadRequest:
+      description: |
+        The request is malformed. `invalid_request`: the JSON is not valid,
+        has an unknown or a duplicate key, lacks a required field or has one
+        of the wrong type, or a parameter or an enum has a value it cannot
+        have. `invalid_cursor`: `after` is not a cursor of this list.
+        `unsupported_profile`: see the operation.
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/X-Request-Id"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            code: invalid_request
+            message: The request is not valid.
+            details: {}
+    Unauthorized:
+      description: "`login_required`: the request has no live session. A session that expired or was revoked answers the same."
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/X-Request-Id"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            code: login_required
+            message: Sign in to continue.
+            details: {}
+    InvalidCredentials:
+      description: "`invalid_credentials`: the name or the password is wrong, or the account is disabled. The answer is the same in the three cases."
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/X-Request-Id"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            code: invalid_credentials
+            message: The username or the password is wrong.
+            details: {}
+    Forbidden:
+      description: |
+        `origin_not_allowed`: `Origin` was sent and is not the public origin
+        of the server. `request_header_required`: a request other than GET
+        and HEAD without `X-Vibrance-Request: 1`. `forbidden`: the operation
+        is for admins and the user is not one.
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/X-Request-Id"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            code: request_header_required
+            message: "The header X-Vibrance-Request: 1 is required."
+            details: {}
+    NotFound:
+      description: |
+        The resource does not exist, **or belongs to another user**, or is
+        not available. The codes of each operation are in its description:
+        `session_not_found`, `user_not_found`, `artist_not_found`,
+        `album_not_found`, `track_not_found`, `playlist_not_found`,
+        `item_not_found`, `track_unavailable`, `cover_not_found`,
+        `lyrics_not_found`.
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/X-Request-Id"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            code: track_not_found
+            message: There is no such track.
+            details: {}
+    Conflict:
+      description: |
+        The change conflicts with the state of the server: `username_taken`,
+        `last_admin`, `cannot_modify_self`. See the operation.
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/X-Request-Id"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            code: last_admin
+            message: The last enabled admin cannot be deleted, demoted or disabled.
+            details: {}
+    PreconditionFailed:
+      description: "`precondition_failed`: `If-Match` does not name the current revision of the playlist. Nothing was changed: read the playlist again and redo the change."
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/X-Request-Id"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            code: precondition_failed
+            message: The playlist was changed in the meantime.
+            details: {}
+    PayloadTooLarge:
+      description: "`body_too_large`: the body is over 1 MiB."
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/X-Request-Id"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            code: body_too_large
+            message: The request body is larger than 1 MiB.
+            details: {}
+    MisdirectedRequest:
+      description: "`host_not_allowed`: `Host` is not the host and port of the public origin of the server."
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/X-Request-Id"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            code: host_not_allowed
+            message: This host is not the public origin of the server.
+            details: {}
+    Unprocessable:
+      description: |
+        The request is well formed and its content is not valid:
+        `username_invalid`, `password_invalid`, `current_password_invalid`,
+        `invalid_request`, `too_many_playlists`, `too_many_items`,
+        `unknown_track`, `track_unavailable`, `invalid_position`. See the
+        operation. Nothing was changed.
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/X-Request-Id"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            code: unknown_track
+            message: Some tracks do not exist.
+            details:
+              track_ids:
+                - 0199a5c1-0c4d-7b88-8e21-3f5a7c9d1b46
+    PreconditionRequired:
+      description: "`precondition_required`: the operation needs `If-Match` and the request has none."
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/X-Request-Id"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            code: precondition_required
+            message: This change needs If-Match.
+            details: {}
+    Internal:
+      description: "`internal`: an unexpected error. The response never has its details: they are in the log of the server, under the `X-Request-Id`."
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/X-Request-Id"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            code: internal
+            message: Something went wrong.
+            details: {}
+    Unavailable:
+      description: "`not_ready`: the server is starting. `shutting_down`: the server is stopping. Ask again shortly."
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/X-Request-Id"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            code: not_ready
+            message: The server is starting.
+            details: {}
+    UnavailableOrChanging:
+      description: |
+        `library_changing`, with `Retry-After`: the file is not the one the
+        index describes, because MusicLib has just replaced it; a scan has
+        started. `not_ready`: the server is starting. `shutting_down`: the
+        server is stopping.
+      headers:
+        X-Request-Id:
+          $ref: "#/components/headers/X-Request-Id"
+        Retry-After:
+          $ref: "#/components/headers/Retry-After"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            code: library_changing
+            message: The library is changing. Try again shortly.
+            details: {}
+  schemas:
+    Id:
+      type: string
+      format: uuid
+      description: A lowercase UUID.
+      example: 0199a5c0-7b1e-7c3a-9d2f-4b6a8c0e1f23
+      x-go-type: string
+    Timestamp:
+      type: string
+      format: date-time
+      pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$'
+      description: A moment, RFC 3339 in UTC, always with three digits of milliseconds and `Z`.
+      example: "2026-09-30T12:34:56.000Z"
+      x-go-type: string
+    Error:
+      type: object
+      description: |
+        Every error of the API. `code` is stable and is what a client tests.
+        `message` is a sentence for people, in English, and may change.
+        `details` is an object, empty unless the operation says what it
+        holds. An error never has paths of the server, SQL or the output of a
+        tool.
+      required: [code, message, details]
+      properties:
+        code:
+          type: string
+          description: |
+            The stable code. By status:
+
+            - `400`: `invalid_request`, `invalid_cursor`, `unsupported_profile`
+            - `401`: `login_required`, `invalid_credentials`
+            - `403`: `forbidden`, `origin_not_allowed`, `request_header_required`
+            - `404`: `not_found` (no such path), `session_not_found`,
+              `user_not_found`, `artist_not_found`, `album_not_found`,
+              `track_not_found`, `playlist_not_found`, `item_not_found`,
+              `track_unavailable`, `cover_not_found`, `lyrics_not_found`
+            - `405`: `method_not_allowed`
+            - `409`: `username_taken`, `last_admin`, `cannot_modify_self`
+            - `412`: `precondition_failed`
+            - `413`: `body_too_large`
+            - `421`: `host_not_allowed`
+            - `422`: `username_invalid`, `password_invalid`,
+              `current_password_invalid`, `invalid_request`,
+              `too_many_playlists`, `too_many_items`, `unknown_track`,
+              `track_unavailable`, `invalid_position`
+            - `428`: `precondition_required`
+            - `500`: `internal`
+            - `503`: `not_ready`, `shutting_down`, `library_changing`
+          enum:
+            - invalid_request
+            - invalid_cursor
+            - unsupported_profile
+            - login_required
+            - invalid_credentials
+            - forbidden
+            - origin_not_allowed
+            - request_header_required
+            - not_found
+            - session_not_found
+            - user_not_found
+            - artist_not_found
+            - album_not_found
+            - track_not_found
+            - playlist_not_found
+            - item_not_found
+            - track_unavailable
+            - cover_not_found
+            - lyrics_not_found
+            - method_not_allowed
+            - username_taken
+            - last_admin
+            - cannot_modify_self
+            - precondition_failed
+            - body_too_large
+            - host_not_allowed
+            - username_invalid
+            - password_invalid
+            - current_password_invalid
+            - too_many_playlists
+            - too_many_items
+            - unknown_track
+            - invalid_position
+            - precondition_required
+            - internal
+            - not_ready
+            - shutting_down
+            - library_changing
+        message:
+          type: string
+          description: A sentence for people. Do not test it.
+        details:
+          type: object
+          description: More about the error, for a program. Empty unless the operation says otherwise.
+          additionalProperties: true
+      example:
+        code: track_unavailable
+        message: The track is not available.
+        details: {}
+    ServerInfo:
+      type: object
+      required: [name, version, api_version]
+      properties:
+        name:
+          type: string
+          description: Always `Vibrance`.
+          enum: [Vibrance]
+        version:
+          type: string
+          description: The version of the server.
+        api_version:
+          type: integer
+          description: The version of this API. Always `1` under `/api/v1`.
+          enum: [1]
+      example:
+        name: Vibrance
+        version: "0.1.0"
+        api_version: 1
+    User:
+      type: object
+      description: An account.
+      required: [id, username, role, disabled, created_at]
+      properties:
+        id:
+          $ref: "#/components/schemas/Id"
+        username:
+          type: string
+          description: Lowercase, 3 to 32 characters of `a-z 0-9 . _ -`.
+        role:
+          $ref: "#/components/schemas/Role"
+        disabled:
+          type: boolean
+          description: A disabled account cannot sign in and has no sessions.
+        created_at:
+          $ref: "#/components/schemas/Timestamp"
+      example:
+        id: 0199a5c5-3a7c-7b01-92d4-6e8f0a1b2c3d
+        username: anna
+        role: user
+        disabled: false
+        created_at: "2026-09-30T12:34:56.000Z"
+    Role:
+      type: string
+      description: "`admin` also manages the accounts and the library. An admin does not see the favorites or the playlists of the others."
+      enum: [admin, user]
+      example: user
+    Session:
+      type: object
+      description: |
+        One sign-in of a user. The `id` is a handle to list and revoke it; it
+        is not the token and cannot be used to sign in.
+      required: [id, kind, device_name, created_at, last_used_at, expires_at, current]
+      properties:
+        id:
+          $ref: "#/components/schemas/Id"
+        kind:
+          type: string
+          description: "`cookie`: from `POST /auth/login`. `token`: from `POST /auth/tokens`."
+          enum: [cookie, token]
+        device_name:
+          type: string
+          nullable: true
+          description: The name the client gave when it signed in.
+        created_at:
+          $ref: "#/components/schemas/Timestamp"
+        last_used_at:
+          $ref: "#/components/schemas/Timestamp"
+        expires_at:
+          $ref: "#/components/schemas/Timestamp"
+        current:
+          type: boolean
+          description: Whether it is the session of this request.
+      example:
+        id: 0199a5c6-4b8d-7c12-a3e5-7f9a1b2c3d4e
+        kind: token
+        device_name: Anna's phone
+        created_at: "2026-09-30T12:34:56.000Z"
+        last_used_at: "2026-10-02T08:15:00.000Z"
+        expires_at: "2026-12-29T12:34:56.000Z"
+        current: true
+    SessionList:
+      type: object
+      required: [sessions]
+      properties:
+        sessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/Session"
+    UserList:
+      type: object
+      required: [users]
+      properties:
+        users:
+          type: array
+          items:
+            $ref: "#/components/schemas/User"
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          description: The name of the account. Case does not count.
+        password:
+          type: string
+        device_name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: A name for this sign-in, shown in the list of sessions. Optional.
+      example:
+        username: anna
+        password: correct horse battery staple
+        device_name: Firefox on the laptop
+    CreateTokenRequest:
+      type: object
+      additionalProperties: false
+      required: [username, password, device_name]
+      properties:
+        username:
+          type: string
+          description: The name of the account. Case does not count.
+        password:
+          type: string
+        device_name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: A name for this sign-in, shown in the list of sessions.
+      example:
+        username: anna
+        password: correct horse battery staple
+        device_name: Anna's phone
+    LoginResult:
+      type: object
+      required: [user, session]
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        session:
+          $ref: "#/components/schemas/Session"
+    TokenResult:
+      type: object
+      required: [token, user, session]
+      properties:
+        token:
+          type: string
+          pattern: "^vb_[A-Za-z0-9_-]{43}$"
+          description: The secret to send in the `Authorization` header, after `Bearer`. It is given only here; keep it as a password.
+          example: vb_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+        user:
+          $ref: "#/components/schemas/User"
+        session:
+          $ref: "#/components/schemas/Session"
+    ChangePasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [current_password, new_password]
+      properties:
+        current_password:
+          type: string
+        new_password:
+          type: string
+          description: 12 to 1024 bytes, no control characters.
+      example:
+        current_password: correct horse battery staple
+        new_password: a much longer and better passphrase
+    CreateUserRequest:
+      type: object
+      additionalProperties: false
+      required: [username, password, role]
+      properties:
+        username:
+          type: string
+          description: 3 to 32 characters of `a-z 0-9 . _ -`, beginning with a letter or a digit.
+        password:
+          type: string
+          description: 12 to 1024 bytes, no control characters.
+        role:
+          $ref: "#/components/schemas/Role"
+      example:
+        username: anna
+        password: correct horse battery staple
+        role: user
+    UpdateUserRequest:
+      type: object
+      additionalProperties: false
+      required: [role, disabled]
+      properties:
+        role:
+          $ref: "#/components/schemas/Role"
+        disabled:
+          type: boolean
+      example:
+        role: user
+        disabled: true
+    ResetUserPasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [password]
+      properties:
+        password:
+          type: string
+          description: 12 to 1024 bytes, no control characters.
+      example:
+        password: correct horse battery staple
+    Cover:
+      type: object
+      description: The cover of an album. `url` is ready to use, for example as the `src` of an image; add `&size=256` for a thumbnail.
+      required: [hash, url]
+      properties:
+        hash:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+          description: The SHA-256 of the cover file. It changes when the cover does.
+        url:
+          type: string
+          description: The path of the cover, with the hash as `v`, so that the image can be cached for ever.
+      example:
+        hash: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+        url: /api/v1/albums/7d4c2f0a-3b1e-4c5d-8e9f-0a1b2c3d4e5f/cover?v=9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+    ArtistRef:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          $ref: "#/components/schemas/Id"
+        name:
+          type: string
+      example:
+        id: 5b0c8f6e-1d2a-5e3f-9a4b-6c7d8e9f0a1b
+        name: Miles Davis
+    ArtistSummary:
+      type: object
+      required: [id, name, album_count]
+      properties:
+        id:
+          $ref: "#/components/schemas/Id"
+        name:
+          type: string
+        album_count:
+          type: integer
+          minimum: 0
+          description: How many available albums the artist has.
+      example:
+        id: 5b0c8f6e-1d2a-5e3f-9a4b-6c7d8e9f0a1b
+        name: Miles Davis
+        album_count: 3
+    ArtistDetail:
+      type: object
+      required: [id, name, albums]
+      properties:
+        id:
+          $ref: "#/components/schemas/Id"
+        name:
+          type: string
+        albums:
+          type: array
+          description: The available albums of the artist.
+          items:
+            $ref: "#/components/schemas/AlbumSummary"
+    ArtistList:
+      type: object
+      required: [artists, next]
+      properties:
+        artists:
+          type: array
+          items:
+            $ref: "#/components/schemas/ArtistSummary"
+        next:
+          $ref: "#/components/schemas/Cursor"
+    Cursor:
+      type: string
+      nullable: true
+      description: The value to send as `after` to read the next page; `null` on the last page.
+      example: eyJzIjoidGl0bGUiLCJvIjoiYXNjIn0
+    AlbumRef:
+      type: object
+      description: The album a track belongs to.
+      required: [id, title, artist, year, cover]
+      properties:
+        id:
+          $ref: "#/components/schemas/Id"
+        title:
+          type: string
+        artist:
+          $ref: "#/components/schemas/ArtistRef"
+        year:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 9999
+        cover:
+          allOf:
+            - $ref: "#/components/schemas/Cover"
+          nullable: true
+      example:
+        id: 7d4c2f0a-3b1e-4c5d-8e9f-0a1b2c3d4e5f
+        title: Kind of Blue
+        artist:
+          id: 5b0c8f6e-1d2a-5e3f-9a4b-6c7d8e9f0a1b
+          name: Miles Davis
+        year: 1959
+        cover:
+          hash: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+          url: /api/v1/albums/7d4c2f0a-3b1e-4c5d-8e9f-0a1b2c3d4e5f/cover?v=9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+    AlbumSummary:
+      type: object
+      required: [id, title, artist, year, genre, compilation, track_count, duration_ms, cover, added_at]
+      properties:
+        id:
+          $ref: "#/components/schemas/Id"
+        title:
+          type: string
+        artist:
+          $ref: "#/components/schemas/ArtistRef"
+        year:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 9999
+        genre:
+          type: string
+          nullable: true
+        compilation:
+          type: boolean
+          description: Whether the album gathers tracks of several artists.
+        track_count:
+          type: integer
+          minimum: 0
+          description: How many available tracks the album has.
+        duration_ms:
+          type: integer
+          format: int64
+          minimum: 0
+          description: The sum of the known durations of the available tracks, in milliseconds.
+        cover:
+          allOf:
+            - $ref: "#/components/schemas/Cover"
+          nullable: true
+        added_at:
+          $ref: "#/components/schemas/Timestamp"
+      example:
+        id: 7d4c2f0a-3b1e-4c5d-8e9f-0a1b2c3d4e5f
+        title: Kind of Blue
+        artist:
+          id: 5b0c8f6e-1d2a-5e3f-9a4b-6c7d8e9f0a1b
+          name: Miles Davis
+        year: 1959
+        genre: Jazz
+        compilation: false
+        track_count: 5
+        duration_ms: 2745000
+        cover:
+          hash: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+          url: /api/v1/albums/7d4c2f0a-3b1e-4c5d-8e9f-0a1b2c3d4e5f/cover?v=9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+        added_at: "2026-09-30T12:34:56.000Z"
+    AlbumDetail:
+      description: An album with its available tracks, ordered by disc and number.
+      allOf:
+        - $ref: "#/components/schemas/AlbumSummary"
+        - type: object
+          required: [disc_count, tracks]
+          properties:
+            disc_count:
+              type: integer
+              minimum: 0
+              description: How many discs the available tracks are on.
+            tracks:
+              type: array
+              items:
+                $ref: "#/components/schemas/Track"
+      example:
+        id: 7d4c2f0a-3b1e-4c5d-8e9f-0a1b2c3d4e5f
+        title: Kind of Blue
+        artist:
+          id: 5b0c8f6e-1d2a-5e3f-9a4b-6c7d8e9f0a1b
+          name: Miles Davis
+        year: 1959
+        genre: Jazz
+        compilation: false
+        track_count: 1
+        duration_ms: 562000
+        cover: null
+        added_at: "2026-09-30T12:34:56.000Z"
+        disc_count: 1
+        tracks:
+          - id: 0199a5c0-7b1e-7c3a-9d2f-4b6a8c0e1f23
+            title: So What
+            artist: Miles Davis
+            album:
+              id: 7d4c2f0a-3b1e-4c5d-8e9f-0a1b2c3d4e5f
+              title: Kind of Blue
+              artist:
+                id: 5b0c8f6e-1d2a-5e3f-9a4b-6c7d8e9f0a1b
+                name: Miles Davis
+              year: 1959
+              cover: null
+            disc: 1
+            number: 1
+            duration_ms: 562000
+            genre: Jazz
+            format:
+              codec: flac
+              sample_rate: 44100
+              channels: 2
+              bit_depth: 16
+              bitrate: null
+              size: 31415926
+            has_lyrics: false
+            replay_gain: null
+            available: true
+            favorite: false
+    AlbumList:
+      type: object
+      required: [albums, next]
+      properties:
+        albums:
+          type: array
+          items:
+            $ref: "#/components/schemas/AlbumSummary"
+        next:
+          $ref: "#/components/schemas/Cursor"
+    AudioFormat:
+      type: object
+      description: The audio file of a track, as MusicLib wrote it.
+      required: [codec, sample_rate, channels, bit_depth, bitrate, size]
+      properties:
+        codec:
+          type: string
+          description: "`aac` and `alac` are in an MP4 file (`.m4a`)."
+          enum: [flac, mp3, aac, alac]
+        sample_rate:
+          type: integer
+          minimum: 1
+          description: In hertz.
+        channels:
+          type: integer
+          minimum: 1
+        bit_depth:
+          type: integer
+          nullable: true
+          minimum: 1
+          description: The bits of a sample; `null` for the lossy codecs.
+        bitrate:
+          type: integer
+          nullable: true
+          minimum: 1
+          description: The bit rate of the audio stream, in bits per second; `null` when the file does not declare one, as FLAC files do not.
+        size:
+          type: integer
+          format: int64
+          minimum: 0
+          description: The size of the file, in bytes.
+      example:
+        codec: flac
+        sample_rate: 44100
+        channels: 2
+        bit_depth: 16
+        bitrate: null
+        size: 31415926
+    ReplayGain:
+      type: object
+      description: The ReplayGain values in the tags of the file. Each is `null` when the file does not have it.
+      required: [track_gain_db, track_peak, album_gain_db, album_peak]
+      properties:
+        track_gain_db:
+          type: number
+          format: double
+          nullable: true
+          description: In decibels.
+        track_peak:
+          type: number
+          format: double
+          nullable: true
+          description: The peak of the track, where `1.0` is full scale.
+        album_gain_db:
+          type: number
+          format: double
+          nullable: true
+          description: In decibels.
+        album_peak:
+          type: number
+          format: double
+          nullable: true
+          description: The peak of the album, where `1.0` is full scale.
+      example:
+        track_gain_db: -6.48
+        track_peak: 0.988
+        album_gain_db: -5.9
+        album_peak: 0.997
+    Track:
+      type: object
+      description: |
+        A track. The id is given by Vibrance and follows the audio: it stays
+        the same when MusicLib changes the title, the number, the tags or the
+        cover, renames the album or moves it to another artist. `album` is
+        always there, with the last data known when the track is not
+        available. A track has no cover of its own: it shows `album.cover`.
+      required: [id, title, artist, album, disc, number, duration_ms, genre, format, has_lyrics, replay_gain, available, favorite]
+      properties:
+        id:
+          $ref: "#/components/schemas/Id"
+        title:
+          type: string
+        artist:
+          type: string
+          description: The name of the artist of the track. The artist of the album is `album.artist`.
+        album:
+          $ref: "#/components/schemas/AlbumRef"
+        disc:
+          type: integer
+          minimum: 1
+          maximum: 99
+        number:
+          type: integer
+          minimum: 1
+          maximum: 999
+          description: The number of the track on its disc.
+        duration_ms:
+          type: integer
+          format: int64
+          nullable: true
+          minimum: 0
+          description: In milliseconds; `null` when it is not known.
+        genre:
+          type: string
+          nullable: true
+        format:
+          $ref: "#/components/schemas/AudioFormat"
+        has_lyrics:
+          type: boolean
+          description: Whether `GET /tracks/{id}/lyrics` has something to give.
+        replay_gain:
+          allOf:
+            - $ref: "#/components/schemas/ReplayGain"
+          nullable: true
+          description: "`null` when the file has no ReplayGain tag at all."
+        available:
+          type: boolean
+          description: Whether the file is in the library. The audio of a track that is not available answers `404 track_unavailable`.
+        favorite:
+          type: boolean
+          description: Whether the track is a favorite of the user of the request.
+      example:
+        id: 0199a5c0-7b1e-7c3a-9d2f-4b6a8c0e1f23
+        title: So What
+        artist: Miles Davis
+        album:
+          id: 7d4c2f0a-3b1e-4c5d-8e9f-0a1b2c3d4e5f
+          title: Kind of Blue
+          artist:
+            id: 5b0c8f6e-1d2a-5e3f-9a4b-6c7d8e9f0a1b
+            name: Miles Davis
+          year: 1959
+          cover:
+            hash: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+            url: /api/v1/albums/7d4c2f0a-3b1e-4c5d-8e9f-0a1b2c3d4e5f/cover?v=9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
+        disc: 1
+        number: 1
+        duration_ms: 562000
+        genre: Jazz
+        format:
+          codec: flac
+          sample_rate: 44100
+          channels: 2
+          bit_depth: 16
+          bitrate: null
+          size: 31415926
+        has_lyrics: true
+        replay_gain:
+          track_gain_db: -6.48
+          track_peak: 0.988
+          album_gain_db: -5.9
+          album_peak: 0.997
+        available: true
+        favorite: false
+    SearchResult:
+      type: object
+      required: [artists, albums, tracks]
+      properties:
+        artists:
+          type: array
+          items:
+            $ref: "#/components/schemas/ArtistSummary"
+        albums:
+          type: array
+          items:
+            $ref: "#/components/schemas/AlbumSummary"
+        tracks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Track"
+    Lyrics:
+      type: object
+      description: |
+        The lyrics of a track. When `synced` is true every line has its
+        `time_ms` and the lines are in the order of their times. When it is
+        false the file had no time at all: every line has `"time_ms": null`
+        and the lines are in the order of the file, without the empty ones.
+      required: [synced, lines]
+      properties:
+        synced:
+          type: boolean
+          description: Whether the lines have times.
+        lines:
+          type: array
+          maxItems: 10000
+          items:
+            $ref: "#/components/schemas/LyricsLine"
+      example:
+        synced: true
+        lines:
+          - time_ms: 12340
+            text: First line of the song
+          - time_ms: 15800
+            text: ""
+          - time_ms: 21050
+            text: Second line of the song
+    LyricsLine:
+      type: object
+      required: [time_ms, text]
+      properties:
+        time_ms:
+          type: integer
+          format: int64
+          nullable: true
+          minimum: 0
+          description: When the line begins, in milliseconds from the start of the track; `null` in lyrics that are not synced.
+        text:
+          type: string
+          description: The line. Empty, in synced lyrics, for a pause without words.
+      example:
+        time_ms: 12340
+        text: First line of the song
+    Favorite:
+      type: object
+      description: |
+        A favorite track of the user. It follows the audio: `track` can
+        become another track, with another id, that has the same audio, when
+        MusicLib moves the track to another album; `favorited_at` stays. The
+        old id can still be read with `GET /tracks/{id}`, with
+        `"available": false`.
+      required: [favorited_at, track]
+      properties:
+        favorited_at:
+          $ref: "#/components/schemas/Timestamp"
+        track:
+          $ref: "#/components/schemas/Track"
+    FavoriteList:
+      type: object
+      required: [favorites, next]
+      properties:
+        favorites:
+          type: array
+          items:
+            $ref: "#/components/schemas/Favorite"
+        next:
+          $ref: "#/components/schemas/Cursor"
+    Playlist:
+      type: object
+      description: A playlist of the user, without its items.
+      required: [id, name, description, item_count, duration_ms, revision, etag, created_at, updated_at]
+      properties:
+        id:
+          $ref: "#/components/schemas/Id"
+        name:
+          type: string
+          description: 1 to 200 characters.
+        description:
+          type: string
+          description: At most 2000 characters; empty when there is none.
+        item_count:
+          type: integer
+          minimum: 0
+          description: How many items have a track that is available. Positions count every item, also the ones whose track is not available.
+        duration_ms:
+          type: integer
+          format: int64
+          minimum: 0
+          description: The sum of the durations of the items that have an available track, in milliseconds.
+        revision:
+          type: integer
+          format: int64
+          minimum: 1
+          description: It grows at every change of the playlist or of its items.
+        etag:
+          type: string
+          description: The entity tag of this revision, `"playlist:<id>:<revision>"` with its quotes; the value to send as `If-Match`.
+        created_at:
+          $ref: "#/components/schemas/Timestamp"
+        updated_at:
+          $ref: "#/components/schemas/Timestamp"
+      example:
+        id: 0199a5c3-51d0-7e42-8a6b-9c0d1e2f3a4b
+        name: Sunday morning
+        description: ""
+        item_count: 12
+        duration_ms: 3120000
+        revision: 7
+        etag: '"playlist:0199a5c3-51d0-7e42-8a6b-9c0d1e2f3a4b:7"'
+        created_at: "2026-09-30T12:34:56.000Z"
+        updated_at: "2026-10-02T08:15:00.000Z"
+    PlaylistList:
+      type: object
+      required: [playlists]
+      properties:
+        playlists:
+          type: array
+          items:
+            $ref: "#/components/schemas/Playlist"
+    PlaylistInput:
+      type: object
+      additionalProperties: false
+      required: [name, description]
+      properties:
+        name:
+          type: string
+          description: 1 to 200 characters.
+        description:
+          type: string
+          description: At most 2000 characters; `""` for none.
+      example:
+        name: Sunday morning
+        description: ""
+    PlaylistItem:
+      type: object
+      description: |
+        One place in a playlist. The `id` is of the item, not of the track:
+        the same track can be in a playlist more than once. The `id` and
+        `added_at` never change, and `position` changes only when the items
+        of the playlist are changed. `track` follows the audio: it can become
+        another track, with another id, that has the same audio, when
+        MusicLib moves the track to another album; the item stays where it
+        is and the playlist gets a new revision. The old id can still be read
+        with `GET /tracks/{id}`, with `"available": false`.
+      required: [id, position, added_at, track]
+      properties:
+        id:
+          $ref: "#/components/schemas/Id"
+        position:
+          type: integer
+          minimum: 0
+          description: The place of the item, from `0`, without gaps.
+        added_at:
+          $ref: "#/components/schemas/Timestamp"
+        track:
+          $ref: "#/components/schemas/Track"
+      example:
+        id: 0199a5c4-2f6b-7a90-b1c3-5d7e9f1a3b5c
+        position: 0
+        added_at: "2026-09-30T12:34:56.000Z"
+        track:
+          id: 0199a5c0-7b1e-7c3a-9d2f-4b6a8c0e1f23
+          title: So What
+          artist: Miles Davis
+          album:
+            id: 7d4c2f0a-3b1e-4c5d-8e9f-0a1b2c3d4e5f
+            title: Kind of Blue
+            artist:
+              id: 5b0c8f6e-1d2a-5e3f-9a4b-6c7d8e9f0a1b
+              name: Miles Davis
+            year: 1959
+            cover: null
+          disc: 1
+          number: 1
+          duration_ms: 562000
+          genre: Jazz
+          format:
+            codec: flac
+            sample_rate: 44100
+            channels: 2
+            bit_depth: 16
+            bitrate: null
+            size: 31415926
+          has_lyrics: false
+          replay_gain: null
+          available: true
+          favorite: true
+    PlaylistItemList:
+      type: object
+      required: [items, next]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PlaylistItem"
+        next:
+          $ref: "#/components/schemas/Cursor"
+    AddPlaylistItemsRequest:
+      type: object
+      additionalProperties: false
+      required: [track_ids, position]
+      properties:
+        track_ids:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          description: The tracks to add, in order. An id may be repeated.
+          items:
+            type: string
+            format: uuid
+        position:
+          type: integer
+          nullable: true
+          description: "`null` to add at the end; or the position of the item the block goes before, from `0` to the number of items of the playlist (the end), which needs `If-Match`."
+      example:
+        track_ids:
+          - 0199a5c0-7b1e-7c3a-9d2f-4b6a8c0e1f23
+        position: null
+    AddPlaylistItemsResult:
+      type: object
+      required: [playlist, added]
+      properties:
+        playlist:
+          $ref: "#/components/schemas/Playlist"
+        added:
+          type: array
+          description: The new items, in the order of `track_ids`.
+          items:
+            $ref: "#/components/schemas/AddedPlaylistItem"
+    AddedPlaylistItem:
+      type: object
+      required: [item_id, track_id, position]
+      properties:
+        item_id:
+          $ref: "#/components/schemas/Id"
+        track_id:
+          $ref: "#/components/schemas/Id"
+        position:
+          type: integer
+          minimum: 0
+      example:
+        item_id: 0199a5c4-2f6b-7a90-b1c3-5d7e9f1a3b5c
+        track_id: 0199a5c0-7b1e-7c3a-9d2f-4b6a8c0e1f23
+        position: 12
+    MovePlaylistItemRequest:
+      type: object
+      additionalProperties: false
+      required: [position]
+      properties:
+        position:
+          type: integer
+          description: Where the item is after the move, from `0` to the number of items of the playlist less one.
+      example:
+        position: 0
+    LibraryStatus:
+      type: object
+      description: The state of the library as the scanner knows it.
+      required: [state, last_scan, albums, tracks, progress, musiclib_maintenance, problems]
+      properties:
+        state:
+          type: string
+          description: |
+            - `idle`: no cycle is running.
+            - `scanning`: a cycle is running.
+            - `maintenance`: MusicLib is rebuilding or restoring its library;
+              the index is left as it is until it ends.
+            - `unavailable`: the folder is not a MusicLib library, or the
+              library cannot be listed; the index is left as it is.
+          enum: [idle, scanning, maintenance, unavailable]
+        last_scan:
+          allOf:
+            - $ref: "#/components/schemas/LibraryScan"
+          nullable: true
+          description: The cycle that is running, or the last one that went through the library; `null` before the first.
+        albums:
+          $ref: "#/components/schemas/LibraryCounts"
+        tracks:
+          $ref: "#/components/schemas/LibraryCounts"
+        progress:
+          allOf:
+            - $ref: "#/components/schemas/LibraryProgress"
+          nullable: true
+          description: How far the running cycle has come; `null` when none is running.
+        musiclib_maintenance:
+          type: boolean
+          description: Whether the last cycle found the maintenance marker of MusicLib.
+        problems:
+          type: array
+          maxItems: 200
+          description: The album folders the last finished cycle could not index, and its warnings; at most 200. The list is made again at every cycle and is empty after a restart until the first one ends.
+          items:
+            $ref: "#/components/schemas/LibraryProblem"
+      example:
+        state: idle
+        last_scan:
+          started_at: "2026-09-30T12:34:56.000Z"
+          finished_at: "2026-09-30T12:35:02.250Z"
+          ok: true
+          error: null
+        albums:
+          available: 412
+          unavailable: 3
+        tracks:
+          available: 5120
+          unavailable: 41
+        progress: null
+        musiclib_maintenance: false
+        problems:
+          - rel_path: Miles Davis/Kind of Blue
+            code: file_missing
+            message: A file the receipt lists is not in the folder.
+    LibraryScan:
+      type: object
+      description: One cycle of the scanner that went through the library.
+      required: [started_at, finished_at, ok, error]
+      properties:
+        started_at:
+          $ref: "#/components/schemas/Timestamp"
+        finished_at:
+          allOf:
+            - $ref: "#/components/schemas/Timestamp"
+          nullable: true
+          description: "`null` while the cycle runs."
+        ok:
+          type: boolean
+          description: Whether the cycle went to its end. The problems of single albums do not make it false. False while the cycle runs.
+        error:
+          type: string
+          nullable: true
+          description: Why a finished cycle is not ok, without internal details; `null` otherwise.
+      example:
+        started_at: "2026-09-30T12:34:56.000Z"
+        finished_at: "2026-09-30T12:35:02.250Z"
+        ok: true
+        error: null
+    LibraryProgress:
+      type: object
+      description: How far a running cycle has come.
+      required: [discovered, pending, indexed]
+      properties:
+        discovered:
+          type: integer
+          minimum: 0
+          description: The album folders found with a valid receipt.
+        pending:
+          type: integer
+          minimum: 0
+          description: The albums still to index in this cycle.
+        indexed:
+          type: integer
+          minimum: 0
+          description: The albums this cycle has indexed.
+      example:
+        discovered: 415
+        pending: 120
+        indexed: 295
+    LibraryCounts:
+      type: object
+      description: The rows of the index, as they were when the last cycle began or ended.
+      required: [available, unavailable]
+      properties:
+        available:
+          type: integer
+          format: int64
+          minimum: 0
+        unavailable:
+          type: integer
+          format: int64
+          minimum: 0
+      example:
+        available: 412
+        unavailable: 3
+    LibraryProblem:
+      type: object
+      required: [rel_path, code, message]
+      properties:
+        rel_path:
+          type: string
+          description: The folder, relative to the library; empty for the library itself.
+        code:
+          type: string
+          description: |
+            A stable code. Problems, which keep the album out of the index
+            (or as it was): `receipt_missing`, `receipt_invalid`,
+            `receipt_schema_unsupported`, `receipt_too_large`, `file_missing`,
+            `file_size_mismatch`, `probe_failed`, `fingerprint_failed`,
+            `listing_failed`. Warnings, which do not: `cover_invalid`,
+            `tags_incomplete`, `lyrics_unreadable`.
+        message:
+          type: string
+          description: A sentence for people.
+      example:
+        rel_path: Miles Davis/Kind of Blue
+        code: file_missing
+        message: A file the receipt lists is not in the folder.

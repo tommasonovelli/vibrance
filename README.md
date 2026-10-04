@@ -2,20 +2,21 @@
 
 Vibrance is the listening side of [Vibrance MusicLib](https://github.com/tommasonovelli/vibrance-musiclib). It is a read-only server over the `library/` folder that MusicLib produces, with multiple users, favorites, playlists, full-text search and an HTTP API documented with OpenAPI. The two products share only that folder.
 
-**Status:** in development toward v0.1. So far the server starts, creates and migrates its SQLite database, checks its `ffmpeg` and `ffprobe`, keeps an index of the MusicLib library up to date in the background, answers its health endpoints and stops; it has no API yet.
+**Status:** in development toward v0.1. So far the server starts, creates and migrates its SQLite database, checks its `ffmpeg` and `ffprobe`, keeps an index of the MusicLib library up to date in the background, answers its health endpoints and stops. Its API is specified in `api/openapi.yaml`, and the server does not serve it yet.
 
 ## Trying it
 
 Everything is built, tested and run in Docker. The host needs only Docker Engine or Docker Desktop with the Compose v2 plugin: no Go and no FFmpeg. On Windows, run the scripts from Git Bash.
 
 ```sh
-scripts/check.sh                 # the gate: sqlc diff, go build, go vet, gofmt, go test -race (no network)
+scripts/check.sh                 # the gate: generated code up to date, go build, go vet, gofmt, go test -race (no network)
 scripts/check.sh ./internal/media/...   # the gate on one package tree
 scripts/dev.sh                   # a shell in the toolchain container, on the live sources
 scripts/dev.sh go test -race -count=20 -run TestX ./internal/media
 scripts/lint-shell.sh            # shellcheck on every shell script
 scripts/fuzz.sh FuzzParseReceipt 60s ./internal/library   # one fuzz target, for a duration, on the live sources
 scripts/sqlc.sh                  # regenerate internal/store from sql/ and the migrations (sqlc.sh diff: only compare)
+scripts/generate.sh              # regenerate internal/api from api/openapi.yaml (generate.sh diff: only compare)
 
 docker build --target runtime -t vibrance:local .
 docker run --rm vibrance:local   # prints: version: devel
@@ -56,6 +57,12 @@ The schema is in `migrations/` (goose, embedded in the binary), the queries in `
 - The gate tests a snapshot of the tree taken when the `test` image is built. `dev.sh` works on the live sources.
 - Two scripts run the real MusicLib 1.2.0, in the Compose project `vibrance-spike` (new volumes, random passwords, no published port), and delete that project when they end; they need network access. `scripts/make-fixture-library.sh` regenerates the fixture library `testdata/library-v1/` (see `testdata/FIXTURE.md`); `scripts/spike.sh` checks what Vibrance assumes about MusicLib and writes `docs/spike-report.md`.
 - The containers run as your uid and gid (`VIBRANCE_DEV_UID`/`VIBRANCE_DEV_GID` override them, `0` is refused). `GATE_TEST_TIMEOUT` sets the `go test -timeout` of the gate (default `15m`).
+
+## The API specification
+
+The API is described in [api/openapi.yaml](api/openapi.yaml) (OpenAPI 3.0.3), written by hand before the code: every operation under `/api/v1`, its parameters, its responses and its errors. The Go types, the router and the interface the handlers implement are generated from it by `oapi-codegen` (`api/oapi-codegen.yaml`) into `internal/api/api.gen.go`, which is committed and never edited by hand. After a change to the specification, run `scripts/generate.sh` and commit the result: the gate fails while the generated file is out of date. `oapi-codegen` is pinned as a `tool` directive of `go.mod` and runs from the module cache of the image, without network.
+
+The tests of `internal/api` hold the table of operations and the list of error codes of the design, and fail when the specification has an operation, a status or a code more or less. Until the step that implements it, an operation answers `501 not_implemented`.
 
 ## The media tools
 
@@ -106,7 +113,7 @@ The original is served in place of the thumbnail when the cover file is larger t
 
 ## Pinned versions
 
-Every image is pinned by exact version and by digest. The pins are copied from MusicLib 1.2.0: Go 1.25.14 on Debian trixie, the `debian:trixie-20260918-slim` runtime base, Dockerfile frontend 1.26.0, shellcheck 0.11.0 and sqlc 1.31.1. `ffmpeg` and `ffprobe` (`8.1.3-musiclib1`) are copied from the published image `ghcr.io/tommasonovelli/musiclib:1.2.0`. The digests are in the `Dockerfile`, `scripts/lint-shell.sh` and `scripts/lib/common.sh`. The Go modules are at exact versions in `go.mod`. [docs/compat.md](docs/compat.md) lists the MusicLib versions Vibrance works with.
+Every image is pinned by exact version and by digest. The pins are copied from MusicLib 1.2.0: Go 1.25.14 on Debian trixie, the `debian:trixie-20260918-slim` runtime base, Dockerfile frontend 1.26.0, shellcheck 0.11.0 and sqlc 1.31.1. `ffmpeg` and `ffprobe` (`8.1.3-musiclib1`) are copied from the published image `ghcr.io/tommasonovelli/musiclib:1.2.0`. The digests are in the `Dockerfile`, `scripts/lint-shell.sh` and `scripts/lib/common.sh`. The Go modules are at exact versions in `go.mod`, `oapi-codegen` among them. [docs/compat.md](docs/compat.md) lists the MusicLib versions Vibrance works with.
 
 ## License
 
