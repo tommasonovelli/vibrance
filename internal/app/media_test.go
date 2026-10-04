@@ -54,7 +54,7 @@ func TestStartupVerifiesTheTools(t *testing.T) {
 	if i < 0 || slices.Index(msgs, "database open") > i || slices.Index(msgs, "ready") < i {
 		t.Fatalf("log events %q: the tools must be verified after the database is open and before the server is ready", msgs)
 	}
-	if ev := r.logs.events(t)[i]; ev["version"] != media.PinnedVersion || ev["level"] != "INFO" {
+	if ev := eventsOf(t, r.logs, "media tools verified")[0]; ev["version"] != media.PinnedVersion || ev["level"] != "INFO" {
 		t.Fatalf("the event does not report the version: %v", ev)
 	}
 }
@@ -83,7 +83,7 @@ func TestStartupRefusesWrongTools(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			logs := &syncBuffer{}
-			s := newServer(newLogger(logs), t.TempDir(), t.TempDir(), testWorkers, testScanInterval)
+			s := mustServer(t, newLogger(logs), testOrigin, t.TempDir(), t.TempDir())
 			s.ffmpegPath, s.ffprobePath = tc.ffmpeg, tc.ffprobe
 			ln := listen(t)
 
@@ -128,7 +128,7 @@ func TestStopDuringTheToolCheck(t *testing.T) {
 	pidFile := filepath.Join(t.TempDir(), "pid")
 	stuck := fakeTool(t, "ffmpeg", `echo $$ > "`+pidFile+`.tmp" && mv "`+pidFile+`.tmp" "`+pidFile+`" && exec sleep 300`)
 	logs := &syncBuffer{}
-	s := newServer(newLogger(logs), t.TempDir(), t.TempDir(), testWorkers, testScanInterval)
+	s := mustServer(t, newLogger(logs), testOrigin, t.TempDir(), t.TempDir())
 	s.ffmpegPath = stuck
 	ln := listen(t)
 	ctx, cancel := context.WithCancel(t.Context())
@@ -165,8 +165,9 @@ func TestStopDuringTheToolCheck(t *testing.T) {
 	if got := logs.messages(t); !slices.Equal(got, want) {
 		t.Fatalf("log events %q, want %q", got, want)
 	}
-	if interrupted, _ := logs.events(t)[2]["interrupted"].(string); !strings.Contains(interrupted, "media_canceled") {
-		t.Fatalf("the stopping event does not say what was interrupted: %v", logs.events(t)[2])
+	stopping := eventsOf(t, logs, "stopping")[0]
+	if interrupted, _ := stopping["interrupted"].(string); !strings.Contains(interrupted, "media_canceled") {
+		t.Fatalf("the stopping event does not say what was interrupted: %v", stopping)
 	}
 	// The tool was killed: it is gone, or a zombie that waits to be
 	// collected ("Z" is the third field of its stat line).

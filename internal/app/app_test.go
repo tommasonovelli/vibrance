@@ -19,6 +19,7 @@ import (
 
 	"vibrance/internal/buildinfo"
 	"vibrance/internal/config"
+	"vibrance/internal/httpx"
 )
 
 // syncBuffer is an io.Writer safe for the concurrent writes of a logger
@@ -59,18 +60,35 @@ func (s *syncBuffer) events(t *testing.T) []map[string]any {
 // they come from the goroutine of the scanner, at any moment between
 // "scanner started" and "scanner stopped", so they have no place in the
 // order of the startup and of the stop. The tests of the scanner look at
-// them through events.
+// them through events. The access log ("request") is left out too: its
+// lines are as many as the requests a test happened to send.
 func (s *syncBuffer) messages(t *testing.T) []string {
 	t.Helper()
 	var out []string
 	for _, ev := range s.events(t) {
 		msg, _ := ev["msg"].(string)
-		if msg == "scan skipped" || msg == "scan finished" {
+		if msg == "scan skipped" || msg == "scan finished" || msg == "request" {
 			continue
 		}
 		out = append(out, msg)
 	}
 	return out
+}
+
+// testOrigin is the VIBRANCE_PUBLIC_ORIGIN of the servers the tests ask
+// only for their health, which is outside the check of Host. startServer
+// gives its server the address it listens on instead.
+const testOrigin = "http://vibrance.test"
+
+// mustServer is newServer with the workers and the scan interval of the
+// tests.
+func mustServer(t *testing.T, log *slog.Logger, origin, stateDir, musiclibDir string) *server {
+	t.Helper()
+	s, err := newServer(log, origin, stateDir, musiclibDir, testWorkers, testScanInterval)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s
 }
 
 func newLogger(w io.Writer) *slog.Logger {
@@ -127,11 +145,11 @@ type running struct {
 func startServer(t *testing.T, prepare func(*server)) *running {
 	t.Helper()
 	logs := &syncBuffer{}
-	s := newServer(newLogger(logs), t.TempDir(), t.TempDir(), testWorkers, testScanInterval)
+	ln := listen(t)
+	s := mustServer(t, newLogger(logs), "http://"+ln.Addr().String(), t.TempDir(), t.TempDir())
 	if prepare != nil {
 		prepare(s)
 	}
-	ln := listen(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	r := &running{s: s, logs: logs, addr: ln.Addr().String(), cancel: cancel, done: make(chan error, 1)}
 	go func() { r.done <- s.run(ctx, ln) }()
@@ -167,7 +185,9 @@ type response struct {
 }
 
 // do sends one request without following redirects and without reusing
-// connections, so that no idle connection outlives the test.
+// connections, so that no idle connection outlives the test. Like a client
+// of the server, it sends X-Vibrance-Request with a request that is not a
+// GET or a HEAD.
 func do(t *testing.T, method, url string) response {
 	t.Helper()
 	client := &http.Client{
@@ -178,6 +198,9 @@ func do(t *testing.T, method, url string) response {
 	req, err := http.NewRequestWithContext(t.Context(), method, url, nil)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if method != http.MethodGet && method != http.MethodHead {
+		req.Header.Set(httpx.RequestHeader, "1")
 	}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -221,7 +244,7 @@ const (
 // again.
 func TestReadinessFollowsTheStartup(t *testing.T) {
 	var logs syncBuffer
-	s := newServer(newLogger(&logs), t.TempDir(), t.TempDir(), testWorkers, testScanInterval)
+	s := mustServer(t, newLogger(&logs), testOrigin, t.TempDir(), t.TempDir())
 	ln := listen(t)
 	base := "http://" + ln.Addr().String()
 
@@ -256,7 +279,8 @@ func TestReadinessFollowsTheStartup(t *testing.T) {
 }
 
 // The health endpoints answer GET and HEAD and nothing else; `/` leads to
-// the API documentation; every other path is unknown.
+// the API documentation; the operations of the API are under /api/v1; every
+// other path is unknown.
 func TestRoutes(t *testing.T) {
 	r := startServer(t, nil)
 	base := "http://" + r.addr
@@ -286,11 +310,16 @@ func TestRoutes(t *testing.T) {
 		t.Fatalf("GET /?x=1: %+v, want 302 to /api/docs", got)
 	}
 
-	for _, path := range []string{"/health", "/health/", "/health/live/", "/health/ready/x", "/index.html", "/api/v1/server"} {
-		if got := do(t, "GET", base+path); got.status != 404 {
+	for _, path := range []string{"/health", "/health/", "/health/live/", "/health/ready/x", "/index.html", "/api/v1/nothing"} {
+		got := do(t, "GET", base+path)
+		if got.status != 404 {
 			t.Fatalf("GET %s: %+v, want 404", path, got)
 		}
+		wantJSON(t, got, 404, `{"code":"not_found","message":"There is no such path.","details":{}}`)
 	}
+	// The operations are routed, and answer 501 until their step.
+	wantJSON(t, do(t, "GET", base+"/api/v1/server"), 501,
+		`{"code":"not_implemented","message":"This operation is not implemented yet.","details":{}}`)
 
 	if err := r.stop(t); err != nil {
 		t.Fatal(err)
@@ -330,10 +359,20 @@ func TestStopWithNothingOpen(t *testing.T) {
 		t.Fatalf("log events %q, want %q", got, want)
 	}
 	for _, ev := range r.logs.events(t) {
+		if healthProbe(ev) {
+			continue
+		}
 		if ev["level"] != "INFO" {
 			t.Fatalf("a clean run logged %v", ev)
 		}
 	}
+}
+
+// healthProbe tells the access log of a request for the health of the
+// server, which is at DEBUG: the tests wait for the server by asking it.
+func healthProbe(ev map[string]any) bool {
+	route, _ := ev["route"].(string)
+	return ev["msg"] == "request" && ev["level"] == "DEBUG" && strings.HasPrefix(route, "GET /health/")
 }
 
 // serveDirectly calls the server's handler without the network.
@@ -489,7 +528,7 @@ func TestStopCutsARequestThatOutlivesTheGracePeriod(t *testing.T) {
 // that the process exits and is restarted.
 func TestRunEndsWhenTheHTTPServerStops(t *testing.T) {
 	logs := &syncBuffer{}
-	s := newServer(newLogger(logs), t.TempDir(), t.TempDir(), testWorkers, testScanInterval)
+	s := mustServer(t, newLogger(logs), testOrigin, t.TempDir(), t.TempDir())
 	ln := listen(t)
 	done := make(chan error, 1)
 	go func() { done <- s.run(t.Context(), ln) }()
@@ -517,7 +556,7 @@ func TestRunEndsWhenTheHTTPServerStops(t *testing.T) {
 
 // The limits of §11.1 are those of the server.
 func TestHTTPServerLimits(t *testing.T) {
-	s := newServer(newLogger(io.Discard), t.TempDir(), t.TempDir(), testWorkers, testScanInterval)
+	s := mustServer(t, newLogger(io.Discard), testOrigin, t.TempDir(), t.TempDir())
 	got := [...]time.Duration{s.http.ReadHeaderTimeout, s.http.ReadTimeout, s.http.WriteTimeout, s.http.IdleTimeout}
 	want := [...]time.Duration{10 * time.Second, 30 * time.Second, 30 * time.Second, 120 * time.Second}
 	if got != want {

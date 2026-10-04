@@ -364,13 +364,13 @@ type AddPlaylistItemsResult struct {
 
 // AddedPlaylistItem Example: {"item_id":"0199a5c4-2f6b-7a90-b1c3-5d7e9f1a3b5c","position":12,"track_id":"0199a5c0-7b1e-7c3a-9d2f-4b6a8c0e1f23"}
 type AddedPlaylistItem struct {
-	// ItemId A lowercase UUID.
+	// ItemId A UUID in its canonical form, lowercase with hyphens. An id has one spelling, in requests as in responses.
 	//
 	// Example: 0199a5c0-7b1e-7c3a-9d2f-4b6a8c0e1f23
 	ItemId   Id  `json:"item_id"`
 	Position int `json:"position"`
 
-	// TrackId A lowercase UUID.
+	// TrackId A UUID in its canonical form, lowercase with hyphens. An id has one spelling, in requests as in responses.
 	//
 	// Example: 0199a5c0-7b1e-7c3a-9d2f-4b6a8c0e1f23
 	TrackId Id `json:"track_id"`
@@ -397,7 +397,7 @@ type AlbumDetail struct {
 	DurationMs int64   `json:"duration_ms"`
 	Genre      *string `json:"genre"`
 
-	// Id A lowercase UUID.
+	// Id A UUID in its canonical form, lowercase with hyphens. An id has one spelling, in requests as in responses.
 	//
 	// Example: 0199a5c0-7b1e-7c3a-9d2f-4b6a8c0e1f23
 	Id    Id     `json:"id"`
@@ -427,7 +427,7 @@ type AlbumRef struct {
 	Artist ArtistRef `json:"artist"`
 	Cover  *Cover    `json:"cover"`
 
-	// Id A lowercase UUID.
+	// Id A UUID in its canonical form, lowercase with hyphens. An id has one spelling, in requests as in responses.
 	//
 	// Example: 0199a5c0-7b1e-7c3a-9d2f-4b6a8c0e1f23
 	Id    Id     `json:"id"`
@@ -453,7 +453,7 @@ type AlbumSummary struct {
 	DurationMs int64   `json:"duration_ms"`
 	Genre      *string `json:"genre"`
 
-	// Id A lowercase UUID.
+	// Id A UUID in its canonical form, lowercase with hyphens. An id has one spelling, in requests as in responses.
 	//
 	// Example: 0199a5c0-7b1e-7c3a-9d2f-4b6a8c0e1f23
 	Id    Id     `json:"id"`
@@ -469,7 +469,7 @@ type ArtistDetail struct {
 	// Albums The available albums of the artist.
 	Albums []AlbumSummary `json:"albums"`
 
-	// Id A lowercase UUID.
+	// Id A UUID in its canonical form, lowercase with hyphens. An id has one spelling, in requests as in responses.
 	//
 	// Example: 0199a5c0-7b1e-7c3a-9d2f-4b6a8c0e1f23
 	Id   Id     `json:"id"`
@@ -488,7 +488,7 @@ type ArtistList struct {
 
 // ArtistRef Example: {"id":"5b0c8f6e-1d2a-5e3f-9a4b-6c7d8e9f0a1b","name":"Miles Davis"}
 type ArtistRef struct {
-	// Id A lowercase UUID.
+	// Id A UUID in its canonical form, lowercase with hyphens. An id has one spelling, in requests as in responses.
 	//
 	// Example: 0199a5c0-7b1e-7c3a-9d2f-4b6a8c0e1f23
 	Id   Id     `json:"id"`
@@ -500,7 +500,7 @@ type ArtistSummary struct {
 	// AlbumCount How many available albums the artist has.
 	AlbumCount int `json:"album_count"`
 
-	// Id A lowercase UUID.
+	// Id A UUID in its canonical form, lowercase with hyphens. An id has one spelling, in requests as in responses.
 	//
 	// Example: 0199a5c0-7b1e-7c3a-9d2f-4b6a8c0e1f23
 	Id   Id     `json:"id"`
@@ -672,7 +672,7 @@ type FavoriteList struct {
 	Next *Cursor `json:"next"`
 }
 
-// Id A lowercase UUID.
+// Id A UUID in its canonical form, lowercase with hyphens. An id has one spelling, in requests as in responses.
 //
 // Example: 0199a5c0-7b1e-7c3a-9d2f-4b6a8c0e1f23
 type Id = string
@@ -849,7 +849,7 @@ type Playlist struct {
 	// Etag The entity tag of this revision, `"playlist:<id>:<revision>"` with its quotes; the value to send as `If-Match`.
 	Etag string `json:"etag"`
 
-	// Id A lowercase UUID.
+	// Id A UUID in its canonical form, lowercase with hyphens. An id has one spelling, in requests as in responses.
 	//
 	// Example: 0199a5c0-7b1e-7c3a-9d2f-4b6a8c0e1f23
 	Id Id `json:"id"`
@@ -894,7 +894,7 @@ type PlaylistItem struct {
 	// Example: 2026-09-30T12:34:56.000Z
 	AddedAt Timestamp `json:"added_at"`
 
-	// Id A lowercase UUID.
+	// Id A UUID in its canonical form, lowercase with hyphens. An id has one spelling, in requests as in responses.
 	//
 	// Example: 0199a5c0-7b1e-7c3a-9d2f-4b6a8c0e1f23
 	Id Id `json:"id"`
@@ -1002,7 +1002,7 @@ type Session struct {
 	// Example: 2026-09-30T12:34:56.000Z
 	ExpiresAt Timestamp `json:"expires_at"`
 
-	// Id A lowercase UUID.
+	// Id A UUID in its canonical form, lowercase with hyphens. An id has one spelling, in requests as in responses.
 	//
 	// Example: 0199a5c0-7b1e-7c3a-9d2f-4b6a8c0e1f23
 	Id Id `json:"id"`
@@ -1084,7 +1084,7 @@ type Track struct {
 	// HasLyrics Whether `GET /tracks/{id}/lyrics` has something to give.
 	HasLyrics bool `json:"has_lyrics"`
 
-	// Id A lowercase UUID.
+	// Id A UUID in its canonical form, lowercase with hyphens. An id has one spelling, in requests as in responses.
 	//
 	// Example: 0199a5c0-7b1e-7c3a-9d2f-4b6a8c0e1f23
 	Id Id `json:"id"`
@@ -1119,7 +1119,7 @@ type User struct {
 	// Disabled A disabled account cannot sign in and has no sessions.
 	Disabled bool `json:"disabled"`
 
-	// Id A lowercase UUID.
+	// Id A UUID in its canonical form, lowercase with hyphens. An id has one spelling, in requests as in responses.
 	//
 	// Example: 0199a5c0-7b1e-7c3a-9d2f-4b6a8c0e1f23
 	Id Id `json:"id"`

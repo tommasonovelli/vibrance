@@ -16,16 +16,29 @@ import (
 	"unicode"
 
 	"github.com/getkin/kin-openapi/openapi3"
+
+	"vibrance/internal/httpx"
 )
 
 // A UUID in the canonical form, for the ids of the paths.
 const someID = "0199a5c0-7b1e-7c3a-9d2f-4b6a8c0e1f23"
 
-// testHandler is the handler of the package on srv, with its log.
-func testHandler(srv StrictServerInterface) (http.Handler, *bytes.Buffer) {
+// testHandler is a router with the operations of the specification the
+// binary carries, on srv, and its log. Every other path is a 404, as in the
+// server. The checks of Host, Origin and X-Vibrance-Request are not here:
+// they are in front of the router (internal/app).
+func testHandler(t *testing.T, srv StrictServerInterface) (http.Handler, *bytes.Buffer) {
+	t.Helper()
 	logs := &bytes.Buffer{}
 	log := slog.New(slog.NewJSONHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	return NewHandler(srv, log), logs
+	doc, err := LoadSpec()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	Register(mux, doc, srv, log)
+	mux.Handle("/", httpx.NotFound(log))
+	return mux, logs
 }
 
 // exampleRequest builds a request for one operation of the specification
@@ -104,7 +117,7 @@ func wantError(t *testing.T, where string, rec *httptest.ResponseRecorder, statu
 // generated router did not know would answer 404 here.
 func TestEveryOperationAnswersNotImplemented(t *testing.T) {
 	doc := loadSpec(t)
-	handler, _ := testHandler(Server{})
+	handler, _ := testHandler(t, Server{})
 
 	ops := operations(doc)
 	if len(ops) != len(designOperations) {
@@ -121,7 +134,7 @@ func TestEveryOperationAnswersNotImplemented(t *testing.T) {
 // HEAD of a GET pattern to the same operation.
 func TestHeadReachesTheOperation(t *testing.T) {
 	doc := loadSpec(t)
-	handler, _ := testHandler(Server{})
+	handler, _ := testHandler(t, Server{})
 
 	heads := 0
 	for _, o := range operations(doc) {
@@ -146,7 +159,7 @@ func TestHeadReachesTheOperation(t *testing.T) {
 // the error model, and never reaches the operation.
 func TestMalformedRequests(t *testing.T) {
 	doc := loadSpec(t)
-	handler, _ := testHandler(Server{})
+	handler, _ := testHandler(t, Server{})
 	errorSchema := doc.Components.Schemas["Error"].Value
 
 	check := func(where string, req *http.Request) {
@@ -227,7 +240,7 @@ func (f failing) GetServerInfo(context.Context, GetServerInfoRequestObject) (Get
 // in the log and never in the response (§8.1).
 func TestUnexpectedErrorHidesItsCause(t *testing.T) {
 	const cause = "open /var/lib/vibrance/vibrance.db: disk on fire"
-	handler, logs := testHandler(failing{err: errors.New(cause)})
+	handler, logs := testHandler(t, failing{err: errors.New(cause)})
 
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, BasePath+"/server", nil))
@@ -254,7 +267,7 @@ func TestUnexpectedErrorHidesItsCause(t *testing.T) {
 
 // The operations are served under /api/v1 and nowhere else.
 func TestOperationsLiveUnderTheBasePath(t *testing.T) {
-	handler, _ := testHandler(Server{})
+	handler, _ := testHandler(t, Server{})
 	for _, target := range []string{"/server", "/api/server", "/api/v2/server", "/api/v1", "/api/v1/", "/api/v1/nothing"} {
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, target, nil))

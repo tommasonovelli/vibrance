@@ -64,6 +64,25 @@ The API is described in [api/openapi.yaml](api/openapi.yaml) (OpenAPI 3.0.3), wr
 
 The tests of `internal/api` hold the table of operations and the list of error codes of the design, and fail when the specification has an operation, a status or a code more or less. Until the step that implements it, an operation answers `501 not_implemented`.
 
+## The HTTP boundary
+
+Every request crosses the same boundary (`internal/httpx`) before it reaches an operation, and every refusal is JSON, `{"code": ..., "message": ..., "details": {...}}`, with a stable `code`:
+
+| Check | Refusal |
+|---|---|
+| `Host` must be the host and port of `VIBRANCE_PUBLIC_ORIGIN`. | `421 host_not_allowed` |
+| `Origin`, if sent, must be exactly `VIBRANCE_PUBLIC_ORIGIN` (`Origin: null` is not). | `403 origin_not_allowed` |
+| A request other than GET and HEAD must carry `X-Vibrance-Request: 1`. | `403 request_header_required` |
+| The path must exist, and take the method. | `404 not_found`, `405 method_not_allowed` with `Allow` |
+| A body is at most 1 MiB. | `413 body_too_large` |
+| A body is one JSON value in UTF-8, without duplicate keys, and matches the schema of the operation, which has no unknown keys; parameters match the specification; an id is a UUID in its canonical form. | `400 invalid_request` |
+
+The two health endpoints are outside the first three checks: a probe asks the container by its address. `X-Forwarded-*` headers are never read, so a reverse proxy must pass `Host` unchanged. No CORS header is ever sent.
+
+Every response carries `X-Request-Id` (a UUIDv7 the server makes), `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer`; a JSON response also `Cache-Control: private, no-store` and `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`. An unexpected failure, a panic included, answers `500 internal` and nothing else: its cause is in the log, under the same `request_id`.
+
+The access log is one line per request, with `request_id`, `method`, `route` (the pattern of the router, such as `GET /api/v1/tracks/{id}`, never the path), `status`, `duration_ms` and `bytes`. It never holds a path, a query string, a header or a body. It is at `INFO`, and at `DEBUG` (not written by default) for the audio, the covers and the health endpoints, which are asked all the time.
+
 ## The media tools
 
 Vibrance reads the tags of the tracks with `ffprobe` and computes their audio fingerprint with `ffmpeg` (`internal/media`). The indexer that brings one album into the database with them, and the scanner that runs it over the library, are in `internal/library`. Both tools are in the image, at `/usr/local/bin`, and are the tools MusicLib verified the audio with. At every start, after the database is open and before it is ready, the server runs `ffmpeg -version` and `ffprobe -version` and refuses any version other than `8.1.3-musiclib1`. A refusal stops it with exit code 1 and one log line:

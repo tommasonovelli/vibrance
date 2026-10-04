@@ -17,8 +17,8 @@ Design: DESIGN.md (versione 0.1). Orchestratore: aggiorna questo file a ogni pas
 | S8 | Scanner: ciclo, trigger, stato | done | 1 | 517ede1 | 2026-10-04 · include le errata §6.6 e «i riferimenti seguono l'audio» · 6 mutazioni del revisore, tutte uccise |
 | S9 | Cover e miniature | done | 2 | 82f6736 | 2026-10-04 · round 1: CHANGES REQUIRED (cover illeggibile scoperta dopo ffprobe; N-078 da marcare TO CONFIRM) · round 2 approvato |
 | S10 | Testi LRC | done | 1 | c3cc104 | 2026-10-04 · fuzz 60 s rieseguito dal revisore, 3 file LRC sporchi provati · fine fase A |
-| S11 | OpenAPI completa e pipeline di generazione | done | 1 | HASH_S11 | 2026-10-04 · specifica confrontata con il §8 riga per riga dal revisore |
-| S12 | Confine HTTP e modello degli errori | todo | | | |
+| S11 | OpenAPI completa e pipeline di generazione | done | 1 | 8de3cbd | 2026-10-04 · specifica confrontata con il §8 riga per riga dal revisore |
+| S12 | Confine HTTP e modello degli errori | done | 1 | HASH_S12 | 2026-10-04 · 33 richieste ostili provate dal revisore sul server vero |
 | S13 | Autenticazione: nucleo | todo | | | |
 | S14 | Endpoint di autenticazione, account e amministrazione utenti | todo | | | |
 | S15 | Catalogo: artisti, album, tracce | todo | | | |
@@ -93,11 +93,13 @@ Stati: `todo`, `in-progress`, `done`, `blocked`.
 - (S9) `warm.go:80-97`: per una cover oltre i limiti il file viene riletto per entrambe le dimensioni. `thumbnail.go:249`: le miniature nascono `0600`. `service.go:163`: `case err == nil || …` poco leggibile. `library.NoCoverWarmer` resta esportato, usato solo dai test.
 - (S9) `indexer.go:176-195`: l'elenco numerato del doc di `IndexAlbum` resta nell'ordine del design, l'ordine reale (5 prima di 4) è in una frase a parte. `TestIndexAlbumCoverThatCannotBeOpened`: nel sottocaso `indexed=true` il conteggio dei processi non può fallire per l'ordine dei passi.
 - (S10) `lyrics_test.go:650`: la soglia di linearità si valuta solo dopo il ritorno di `Parse`; una regressione quadratica piena appare come timeout del gate, un peggioramento sotto circa 100× non si vede. `lyrics.go:38-40`: `offsetKey` duplica una voce di `identKeys`.
-- (S11, per S12) Le risposte tipizzate del codice generato riscrivono ogni header dichiarato, `X-Request-Id` compreso (`api.gen.go`, `Set` incondizionato): il middleware di S12 deve impostarlo per ultimo (N-085).
-- (S11, per S12) Non è verificato se il router del validatore `kin-openapi` trova una rotta per HEAD: se la rifiuta, la rotta va cercata come GET. Il test di conformità delle risposte deve trattare esplicitamente il `501 not_implemented`, che è fuori dalla specifica finché S20 non lo toglie.
-- (S11, per S12) `Id` non ha un `pattern`: il binding dei path id potrebbe accettare maiuscole e forme senza trattini (non verificato). Da decidere in S12 se rifiutarle.
 - (S11, per S16) Le risposte binarie generate usano `io.Copy`, non `http.ServeContent`: serve un oggetto di risposta proprio (N-085). `getTrackLyrics` dichiara `ETag` ma né `If-None-Match` né 304.
 - (S11) Più robusto dichiarare l'header `ETag` su ogni risposta che restituisce una `Playlist` (`updatePlaylist`, `removePlaylistItem`, `movePlaylistItem`, `addPlaylistItems`): oggi il client lo trova solo nel corpo. `getArtist` non dice l'ordine degli album; `listAlbums?artist=` non dice cosa risponde con un artista inesistente. Il README parla del 501 quando l'API non è ancora servita. L'incoerenza §6.5/§8.2 sui contatori «ignorati» merita una riga in NOTES.md.
+- (S12) `httpx/contract.go:110`: `http.MaxBytesReader` riceve un wrapper, quindi net/http non marca la connessione da chiudere dopo un 413; con un corpo chunked che si ferma oltre il limite il 413 arriva solo allo scadere di `ReadTimeout` (30 s). Miglioria: `Connection: close` sul 413 o il writer più interno.
+- (S12) `OPTIONS *` è servito da net/http fuori dall'handler (200 senza `X-Request-Id` né header di sicurezza): `http.Server.DisableGeneralOptionsHandler = true` lo porterebbe dentro il confine. Le risposte che net/http scrive prima di ogni handler (431, 400 per `Host` malformato) sono testo semplice senza `X-Request-Id`: inevitabili, da dire nel README.
+- (S12, per S13) `user_id` nel log degli accessi manca (il log sta fuori dal middleware di autenticazione). Il codice generato applica i middleware in ordine inverso: l'autenticazione va messa nella lista prima di `Contract.Check` perché giri dopo. `Recover` registra il valore del panic: nessun passo deve fare panic con valori che contengono segreti.
+- (S12, per S14) Nulla fa rispondere `503 not_ready` o `shutting_down` alle rotte API durante avvio e arresto: il primo handler che usa un servizio creato all'avvio deve aggiungere il controllo. `assertConforms` vive in `internal/app/boundary_test.go`: S14 può spostarlo come helper riusabile.
+- (S12, per S16/S24) I wrapper di `ResponseWriter` nascondono `io.ReaderFrom`: niente sendfile per l'audio. Da misurare.
 
 ## TO CONFIRM aperti (da riportare all'utente a fine fase)
 - N-014 (S1) Dopo un `rebuild` offline di MusicLib `.maintenance` sparisce ma `library/` resta vuota finché l'app non riparte: in quell'intervallo Vibrance vede tutti gli album non disponibili (poi tornano con gli stessi ID). Riportato all'utente a fine fase 0 (2026-10-01).
@@ -116,6 +118,8 @@ Stati: `todo`, `in-progress`, `done`, `blocked`.
 - N-082 (S10) Letture del formato LRC che cambiano ciò che l'ascoltatore vede: (1) solo `ar|ti|al|by|length|offset` sono intestazioni, gli altri tag (`[re:]`, `[la:]`, `[tool:]`…) restano testo nei file non sincronizzati; (2) `[00:01:23]` è ore:minuti:secondi, mentre nei file reali la forma a tre campi è quasi sempre minuti:secondi:centesimi (tempi sbagliati in silenzio: la più rischiosa); (3) `offset` globale, vale l'ultimo; (4) il valore di un tag finisce al primo `]`; (5) nei testi non sincronizzati le righe vuote spariscono (strofe non separate).
 - N-087 (S11) Lo schema impone solo i limiti senza codice 422 nel design (`limit`, `q`, `device_name` 1–100, `track_ids` 1–1000 → `400 invalid_request`); nome utente, password, nome e descrizione di playlist e posizioni restano agli handler (422). Alternativa aperta: `422 too_many_items` per più di 1000 `track_ids`.
 - (S11) `CLAUDE.md` e `AGENTS.md` non nominano `scripts/generate.sh` né il `generate diff` nel gate: l'ingegnere propone due righe (rapporto di S11), da aggiungere con il consenso dell'utente.
+- N-091 (S12) Un id ha una sola grafia: maiuscole, forma senza trattini, graffe e `urn:uuid:` danno `400 invalid_request` (prima il binding le accettava).
+- N-093 (S12) Il log degli accessi delle sonde di salute è a DEBUG (il §11.5 nomina solo audio e cover; la sonda chiede ogni 10 s). Il server logga a INFO, quindi quelle righe non compaiono mai.
 
 ## Errata al design
 Vedi la sezione «Errata» in fondo a DESIGN.md.
@@ -131,3 +135,4 @@ Vedi la sezione «Errata» in fondo a DESIGN.md.
 - 2026-10-04 · S8 · §11.2: codici d'avvio nuovi `musiclib_folder` e `library_index` (N-072).
 - 2026-10-04 · S9 · §6.3: la cover si valida prima di `ffprobe` e impronte (passo 5 prima del passo 4).
 - 2026-10-04 · S19 · §8.2/§8.6: `item_count` di una playlist conta tutti gli elementi; solo `duration_ms` esclude le tracce non disponibili (N-088).
+- 2026-10-04 · S12 · §2.4 e passo S12: la validazione OpenAPI non usa `ValidateRequest` né `nethttp-middleware` (leggono il corpo senza limite); un solo router, quello di net/http.

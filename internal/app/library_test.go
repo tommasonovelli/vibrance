@@ -99,6 +99,9 @@ func TestStartupStartsTheScanner(t *testing.T) {
 		t.Fatalf("the cycles of the first run: %v", finished)
 	}
 	for _, ev := range r.logs.events(t) {
+		if healthProbe(ev) {
+			continue
+		}
 		if ev["level"] != "INFO" {
 			t.Fatalf("the run logged above INFO: %v", ev)
 		}
@@ -151,7 +154,7 @@ func TestStartupWithoutALibrary(t *testing.T) {
 func TestStartupRefusesAMissingMusicLibFolder(t *testing.T) {
 	logs := &syncBuffer{}
 	missing := filepath.Join(t.TempDir(), "missing")
-	s := newServer(newLogger(logs), t.TempDir(), missing, testWorkers, testScanInterval)
+	s := mustServer(t, newLogger(logs), testOrigin, t.TempDir(), missing)
 	err := s.run(t.Context(), listen(t))
 	var ae *Error
 	if !errors.As(err, &ae) || ae.Code != CodeMusicLibFolder || Code(err) != CodeMusicLibFolder {
@@ -258,7 +261,7 @@ func TestStartupRefusesAnIndexItCannotPrepare(t *testing.T) {
 		t.Fatal(err)
 	}
 	logs := &syncBuffer{}
-	s := newServer(newLogger(logs), state, t.TempDir(), testWorkers, testScanInterval)
+	s := mustServer(t, newLogger(logs), testOrigin, state, t.TempDir())
 	err = s.run(t.Context(), listen(t))
 	var ae *Error
 	if !errors.As(err, &ae) || ae.Code != CodeLibraryIndex {
@@ -382,6 +385,9 @@ func TestStartupMakesTheThumbnailsOfNewCovers(t *testing.T) {
 		t.Fatalf("the cache holds %v (%v), want only the folder of the cover of album A", entries, err)
 	}
 	for _, ev := range r.logs.events(t) {
+		if healthProbe(ev) {
+			continue
+		}
 		if ev["level"] != "INFO" {
 			t.Fatalf("the run logged above INFO: %v", ev)
 		}

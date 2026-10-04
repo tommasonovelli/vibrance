@@ -800,6 +800,7 @@ paths:
           schema:
             type: string
             format: uuid
+            pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/After"
       responses:
@@ -1750,19 +1751,21 @@ components:
       name: id
       in: path
       required: true
-      description: The id of the resource, a UUID. Anything else answers `400 invalid_request`.
+      description: The id of the resource, a UUID in its canonical form (lowercase, with hyphens). Anything else answers `400 invalid_request`.
       schema:
         type: string
         format: uuid
+        pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
       example: 0199a5c0-7b1e-7c3a-9d2f-4b6a8c0e1f23
     PathItemId:
       name: item_id
       in: path
       required: true
-      description: The id of the playlist item, a UUID. Anything else answers `400 invalid_request`.
+      description: The id of the playlist item, a UUID in its canonical form (lowercase, with hyphens). Anything else answers `400 invalid_request`.
       schema:
         type: string
         format: uuid
+        pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
       example: 0199a5c4-2f6b-7a90-b1c3-5d7e9f1a3b5c
     Limit:
       name: limit
@@ -1807,6 +1810,7 @@ components:
       schema:
         type: string
         format: uuid
+        pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
         example: 0199a5c8-6d3e-7f10-a2b4-c6d8e0f2a4b6
     ETag:
       description: |
@@ -2046,7 +2050,8 @@ components:
     Id:
       type: string
       format: uuid
-      description: A lowercase UUID.
+      pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      description: A UUID in its canonical form, lowercase with hyphens. An id has one spelling, in requests as in responses.
       example: 0199a5c0-7b1e-7c3a-9d2f-4b6a8c0e1f23
       x-go-type: string
     Timestamp:
@@ -2944,6 +2949,7 @@ components:
           items:
             type: string
             format: uuid
+            pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
         position:
           type: integer
           nullable: true

@@ -116,11 +116,15 @@ func Run(ctx context.Context, getenv func(string) string, euid, cpus int, stateD
 	log.Info("starting", "version", buildinfo.Version, "public_origin", cfg.PublicOrigin,
 		"http_addr", cfg.HTTPAddr, "scan_interval", cfg.ScanInterval.String(), "workers", cfg.Workers)
 
+	srv, err := newServer(log, cfg.PublicOrigin, stateDir, musiclibDir, cfg.Workers, cfg.ScanInterval)
+	if err != nil {
+		return err
+	}
 	ln, err := net.Listen("tcp", cfg.HTTPAddr)
 	if err != nil {
 		return &Error{Code: CodeHTTPListen, Msg: "cannot listen on " + cfg.HTTPAddr, Err: err}
 	}
-	if err := newServer(log, stateDir, musiclibDir, cfg.Workers, cfg.ScanInterval).run(ctx, ln); err != nil {
+	if err := srv.run(ctx, ln); err != nil {
 		return err
 	}
 	log.Info("stopped")
@@ -175,11 +179,19 @@ type server struct {
 	grace time.Duration
 }
 
-func newServer(log *slog.Logger, stateDir, musiclibDir string, workers int, scanInterval time.Duration) *server {
+// newServer prepares a server that answers for publicOrigin, which is
+// VIBRANCE_PUBLIC_ORIGIN. It fails only if the HTTP boundary cannot be built:
+// the specification the binary carries does not parse, which the tests of
+// internal/api exclude.
+func newServer(log *slog.Logger, publicOrigin, stateDir, musiclibDir string, workers int, scanInterval time.Duration) (*server, error) {
 	s := &server{log: log, stateDir: stateDir, musiclibDir: musiclibDir, grace: shutdownGrace,
 		workers: workers, scanInterval: scanInterval, ffmpegPath: media.FFmpegPath, ffprobePath: media.FFprobePath}
+	handler, err := s.routes(publicOrigin)
+	if err != nil {
+		return nil, fmt.Errorf("building the HTTP boundary: %w", err)
+	}
 	s.http = &http.Server{
-		Handler:           s.routes(),
+		Handler:           handler,
 		ReadHeaderTimeout: readHeaderTimeout,
 		ReadTimeout:       readTimeout,
 		WriteTimeout:      writeTimeout,
@@ -187,7 +199,7 @@ func newServer(log *slog.Logger, stateDir, musiclibDir string, workers int, scan
 		MaxHeaderBytes:    maxHeaderBytes,
 		ErrorLog:          slog.NewLogLogger(log.Handler(), slog.LevelWarn),
 	}
-	return s
+	return s, nil
 }
 
 // run serves on ln, completes the startup, waits for ctx to be cancelled

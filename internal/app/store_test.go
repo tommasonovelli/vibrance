@@ -211,7 +211,7 @@ func TestStartupRefusals(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			stateDir := tc.prepare(t, t.TempDir())
 			logs := &syncBuffer{}
-			s := newServer(newLogger(logs), stateDir, t.TempDir(), testWorkers, testScanInterval)
+			s := mustServer(t, newLogger(logs), testOrigin, stateDir, t.TempDir())
 			ln := listen(t)
 
 			done := make(chan error, 1)
@@ -255,7 +255,7 @@ func TestStartupRefusals(t *testing.T) {
 func TestStopDuringTheStartup(t *testing.T) {
 	logs := &syncBuffer{}
 	dir := t.TempDir()
-	s := newServer(newLogger(logs), dir, t.TempDir(), testWorkers, testScanInterval)
+	s := mustServer(t, newLogger(logs), testOrigin, dir, t.TempDir())
 	ln := listen(t)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
@@ -266,7 +266,7 @@ func TestStopDuringTheStartup(t *testing.T) {
 	if got := logs.messages(t); !slices.Equal(got, []string{"http listening", "stopping", "http server stopped"}) {
 		t.Fatalf("log events %q", got)
 	}
-	stopping := logs.events(t)[1]
+	stopping := eventsOf(t, logs, "stopping")[0]
 	if interrupted, _ := stopping["interrupted"].(string); stopping["level"] != "INFO" || !strings.Contains(interrupted, "context canceled") {
 		t.Fatalf("the stopping event does not say what was interrupted: %v", stopping)
 	}
