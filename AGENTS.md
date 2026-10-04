@@ -13,7 +13,7 @@ Vibrance is a read-only listening server over the `library/` folder that Vibranc
 - The engineer implements the whole step, and only the step (I16).
 - Record decisions, deviations, risks and questions in [NOTES.md](NOTES.md), one short entry per topic: `DECIDED` when the design is silent or ambiguous without visible effect, `TO CONFIRM` when the ambiguity changes visible behavior. Pick the most conservative option and go on.
 - If the design contradicts itself or rests on a false assumption, stop and report a `BLOCCO:` with evidence (commands and output). Never work around it.
-- Never modify `.ref/`, the read-only clone of MusicLib 1.1.0 kept for reference. It is never committed.
+- Never modify `.ref/`, the read-only clone of MusicLib 1.2.0 kept for reference. It is never committed.
 
 ## Build, test, run: Docker only
 
@@ -30,7 +30,7 @@ Vibrance is a read-only listening server over the `library/` folder that Vibranc
 - The only link to MusicLib is the `library/` folder, read-only: no API, no shared database, no startup dependency. Vibrance works fully with MusicLib stopped.
 - The scanner uses level-triggered reconciliation: it is idempotent, non-destructive and commits one transaction per album. The software is crash-only: stopping is exiting, and starting is recovering.
 - Measure before optimizing: no cache, pool or parallelism without a measurement.
-- Pins: the same toolchain pins as MusicLib (Go 1.25.14, Debian trixie, images by digest). `ffmpeg`/`ffprobe` `8.1.3-musiclib1` are copied from `ghcr.io/tommasonovelli/musiclib:1.1.0`.
+- Pins: the same toolchain pins as MusicLib (Go 1.25.14, Debian trixie, images by digest). `ffmpeg`/`ffprobe` `8.1.3-musiclib1` are copied from `ghcr.io/tommasonovelli/musiclib:1.2.0`.
 - SQLite with `modernc.org/sqlite`, with no Redis, no PostgreSQL and no search service. Search uses FTS5. OpenAPI 3.0.3 is written by hand before the code, with `oapi-codegen` (strict server) and `kin-openapi`.
 - A track id is a UUID kept through the audio fingerprint, never through a path or a number.
 - Errors are `{code, message, details}` with stable codes. Pagination is `?limit=&after=`. JSON is strict: unknown or duplicate keys are rejected.
