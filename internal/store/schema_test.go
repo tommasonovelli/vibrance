@@ -181,7 +181,8 @@ func TestSchemaColumns(t *testing.T) {
 	}
 }
 
-// The indexes are those §5.2 makes mandatory, and no others.
+// The indexes are those §5.2 makes mandatory and tracks(fingerprint), which
+// the erratum "the references follow the audio" adds, and no others.
 func TestSchemaIndexes(t *testing.T) {
 	s := newStore(t)
 	want := []string{
@@ -196,6 +197,7 @@ func TestSchemaIndexes(t *testing.T) {
 		"sessions_user_id_idx ON sessions (user_id)",
 		"tracks_album_disc_no_idx ON tracks (album_id, disc, no)",
 		"UNIQUE tracks_album_fingerprint_occurrence_idx ON tracks (album_id, fingerprint, occurrence)",
+		"tracks_fingerprint_idx ON tracks (fingerprint)",
 	}
 	// Only the indexes the migrations create: those SQLite makes by itself
 	// for PRIMARY KEY and UNIQUE have no SQL text.

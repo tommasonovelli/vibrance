@@ -87,3 +87,10 @@ func SortKey(s string) []byte {
 	var buf collate.Buffer
 	return bytes.Clone(c.KeyFromString(&buf, norm.NFC.String(s)))
 }
+
+// CollateVersion names what the sort keys were computed with: the version
+// of golang.org/x/text that is compiled in, which carries the collation
+// tables and the algorithm. It is kept in the database with the keys
+// (meta.collate_version), and the keys are computed again when it is not the
+// one they were made with (§5.5, T26). A test compares it with go.mod.
+const CollateVersion = "golang.org/x/text v0.41.0"

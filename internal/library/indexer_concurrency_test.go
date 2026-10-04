@@ -263,19 +263,21 @@ func TestIndexAlbumReaderNeverSeesHalfAnAlbum(t *testing.T) {
 	}
 }
 
-// The write transaction of an indexing does no I/O (I11): everything that
-// runs inside it is in commit.go, which has no way to the disk or to a
-// process. The test reads the sources: the package starts one write
-// transaction, whose function only calls commitAlbum; commit.go imports
-// nothing that reaches outside the database, and names neither the indexer,
-// nor the Root, nor the media adapter.
+// The write transactions of the package do no I/O (I11): everything that
+// runs inside one is in commit.go, which has no way to the disk or to a
+// process. The test reads the sources: every write transaction of the
+// package has a function that only calls one function of commit.go, and
+// each of those is the function of exactly one transaction: the indexing of
+// an album, and those of the scanner. commit.go imports nothing that
+// reaches outside the database, and names neither the indexer, nor the
+// scanner, nor the Root, nor the media adapter.
 func TestTheWriteTransactionDoesNoIO(t *testing.T) {
 	allowedImports := map[string]bool{
-		"bytes": true, "context": true, "database/sql": true, "errors": true, "fmt": true, "reflect": true,
+		"bytes": true, "context": true, "database/sql": true, "errors": true, "fmt": true, "reflect": true, "slices": true,
 		"vibrance/internal/search": true, "vibrance/internal/store": true,
 	}
 	forbiddenNames := map[string]bool{
-		"Indexer": true, "Root": true, "Media": true, "CoverWarmer": true, "media": true, "os": true,
+		"Indexer": true, "Scanner": true, "Root": true, "Media": true, "CoverWarmer": true, "media": true, "os": true,
 		"OpenRoot": true, "Lstat": true, "Open": true, "ReadReceipt": true, "Probe": true, "Fingerprint": true, "Warm": true,
 	}
 	entries, err := os.ReadDir(".")
@@ -283,7 +285,11 @@ func TestTheWriteTransactionDoesNoIO(t *testing.T) {
 		t.Fatal(err)
 	}
 	fset := token.NewFileSet()
-	transactions, sawCommit := 0, false
+	// The functions of the write transactions, and how many transactions
+	// call each.
+	transactions := map[string]int{"commitAlbum": 0, "commitAbsent": 0, "commitReferences": 0, "commitFingerprint": 0, "commitMeta": 0, "commitSortKeys": 0}
+	declared := map[string]bool{}
+	sawCommit := false
 	for _, entry := range entries {
 		name := entry.Name()
 		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
@@ -308,6 +314,9 @@ func TestTheWriteTransactionDoesNoIO(t *testing.T) {
 				if id, ok := n.(*ast.Ident); ok && forbiddenNames[id.Name] {
 					t.Errorf("%s: commit.go names %s: the write transaction does no I/O", fset.Position(id.Pos()), id.Name)
 				}
+				if fn, ok := n.(*ast.FuncDecl); ok {
+					declared[fn.Name.Name] = true
+				}
 				return true
 			})
 		}
@@ -320,38 +329,51 @@ func TestTheWriteTransactionDoesNoIO(t *testing.T) {
 			if !ok || sel.Sel.Name != "WithWriteTx" {
 				return true
 			}
-			transactions++
-			if !onlyCalls(call, "commitAlbum") {
-				t.Errorf("%s: the function of the write transaction must only return commitAlbum(...)", fset.Position(call.Pos()))
+			callee := onlyCall(call)
+			if _, ok := transactions[callee]; !ok {
+				t.Errorf("%s: the function of a write transaction must only return a call of a function of commit.go, not %q",
+					fset.Position(call.Pos()), callee)
 			}
+			transactions[callee]++
 			return true
 		})
 	}
-	if !sawCommit || transactions != 1 {
-		t.Fatalf("commit.go seen: %v; write transactions in the package: %d, want 1", sawCommit, transactions)
+	if !sawCommit {
+		t.Fatal("commit.go was not checked")
+	}
+	for name, n := range transactions {
+		if !declared[name] {
+			t.Errorf("%s is not a function of commit.go", name)
+		}
+		if n != 1 {
+			t.Errorf("%d write transactions call %s, want 1", n, name)
+		}
 	}
 }
 
-// onlyCalls reports whether the function literal given to WithWriteTx is
-// `func(q) error { return name(...) }`.
-func onlyCalls(withWriteTx *ast.CallExpr, name string) bool {
+// onlyCall returns name when the function literal given to WithWriteTx is
+// `func(q) error { return name(...) }`, and "" otherwise.
+func onlyCall(withWriteTx *ast.CallExpr) string {
 	if len(withWriteTx.Args) != 2 {
-		return false
+		return ""
 	}
 	fn, ok := withWriteTx.Args[1].(*ast.FuncLit)
 	if !ok || len(fn.Body.List) != 1 {
-		return false
+		return ""
 	}
 	ret, ok := fn.Body.List[0].(*ast.ReturnStmt)
 	if !ok || len(ret.Results) != 1 {
-		return false
+		return ""
 	}
 	call, ok := ret.Results[0].(*ast.CallExpr)
 	if !ok {
-		return false
+		return ""
 	}
 	callee, ok := call.Fun.(*ast.Ident)
-	return ok && callee.Name == name
+	if !ok {
+		return ""
+	}
+	return callee.Name
 }
 
 // The planner's error for a file without a fingerprint cannot come from

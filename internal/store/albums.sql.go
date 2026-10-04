@@ -10,6 +10,40 @@ import (
 	"database/sql"
 )
 
+const countAlbums = `-- name: CountAlbums :many
+SELECT available, count(*) AS total FROM albums GROUP BY available ORDER BY available
+`
+
+type CountAlbumsRow struct {
+	Available int64
+	Total     int64
+}
+
+// CountAlbums counts the albums that are available (1) and those that are
+// not (0), for the state of the library (DESIGN.md 6.5).
+func (q *Queries) CountAlbums(ctx context.Context) ([]CountAlbumsRow, error) {
+	rows, err := q.db.QueryContext(ctx, countAlbums)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CountAlbumsRow
+	for rows.Next() {
+		var i CountAlbumsRow
+		if err := rows.Scan(&i.Available, &i.Total); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getIndexedAlbum = `-- name: GetIndexedAlbum :one
 SELECT albums.seq, albums.id, albums.artist_id, albums.artist_key, albums.title, albums.title_key, albums.year, albums.year_key, albums.genre, albums.compilation, albums.rel_path, albums.album_revision, albums.render_version, albums.receipt_hash, albums.cover_rel, albums.cover_sha256, albums.cover_mime, albums.cover_size, albums.cover_mtime_ns, albums.track_count, albums.duration_ms, albums.available, albums.first_seen_at, albums.updated_at, artists.name AS artist_name
 FROM albums
@@ -84,6 +118,118 @@ func (q *Queries) ListAlbumIDsByArtist(ctx context.Context, artistID string) ([]
 		return nil, err
 	}
 	return items, nil
+}
+
+const listAlbumStates = `-- name: ListAlbumStates :many
+SELECT id, artist_id, rel_path, receipt_hash, available FROM albums ORDER BY seq
+`
+
+type ListAlbumStatesRow struct {
+	ID          string
+	ArtistID    string
+	RelPath     string
+	ReceiptHash string
+	Available   int64
+}
+
+// ListAlbumStates returns, for every album of the index, available or not,
+// what a scan compares with the library (DESIGN.md 6.1, P3): the folder and
+// the receipt it was indexed from. The rows are in the order they were
+// created.
+func (q *Queries) ListAlbumStates(ctx context.Context) ([]ListAlbumStatesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAlbumStates)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAlbumStatesRow
+	for rows.Next() {
+		var i ListAlbumStatesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ArtistID,
+			&i.RelPath,
+			&i.ReceiptHash,
+			&i.Available,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAlbumTitles = `-- name: ListAlbumTitles :many
+SELECT id, title FROM albums ORDER BY seq
+`
+
+type ListAlbumTitlesRow struct {
+	ID    string
+	Title string
+}
+
+// ListAlbumTitles returns the title of every album: what its title_key is
+// computed from (DESIGN.md 5.5).
+func (q *Queries) ListAlbumTitles(ctx context.Context) ([]ListAlbumTitlesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAlbumTitles)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAlbumTitlesRow
+	for rows.Next() {
+		var i ListAlbumTitlesRow
+		if err := rows.Scan(&i.ID, &i.Title); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const setAlbumTitleKey = `-- name: SetAlbumTitleKey :exec
+UPDATE albums SET title_key = ? WHERE id = ?
+`
+
+type SetAlbumTitleKeyParams struct {
+	TitleKey []byte
+	ID       string
+}
+
+// SetAlbumTitleKey gives an album the sort key of its title, computed again
+// after the collation changed (DESIGN.md 5.5, T26).
+func (q *Queries) SetAlbumTitleKey(ctx context.Context, arg SetAlbumTitleKeyParams) error {
+	_, err := q.db.ExecContext(ctx, setAlbumTitleKey, arg.TitleKey, arg.ID)
+	return err
+}
+
+const setAlbumUnavailable = `-- name: SetAlbumUnavailable :exec
+UPDATE albums SET available = 0, updated_at = ? WHERE id = ? AND available = 1
+`
+
+type SetAlbumUnavailableParams struct {
+	UpdatedAt int64
+	ID        string
+}
+
+// SetAlbumUnavailable records that the folder of an album is gone (DESIGN.md
+// 6.4). The row stays, with what was last known of the album (I3), and comes
+// back with the same id if its folder does.
+func (q *Queries) SetAlbumUnavailable(ctx context.Context, arg SetAlbumUnavailableParams) error {
+	_, err := q.db.ExecContext(ctx, setAlbumUnavailable, arg.UpdatedAt, arg.ID)
+	return err
 }
 
 const setArtistKeyOfAlbums = `-- name: SetArtistKeyOfAlbums :exec

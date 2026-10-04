@@ -27,6 +27,56 @@ func (q *Queries) GetArtist(ctx context.Context, id string) (Artist, error) {
 	return i, err
 }
 
+const listArtists = `-- name: ListArtists :many
+SELECT seq, id, name, sort_key FROM artists ORDER BY seq
+`
+
+// ListArtists returns every artist, in the order the rows were created: the
+// names their sort keys are computed from (DESIGN.md 5.5).
+func (q *Queries) ListArtists(ctx context.Context) ([]Artist, error) {
+	rows, err := q.db.QueryContext(ctx, listArtists)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Artist
+	for rows.Next() {
+		var i Artist
+		if err := rows.Scan(
+			&i.Seq,
+			&i.ID,
+			&i.Name,
+			&i.SortKey,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const setArtistSortKey = `-- name: SetArtistSortKey :exec
+UPDATE artists SET sort_key = ? WHERE id = ?
+`
+
+type SetArtistSortKeyParams struct {
+	SortKey []byte
+	ID      string
+}
+
+// SetArtistSortKey gives an artist the sort key of its name, computed again
+// after the collation changed (DESIGN.md 5.5, T26).
+func (q *Queries) SetArtistSortKey(ctx context.Context, arg SetArtistSortKeyParams) error {
+	_, err := q.db.ExecContext(ctx, setArtistSortKey, arg.SortKey, arg.ID)
+	return err
+}
+
 const upsertArtist = `-- name: UpsertArtist :exec
 INSERT INTO artists (id, name, sort_key) VALUES (?, ?, ?)
 ON CONFLICT (id) DO UPDATE SET name = excluded.name, sort_key = excluded.sort_key

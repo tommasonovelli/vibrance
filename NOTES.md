@@ -261,3 +261,51 @@ Reason: the literal reading, and total functions. Visible effect: none with Musi
 ## N-062 · The debt of S5: `TestRunCancelKillsTheGroup` — DECIDED
 Step: S7 (erratum of 2026-10-02). The test reads the members of the group again, every 5 ms for at most 5 s, until they are exactly the three pids, and fails only at the deadline: the `mv` of the test tool may still be in the group for an instant. Only the test changed, and it was repeated 20 times with the race detector.
 Reason: the erratum. Visible effect: none.
+
+## N-063 · The scanner: its API, its goroutines, its log — DECIDED
+Step: S8. `NewScanner(indexer, workers, interval, log)`, `Run(ctx)`, `Trigger(reason)`, `Status()`. `Run` is the one goroutine of the cycles: a cycle at once, then one after every interval counted from the end of the last, or sooner when `Trigger` asks. A buffered channel of one reason is the coalescing: one cycle runs and at most one waits. P4 indexes with `workers` goroutines that live only for the cycle. The four reasons (`startup`, `interval`, `request`, `file_replaced`) are only logged; the last two are used by S16 and S20, like `Status`. Every cycle logs one INFO line, `scan finished` with its counters or `scan skipped` with the state. `Run` returns nothing: a failure is in the state and in the log.
+Reason: the smallest thing that does what §6.1 says. Visible effect: the new log events.
+
+## N-064 · Which failed albums are not tried again — TO CONFIRM
+Step: S8. Context: §6.2 says that an album that failed with a certain receipt is not tried again until the receipt changes or the process restarts, "so that ffprobe is not run every 5 minutes on a broken album"; §6.3 step 2 says of a missing file that "if it is passing, the next cycle solves it". Choice: `probe_failed` and `fingerprint_failed`, which cost processes, are remembered; `file_missing`, `file_size_mismatch` and `receipt_too_large`, which cost an `Lstat` at most, are tried at every cycle. An album that the database refused (an error without a code, the S7 debt about `Disc N`) does not stop the cycle, is logged at ERROR, makes the cycle `ok: false`, is not listed among the problems (§6.5 has no code for it) and is tried again at the next cycle: a full disk must not need a restart.
+Visible effect: when a problem of step 2 disappears from the list (next cycle, not next restart).
+
+## N-065 · The state of the library where §6.5 and §8.2 differ or are silent — DECIDED
+Step: S8. `Status` has the shape of `LibraryStatus` of §8.2 (albums and tracks, each available and unavailable), not the "ignored" counter of §6.5: the ignored folders are the problems. `last_scan` is the cycle that is running (`finished_at` null) or the last one that got past P0; a cycle that the markers stop is not a scan and leaves it as it was. `ok` is false when the cycle did not reach its end (interrupted, a failure of the database, `library/` that cannot be listed, a marker that appears during the cycle) and `error` says which, without internal details. The problems of single albums do not make it false. The counters are read from the index when a cycle begins and ends. The problems are replaced when a cycle ends, sorted by path and code, at most 200. The warnings of an album that was indexed are kept in memory with its receipt and listed again while the album is skipped (the S7 debt about `tags_incomplete`); after a restart they are not, until the album changes.
+Reason: §8.2 is the form the API will have (S11, S20). Visible effect: in S20.
+
+## N-066 · `library/` that cannot be listed: §6 and scenario A16 disagree — TO CONFIRM
+Step: S8, for S23. §6.1 and §6.2 say that when `library/` does not open the state is `unavailable` and the cycle stops "without touching anything"; the row A16 of §12.3 (the folder renamed away for a moment) expects "everything `available: false`". Implemented as §6 says: the index stays, the albums stay available in the index, and the media endpoints will answer for the files that are not there (§9.1). An empty `library/` that can be listed is the other case: every album becomes unavailable, no row is lost (tested). The orchestrator may want an erratum to A16 or to §6.2 before S23.
+Visible effect: with `library/` missing the lists still show the albums.
+
+## N-067 · The markers are read again before P5 — DECIDED
+Step: S8. A rebuild of MusicLib that starts after P0 can empty `library/` under the discovery, which would then find albums "gone". The cycle reads `.maintenance` and `.musiclib-store` again after P4 and, if they no longer allow a scan, stops before P5 and P6 with the state they give (`ok: false`). What P4 committed stays: each album was written whole, from a receipt read twice. The window that is left (N-014: the marker is already gone and `library/` still empty) is the one the design accepts.
+Reason: §4.5, "if it is there, the scanner does not touch the index". Visible effect: none.
+
+## N-068 · Albums that are not seen for a cycle — DECIDED
+Step: S8. §6.4 is applied as written: an available album whose `album_id` was not seen and that no listing error protects becomes unavailable. So an album whose receipt is corrupt becomes unavailable while its folder has the problem `receipt_invalid`, and is back with the same ids when the receipt is whole (tested). Risk, left as it is: a folder that MusicLib renames between the listing of its artist and the reading of its receipt is "gone" for the discovery (N-033), the new folder was not listed, and the album is unavailable until the next cycle. Nothing is lost, and the references of the users do not move (no other track has that audio).
+Reason: the letter of §6.4; "the harm of a false alarm is zero". Visible effect: in that window, an album missing from the lists for one interval.
+
+## N-069 · The job of §6.6: when it runs and what it remembers — DECIDED
+Step: S8 (erratum of 2026-10-02). The job is a second goroutine of `Scanner.Run`, woken after every cycle that reached its end: it lists, 100 at a time, the available rows whose `fp_version` is not the current one and computes them one file at a time through the Runner. A row is written by a compare-and-set on what was read (fingerprint, version, size, time, available), so the job and an indexing of the same album never overwrite each other (N-058). A row whose file cannot be opened or has another size or time is left to the scanner. `meta.ffmpeg_version` is written when a pass leaves no such row; it is only a record, since the job starts from the rows and not from it. A file ffmpeg fails on is remembered by track id and SHA-256 until the process restarts, like a failed album. The job does not run at the very start but after the first cycle, which first indexes what changed on disk.
+Reason: the erratum, and the reasoning of §6.2. Visible effect: none.
+
+## N-070 · `collate_version` is the version of the module, as a constant — DECIDED
+Step: S8. `names.CollateVersion` is `golang.org/x/text v0.41.0`, and a test compares it with `go.mod`: the build information of a test binary is not a reliable source, and a constant that a test ties to `go.mod` cannot drift. `library.EnsureSortKeys` runs at step 6 of the startup, before the scanner and before readiness: one read, the keys computed outside any write transaction, one write transaction with every key and the version. A new database only records the version.
+Reason: §5.5, T26. Visible effect: the log event `sort keys computed again`.
+
+## N-071 · The references follow the audio: what the erratum leaves open — DECIDED
+Step: S8. P6 first reads, and opens its write transaction only when a reference has to move: a cycle with nothing to move writes nothing. A playlist gets one new revision however many of its items moved in that cycle. When two unavailable tracks of one user's favorites move to the same track, the row of the track with the lower `seq` gives its `created_at`. The index `tracks_fingerprint_idx` is added to `migrations/00001_schema.sql` (I13: no release yet); a development database made before this step does not get it and must be made again. P6 does not run in a cycle that the markers or the listing of `library/` stopped.
+Reason: the erratum, points 3, 4 and 6. Visible effect: none beyond the erratum.
+
+## N-072 · Steps 6 and 7 of the startup, and the stop — DECIDED
+Step: S8. `app.Run` takes the folder of MusicLib, `/musiclib` in `cmd/vibrance` (a variable only for the process tests, like the state folder). The folder is opened once (`os.OpenRoot`); if it is not there at all the startup refuses with `musiclib_folder`, exit 1: the image always has it, and an empty one is fine (I14: the state is `unavailable`). A failure of step 6 is `library_index`. The scanner has its own context, cancelled at the stop after the HTTP server and before the database is closed; the stop waits for it. New log events: `scanner started`, `scanner stopped`. The deletion of expired sessions and the hourly cleanup are S13's.
+Reason: §11.2. Visible effect: the two codes and the log events.
+
+## N-073 · `PRAGMA optimize` after a cycle that "changed much" — DECIDED
+Step: S8. A cycle that indexed or found gone at least 100 albums ends with `Store.Optimize`. The number is not measured: it separates a first scan, or a library that comes back, from the edit of a few albums, and `PRAGMA optimize` itself decides what to analyze. S24 can move it.
+Reason: P6 and T30. Visible effect: none.
+
+## N-074 · Debts of earlier steps that S8 met and did not change — DECIDED
+Step: S8. (1) A cover that could not be opened for a passing fault stays `cover_invalid` until the receipt changes or the server restarts, because an unchanged album is skipped (the S7 debt): P3 was left as §6.1 writes it. (2) `Discovery.Candidates` holds every receipt for the length of a cycle (the S4 debt, T30): for S24 to measure.
+Reason: I16. Visible effect: none new.

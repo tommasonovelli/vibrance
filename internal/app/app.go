@@ -14,6 +14,7 @@ import (
 
 	"vibrance/internal/buildinfo"
 	"vibrance/internal/config"
+	"vibrance/internal/library"
 	"vibrance/internal/media"
 	"vibrance/internal/store"
 )
@@ -27,6 +28,13 @@ const (
 	// CodeStateUnwritable: the server cannot create files in its state
 	// folder.
 	CodeStateUnwritable = "state_unwritable"
+	// CodeMusicLibFolder: the folder MusicLib's data volume is mounted at
+	// cannot be opened. Its content is not looked at: an empty folder is
+	// fine (I14).
+	CodeMusicLibFolder = "musiclib_folder"
+	// CodeLibraryIndex: the index of the library could not be prepared for
+	// serving (its sort keys).
+	CodeLibraryIndex = "library_index"
 )
 
 // databaseFile is the name of the database in the state folder (§5.1).
@@ -86,8 +94,9 @@ func Code(err error) string {
 //
 // euid is the effective user id of the process, and cpus the number of
 // CPUs available to it. stateDir is the folder of the server's state: the
-// database, and later the thumbnails.
-func Run(ctx context.Context, getenv func(string) string, euid, cpus int, stateDir string, log *slog.Logger) error {
+// database, and later the thumbnails. musiclibDir is the folder MusicLib's
+// data volume is mounted at, which the server only reads.
+func Run(ctx context.Context, getenv func(string) string, euid, cpus int, stateDir, musiclibDir string, log *slog.Logger) error {
 	// Step 1: refuse root, then read and validate the configuration.
 	// Nothing is opened or written before both pass.
 	if err := checkNotRoot(euid); err != nil {
@@ -104,7 +113,7 @@ func Run(ctx context.Context, getenv func(string) string, euid, cpus int, stateD
 	if err != nil {
 		return &Error{Code: CodeHTTPListen, Msg: "cannot listen on " + cfg.HTTPAddr, Err: err}
 	}
-	if err := newServer(log, stateDir, cfg.Workers).run(ctx, ln); err != nil {
+	if err := newServer(log, stateDir, musiclibDir, cfg.Workers, cfg.ScanInterval).run(ctx, ln); err != nil {
 		return err
 	}
 	log.Info("stopped")
@@ -136,24 +145,32 @@ type server struct {
 	http     *http.Server
 	state    atomic.Int32
 	stateDir string
+	// musiclibDir is the folder of MusicLib's data volume (/musiclib).
+	musiclibDir string
 	// store is the database, from step 3 of the startup on.
 	store *store.Store
 	// workers is VIBRANCE_WORKERS: how many ffmpeg and ffprobe processes
-	// run at once.
+	// run at once, and how many albums are indexed at once.
 	workers int
+	// scanInterval is VIBRANCE_SCAN_INTERVAL.
+	scanInterval time.Duration
 	// ffmpegPath and ffprobePath are media.FFmpegPath and
 	// media.FFprobePath; only the tests point them elsewhere.
 	ffmpegPath, ffprobePath string
 	// tools is the adapter of ffmpeg and ffprobe, from step 4 of the
 	// startup on.
 	tools *media.Tools
+	// scanner keeps the index aligned with the library, from step 7 of the
+	// startup on; stopScanner stops it and waits for it.
+	scanner     *library.Scanner
+	stopScanner func() error
 	// grace is shutdownGrace; only the tests shorten it.
 	grace time.Duration
 }
 
-func newServer(log *slog.Logger, stateDir string, workers int) *server {
-	s := &server{log: log, stateDir: stateDir, grace: shutdownGrace,
-		workers: workers, ffmpegPath: media.FFmpegPath, ffprobePath: media.FFprobePath}
+func newServer(log *slog.Logger, stateDir, musiclibDir string, workers int, scanInterval time.Duration) *server {
+	s := &server{log: log, stateDir: stateDir, musiclibDir: musiclibDir, grace: shutdownGrace,
+		workers: workers, scanInterval: scanInterval, ffmpegPath: media.FFmpegPath, ffprobePath: media.FFprobePath}
 	s.http = &http.Server{
 		Handler:           s.routes(),
 		ReadHeaderTimeout: readHeaderTimeout,
@@ -213,13 +230,17 @@ func (s *server) serveHTTP(ln net.Listener) <-chan error {
 //	Step 4: verify ffmpeg and ffprobe at the pinned version
 //	        (media_tool_unavailable, media_tool_version).
 //
-// The steps below arrive with the components they start:
+//	Step 6: compute the sort keys again if the collation changed
+//	        (library_index). The fingerprints of another ffmpeg are computed
+//	        again by the scanner, in the background.
+//	Step 7: start the scanner (musiclib_folder).
+//
+// What is left of those steps arrives with the components it belongs to:
 //
 //	Step 5: create the admin if there is no user (admin_password_missing,
 //	        admin_password_invalid).
-//	Step 6: check meta.collate_version and meta.ffmpeg_version; delete the
-//	        expired sessions.
-//	Step 7: start the scanner and the hourly cleanup of the sessions.
+//	Step 6: delete the expired sessions.
+//	Step 7: start the hourly cleanup of the sessions.
 //
 // Readiness turns positive last. It depends neither on MusicLib nor on
 // the state of the index (I14).
@@ -228,6 +249,12 @@ func (s *server) startup(ctx context.Context) error {
 		return err
 	}
 	if err := s.checkTools(ctx); err != nil {
+		return err
+	}
+	if err := s.prepareIndex(ctx); err != nil {
+		return err
+	}
+	if err := s.startScanner(); err != nil {
 		return err
 	}
 	s.state.Store(stateReady)
@@ -264,6 +291,51 @@ func (s *server) checkTools(ctx context.Context) error {
 	return nil
 }
 
+// prepareIndex is what step 6 of the startup does to the index before the
+// server serves: the sort keys of the lists are those of the compiled
+// collation (§5.5, T26).
+func (s *server) prepareIndex(ctx context.Context) error {
+	recomputed, err := library.EnsureSortKeys(ctx, s.store)
+	if err != nil {
+		return &Error{Code: CodeLibraryIndex, Msg: "preparing the index of the library", Err: err}
+	}
+	if recomputed {
+		s.log.Info("sort keys computed again")
+	}
+	return nil
+}
+
+// startScanner is step 7 of the startup. The scanner has a context of its
+// own: the stop cancels it after the HTTP server has stopped (§11.2). The
+// folder of MusicLib is opened once and only read (I1); what is in it, or
+// that it is empty, is the business of the scanner and never keeps the
+// server from starting (I14).
+func (s *server) startScanner() error {
+	root, err := library.OpenRoot(s.musiclibDir)
+	if err != nil {
+		return &Error{Code: CodeMusicLibFolder, Msg: "opening the folder of MusicLib " + s.musiclibDir, Err: err}
+	}
+	indexer := library.NewIndexer(root, s.store, s.tools, library.NoCoverWarmer{}, time.Now)
+	s.scanner = library.NewScanner(indexer, s.workers, s.scanInterval, s.log)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		s.scanner.Run(ctx)
+	}()
+	s.stopScanner = func() error {
+		cancel()
+		<-done
+		s.log.Info("scanner stopped")
+		if err := root.Close(); err != nil {
+			return &Error{Code: CodeMusicLibFolder, Msg: "closing the folder of MusicLib", Err: err}
+		}
+		return nil
+	}
+	s.log.Info("scanner started", "scan_interval", s.scanInterval.String())
+	return nil
+}
+
 // writeProbe is the file that checkWritable creates and removes. Its name
 // is fixed, so that a probe left behind by a killed process is taken over
 // by the next one instead of piling up.
@@ -296,13 +368,17 @@ func checkWritable(dir string) error {
 //     at most the grace period; then it closes their connections. A
 //     request cut this way is not a failure of the stop: streams outlive
 //     any grace period.
-//  3. (Arrives with the scanner.) Cancel the scanner and its jobs, which
-//     ends the child processes.
+//  3. The scanner and its job are cancelled, which ends the child
+//     processes, and waited for: nothing uses the database after this.
 //  4. PRAGMA optimize and wal_checkpoint(TRUNCATE); close the database.
 func (s *server) shutdown() error {
 	s.state.Store(stateStopping)
 	httpErr := s.stopHTTP()
-	return errors.Join(httpErr, s.closeStore())
+	var scannerErr error
+	if s.stopScanner != nil {
+		scannerErr = s.stopScanner()
+	}
+	return errors.Join(httpErr, scannerErr, s.closeStore())
 }
 
 func (s *server) stopHTTP() error {

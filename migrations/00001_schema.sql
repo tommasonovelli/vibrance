@@ -147,6 +147,10 @@ CREATE INDEX tracks_album_disc_no_idx ON tracks (album_id, disc, "no");
 -- The natural key of a track (§5.4), and the only uniqueness rule on tracks:
 -- the same audio may appear twice in an album, told apart by occurrence.
 CREATE UNIQUE INDEX tracks_album_fingerprint_occurrence_idx ON tracks (album_id, fingerprint, occurrence);
+-- The same audio in any album: when a track is no longer available, the
+-- playlists and the favorites that point to it move to an available track
+-- with its fingerprint (the scanner, at the end of every cycle).
+CREATE INDEX tracks_fingerprint_idx ON tracks (fingerprint);
 
 CREATE TABLE favorites (
     user_id    text    NOT NULL REFERENCES users (id) ON DELETE CASCADE,

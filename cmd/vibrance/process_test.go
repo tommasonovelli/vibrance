@@ -68,7 +68,13 @@ func vibranceBinary(t *testing.T) string {
 		if binary.err = os.Mkdir(state, 0o755); binary.err != nil {
 			return
 		}
-		if out, err := exec.CommandContext(ctx, goTool, "build", "-race", "-ldflags", "-X main.stateDir="+state, "-o", path, ".").CombinedOutput(); err != nil {
+		// The folder of MusicLib of the binary: an empty folder, as /musiclib
+		// is in a container that mounts no volume there.
+		musiclib := filepath.Join(binary.dir, "musiclib")
+		if binary.err = os.Mkdir(musiclib, 0o755); binary.err != nil {
+			return
+		}
+		if out, err := exec.CommandContext(ctx, goTool, "build", "-race", "-ldflags", "-X main.stateDir="+state+" -X main.musiclibDir="+musiclib, "-o", path, ".").CombinedOutput(); err != nil {
 			binary.err = fmt.Errorf("go build -race: %w\n%s", err, out)
 			return
 		}
@@ -254,7 +260,7 @@ func wantCleanRun(t *testing.T, p *process) {
 	if p.stderr.String() != "" {
 		t.Fatalf("the server wrote to stderr:\n%s", p.stderr)
 	}
-	want := []string{"starting", "http listening", "database open", "media tools verified", "ready", "stopping", "http server stopped", "database closed", "stopped"}
+	want := []string{"starting", "http listening", "database open", "media tools verified", "scanner started", "ready", "stopping", "http server stopped", "scanner stopped", "database closed", "stopped"}
 	if got := p.stdout.messages(t); !slices.Equal(got, want) {
 		t.Fatalf("log events %q, want %q", got, want)
 	}
@@ -350,7 +356,7 @@ func TestProcessKilledAndStartedAgain(t *testing.T) {
 	if ws := killed.wait(t); !ws.Signaled() || ws.Signal() != syscall.SIGKILL {
 		t.Fatalf("the server ended with %v, want killed", killed.cmd.ProcessState)
 	}
-	if got := killed.stdout.messages(t); !slices.Equal(got, []string{"starting", "http listening", "database open", "media tools verified", "ready"}) {
+	if got := killed.stdout.messages(t); !slices.Equal(got, []string{"starting", "http listening", "database open", "media tools verified", "scanner started", "ready"}) {
 		t.Fatalf("log events of the killed server: %q", got)
 	}
 	if code, _ := runHealthcheck(t, addr); code != exitFailure {
@@ -573,8 +579,8 @@ func TestProcessStopCutsAnOpenRequest(t *testing.T) {
 	if p.stderr.String() != "" {
 		t.Fatalf("the server wrote to stderr:\n%s", p.stderr)
 	}
-	want := []string{"starting", "http listening", "database open", "media tools verified", "ready", "stopping",
-		"requests still open after the grace period: closing their connections", "http server stopped", "database closed", "stopped"}
+	want := []string{"starting", "http listening", "database open", "media tools verified", "scanner started", "ready", "stopping",
+		"requests still open after the grace period: closing their connections", "http server stopped", "scanner stopped", "database closed", "stopped"}
 	if got := p.stdout.messages(t); !slices.Equal(got, want) {
 		t.Fatalf("log events %q, want %q", got, want)
 	}

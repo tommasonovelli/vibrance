@@ -31,6 +31,10 @@ const (
 // temporary folder (-ldflags "-X main.stateDir=...").
 var stateDir = "/var/lib/vibrance"
 
+// musiclibDir is the folder MusicLib's data volume is mounted at, read
+// only. It is fixed too (§3.4), and a variable for the same reason.
+var musiclibDir = "/musiclib"
+
 func main() {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	os.Exit(run(os.Args[1:], os.Getenv, os.Geteuid(), os.Stdout, log))
@@ -40,7 +44,7 @@ func main() {
 func run(args []string, getenv func(string) string, euid int, stdout io.Writer, log *slog.Logger) int {
 	switch {
 	case len(args) == 1 && args[0] == "serve":
-		return serve(getenv, euid, stateDir, log)
+		return serve(getenv, euid, stateDir, musiclibDir, log)
 	case len(args) == 1 && args[0] == "healthcheck":
 		return healthcheck(getenv, log)
 	case len(args) == 1 && args[0] == "version":

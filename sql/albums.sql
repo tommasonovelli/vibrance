@@ -65,3 +65,31 @@ UPDATE albums SET artist_key = ? WHERE artist_id = ?;
 -- name: ListAlbumIDsByArtist :many
 -- ListAlbumIDsByArtist returns the ids of the available albums of an artist.
 SELECT id FROM albums WHERE artist_id = ? AND available = 1 ORDER BY seq;
+
+-- name: ListAlbumStates :many
+-- ListAlbumStates returns, for every album of the index, available or not,
+-- what a scan compares with the library (DESIGN.md 6.1, P3): the folder and
+-- the receipt it was indexed from. The rows are in the order they were
+-- created.
+SELECT id, artist_id, rel_path, receipt_hash, available FROM albums ORDER BY seq;
+
+-- name: SetAlbumUnavailable :exec
+-- SetAlbumUnavailable records that the folder of an album is gone (DESIGN.md
+-- 6.4). The row stays, with what was last known of the album (I3), and comes
+-- back with the same id if its folder does.
+UPDATE albums SET available = 0, updated_at = ? WHERE id = ? AND available = 1;
+
+-- name: CountAlbums :many
+-- CountAlbums counts the albums that are available (1) and those that are
+-- not (0), for the state of the library (DESIGN.md 6.5).
+SELECT available, count(*) AS total FROM albums GROUP BY available ORDER BY available;
+
+-- name: ListAlbumTitles :many
+-- ListAlbumTitles returns the title of every album: what its title_key is
+-- computed from (DESIGN.md 5.5).
+SELECT id, title FROM albums ORDER BY seq;
+
+-- name: SetAlbumTitleKey :exec
+-- SetAlbumTitleKey gives an album the sort key of its title, computed again
+-- after the collation changed (DESIGN.md 5.5, T26).
+UPDATE albums SET title_key = ? WHERE id = ?;

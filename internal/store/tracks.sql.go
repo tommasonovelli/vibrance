@@ -10,6 +10,146 @@ import (
 	"database/sql"
 )
 
+const countTracks = `-- name: CountTracks :many
+SELECT available, count(*) AS total FROM tracks GROUP BY available ORDER BY available
+`
+
+type CountTracksRow struct {
+	Available int64
+	Total     int64
+}
+
+// CountTracks counts the tracks that are available (1) and those that are
+// not (0), for the state of the library (DESIGN.md 6.5).
+func (q *Queries) CountTracks(ctx context.Context) ([]CountTracksRow, error) {
+	rows, err := q.db.QueryContext(ctx, countTracks)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CountTracksRow
+	for rows.Next() {
+		var i CountTracksRow
+		if err := rows.Scan(&i.Available, &i.Total); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOccurrences = `-- name: ListOccurrences :many
+SELECT occurrence FROM tracks WHERE album_id = ? AND fingerprint = ? AND id <> ? ORDER BY occurrence
+`
+
+type ListOccurrencesParams struct {
+	AlbumID     string
+	Fingerprint string
+	ID          string
+}
+
+// ListOccurrences returns the occurrences that the other rows of an album,
+// available or not, have for a fingerprint: those a row that takes that
+// fingerprint cannot have (DESIGN.md 5.4).
+func (q *Queries) ListOccurrences(ctx context.Context, arg ListOccurrencesParams) ([]int64, error) {
+	rows, err := q.db.QueryContext(ctx, listOccurrences, arg.AlbumID, arg.Fingerprint, arg.ID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var occurrence int64
+		if err := rows.Scan(&occurrence); err != nil {
+			return nil, err
+		}
+		items = append(items, occurrence)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listStaleFingerprints = `-- name: ListStaleFingerprints :many
+SELECT tracks.seq, tracks.id, tracks.album_id, albums.rel_path AS album_rel_path, tracks.rel_path,
+    tracks.file_size, tracks.file_mtime_ns, tracks.file_sha256,
+    tracks.fingerprint, tracks.fp_version, tracks.occurrence
+FROM tracks
+JOIN albums ON albums.id = tracks.album_id
+WHERE tracks.available = 1 AND tracks.fp_version <> ?1 AND tracks.seq > ?2
+ORDER BY tracks.seq
+LIMIT ?3
+`
+
+type ListStaleFingerprintsParams struct {
+	FpVersion string
+	AfterSeq  int64
+	PageSize  int64
+}
+
+type ListStaleFingerprintsRow struct {
+	Seq          int64
+	ID           string
+	AlbumID      string
+	AlbumRelPath string
+	RelPath      string
+	FileSize     int64
+	FileMtimeNs  int64
+	FileSha256   string
+	Fingerprint  string
+	FpVersion    string
+	Occurrence   int64
+}
+
+// ListStaleFingerprints returns a page of the available tracks whose
+// fingerprint was computed by another ffmpeg than the current one, in the
+// order of seq and after a given seq, with the folder of their album
+// (DESIGN.md 6.6). Only such a fingerprint is computed again.
+func (q *Queries) ListStaleFingerprints(ctx context.Context, arg ListStaleFingerprintsParams) ([]ListStaleFingerprintsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listStaleFingerprints, arg.FpVersion, arg.AfterSeq, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListStaleFingerprintsRow
+	for rows.Next() {
+		var i ListStaleFingerprintsRow
+		if err := rows.Scan(
+			&i.Seq,
+			&i.ID,
+			&i.AlbumID,
+			&i.AlbumRelPath,
+			&i.RelPath,
+			&i.FileSize,
+			&i.FileMtimeNs,
+			&i.FileSha256,
+			&i.Fingerprint,
+			&i.FpVersion,
+			&i.Occurrence,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTracksByAlbum = `-- name: ListTracksByAlbum :many
 SELECT seq, id, album_id, fingerprint, fp_version, occurrence, disc, "no", title, artist, genre, rel_path, file_size, file_mtime_ns, file_sha256, codec, sample_rate, channels, bit_depth, bitrate, duration_ms, lyrics_rel, lyrics_sha256, rg_track_gain, rg_track_peak, rg_album_gain, rg_album_peak, available, updated_at FROM tracks WHERE album_id = ? ORDER BY seq
 `
@@ -70,6 +210,55 @@ func (q *Queries) ListTracksByAlbum(ctx context.Context, albumID string) ([]Trac
 	return items, nil
 }
 
+const setTrackFingerprint = `-- name: SetTrackFingerprint :execrows
+UPDATE tracks SET
+    fingerprint = ?1,
+    fp_version = ?2,
+    occurrence = ?3,
+    updated_at = ?4
+WHERE id = ?5
+  AND available = 1
+  AND fingerprint = ?6
+  AND fp_version = ?7
+  AND file_size = ?8
+  AND file_mtime_ns = ?9
+`
+
+type SetTrackFingerprintParams struct {
+	Fingerprint    string
+	FpVersion      string
+	Occurrence     int64
+	UpdatedAt      int64
+	ID             string
+	OldFingerprint string
+	OldFpVersion   string
+	FileSize       int64
+	FileMtimeNs    int64
+}
+
+// SetTrackFingerprint gives a row the fingerprint that the current ffmpeg
+// computes for its file (DESIGN.md 6.6): the same row, with the same id
+// (I3). It writes only if the row is still available and still describes
+// the file that was read, with the fingerprint it had then; otherwise it
+// changes nothing, and the number of rows it returns is 0.
+func (q *Queries) SetTrackFingerprint(ctx context.Context, arg SetTrackFingerprintParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, setTrackFingerprint,
+		arg.Fingerprint,
+		arg.FpVersion,
+		arg.Occurrence,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.OldFingerprint,
+		arg.OldFpVersion,
+		arg.FileSize,
+		arg.FileMtimeNs,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const setTrackUnavailable = `-- name: SetTrackUnavailable :exec
 UPDATE tracks SET available = 0, updated_at = ? WHERE id = ?
 `
@@ -84,6 +273,22 @@ type SetTrackUnavailableParams struct {
 // still show it, and it comes back with the same id if its audio does.
 func (q *Queries) SetTrackUnavailable(ctx context.Context, arg SetTrackUnavailableParams) error {
 	_, err := q.db.ExecContext(ctx, setTrackUnavailable, arg.UpdatedAt, arg.ID)
+	return err
+}
+
+const setTracksOfAlbumUnavailable = `-- name: SetTracksOfAlbumUnavailable :exec
+UPDATE tracks SET available = 0, updated_at = ? WHERE album_id = ? AND available = 1
+`
+
+type SetTracksOfAlbumUnavailableParams struct {
+	UpdatedAt int64
+	AlbumID   string
+}
+
+// SetTracksOfAlbumUnavailable records that the files of every track of an
+// album are gone with its folder (DESIGN.md 6.4). The rows stay (I3).
+func (q *Queries) SetTracksOfAlbumUnavailable(ctx context.Context, arg SetTracksOfAlbumUnavailableParams) error {
+	_, err := q.db.ExecContext(ctx, setTracksOfAlbumUnavailable, arg.UpdatedAt, arg.AlbumID)
 	return err
 }
 

@@ -17,6 +17,10 @@ import (
 // testWorkers is the VIBRANCE_WORKERS of the servers the tests make.
 const testWorkers = 2
 
+// testScanInterval is their VIBRANCE_SCAN_INTERVAL: longer than any test, so
+// that only the cycle of the startup runs unless a test asks for another.
+const testScanInterval = time.Hour
+
 // fakeTool writes an executable shell script: a stand-in for an ffmpeg or
 // ffprobe that is of another version, broken or stuck. The real tools are
 // the pinned ones of the image.
@@ -79,7 +83,7 @@ func TestStartupRefusesWrongTools(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			logs := &syncBuffer{}
-			s := newServer(newLogger(logs), t.TempDir(), testWorkers)
+			s := newServer(newLogger(logs), t.TempDir(), t.TempDir(), testWorkers, testScanInterval)
 			s.ffmpegPath, s.ffprobePath = tc.ffmpeg, tc.ffprobe
 			ln := listen(t)
 
@@ -124,7 +128,7 @@ func TestStopDuringTheToolCheck(t *testing.T) {
 	pidFile := filepath.Join(t.TempDir(), "pid")
 	stuck := fakeTool(t, "ffmpeg", `echo $$ > "`+pidFile+`.tmp" && mv "`+pidFile+`.tmp" "`+pidFile+`" && exec sleep 300`)
 	logs := &syncBuffer{}
-	s := newServer(newLogger(logs), t.TempDir(), testWorkers)
+	s := newServer(newLogger(logs), t.TempDir(), t.TempDir(), testWorkers, testScanInterval)
 	s.ffmpegPath = stuck
 	ln := listen(t)
 	ctx, cancel := context.WithCancel(t.Context())

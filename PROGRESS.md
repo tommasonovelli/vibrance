@@ -13,8 +13,8 @@ Design: DESIGN.md (versione 0.1). Orchestratore: aggiorna questo file a ogni pas
 | S6 | Identità e riconciliazione (puro) | done | 1 | 3753895 | 2026-10-02 · segue round di errata al §5.4 (S6e) |
 | S6e | Errata al §5.4: planner più robusto (gemelle, impronte fra versioni) | done | 1 | cdf0d4e | 2026-10-02 · passo aggiunto dall'errata · 11 mutazioni del revisore, 1 equivalente (N-049) |
 | S6m | Passaggio a MusicLib 1.2.0: pin, spike H1–H12, documenti | done | 1 | e0f2a77 | 2026-10-02 · passo aggiunto dall'errata · H1–H12 confermate, spike rieseguito dal revisore |
-| S7 | Indicizzare un album | done | 1 | HASH_S7 | 2026-10-04 · ingegnere ripreso dopo un limite d'uso (stesso round) · 4 mutazioni del revisore, tutte uccise |
-| S8 | Scanner: ciclo, trigger, stato | todo | | | |
+| S7 | Indicizzare un album | done | 1 | c061248 | 2026-10-04 · ingegnere ripreso dopo un limite d'uso (stesso round) · 4 mutazioni del revisore, tutte uccise |
+| S8 | Scanner: ciclo, trigger, stato | done | 1 | HASH_S8 | 2026-10-04 · include le errata §6.6 e «i riferimenti seguono l'audio» · 6 mutazioni del revisore, tutte uccise |
 | S9 | Cover e miniature | todo | | | |
 | S10 | Testi LRC | todo | | | |
 | S11 | OpenAPI completa e pipeline di generazione | todo | | | |
@@ -78,11 +78,17 @@ Stati: `todo`, `in-progress`, `done`, `blocked`.
 - (S6e) `reconcile.go:173-177`: il commento sui limiti cita 6(a) e 6(b) ma non il limite di N-050 (gemelle entrambe non disponibili).
 - (S6e) `reconcile_property_test.go:~792-800`: manca una riga vuota fra `fingerprintOf`, `(*model).fingerprint` e `durationOf`.
 - (S6e) N-050 descrive «prende il numero della cancellata, poi cestino e file riscritto»; il test copre la variante «cestino, poi torna spostata a un numero libero». Il caso esatto della nota non ha un test suo.
-- (S6, per S8) Nel lavoro del §6.6 la coppia `(fingerprint, occurrence)` nuova può essere già occupata: va presa la prossima libera (N-048 punto 2).
 - (S6m) `scripts/spike/moves_test.go:208-213`: `TestPollMove` dipende da due `time.Sleep(20ms)`.
 - (S6m) `scripts/spike/moves.go:114` (`highest`): nessun test con due cartelle dello stesso `album_id` (mutazione Min/Max sopravvive; tocca solo l'osservazione senza esito).
 - (S6m) `scripts/spike/compose.yaml`: il commento del servizio `app` cita ancora N-002 (il pin ora è in N-051); `report.go` `reportHeader`: il titolo resta «Spike S1».
-- (S7, per S8/S9) `indexer.go:328-331` (`validCover`): un errore transitorio di `Open` sulla cover diventa `cover_invalid` e l'album resta senza cover finché la ricevuta non cambia (S8 salta gli album con ricevuta invariata).- (S7, per S8) `index_rows.go:60` (`place`): una cartella `Disc N` con N > 99 senza tag disco dà un errore di `CHECK` nel commit, cioè un errore senza codice: S8 non deve trattarlo come fatale per il ciclo.- (S7, per S8) `tags_incomplete` non si rialza per i file risolti da F1 (N-061): S8 deve saperlo quando ricostruisce i problemi a ogni ciclo.- (S7, per S24) `commit.go:128-139` (`syncSearch`): alla rinomina di un artista si riscrivono anche le righe `search_tracks` di tutti i suoi album, dentro la transazione di scrittura. Da misurare.- (S7) `store/tx.go` `Conn()`: il vincolo «solo `internal/search`» è solo un commento; un test sui sorgenti lo renderebbe verificato.- (S7) `indexer.go:121-125`: sul percorso d'errore con codice c'è una lettura in più della ricevuta, non coperta dal controllo del context (innocuo).
+- (S7, per S9) `indexer.go:328-331` (`validCover`): un errore transitorio di `Open` sulla cover diventa `cover_invalid` e l'album resta senza cover finché la ricevuta non cambia (S8 salta gli album con ricevuta invariata).
+- (S7, per S24) `commit.go:128-139` (`syncSearch`): alla rinomina di un artista si riscrivono anche le righe `search_tracks` di tutti i suoi album, dentro la transazione di scrittura. Da misurare.
+- (S7) `store/tx.go` `Conn()`: il vincolo «solo `internal/search`» è solo un commento; un test sui sorgenti lo renderebbe verificato.
+- (S7) `indexer.go:121-125`: sul percorso d'errore con codice c'è una lettura in più della ricevuta, non coperta dal controllo del context (innocuo).
+- (S8) `refingerprint.go:115-123`: un errore di `Close` dopo un'impronta riuscita diventa `fingerprint_failed` e il file è ricordato come fallito fino al riavvio; l'errore di `Stat` è scartato e un errore di `Close` esce senza codice (ferma il passaggio).
+- (S8, da S7) `scanner.go:441-446` + `index_rows.go:60`: un errore senza codice e deterministico (`Disc N` > 99 senza tag disco) fa rieseguire `ffprobe` e impronta dell'album a ogni ciclo, con un ERROR ogni intervallo. Rimedio: dare un codice di problema a quel caso in `place`. Con MusicLib non accade.
+- (S8) `scanner.go:553`: con `workers < 1` `indexAll` resterebbe fermo; oggi la configurazione garantisce 1–16, `NewScanner` non lo controlla.
+- (S8, per S24) Il lavoro del §6.6 scorre tutte le tracce disponibili dopo ogni ciclo riuscito (nessun indice su `fp_version`); il piano delle query di P6 non è verificato con `EXPLAIN QUERY PLAN`; soglia di 100 album per `PRAGMA optimize` non misurata (N-073).
 
 ## TO CONFIRM aperti (da riportare all'utente a fine fase)
 - N-014 (S1) Dopo un `rebuild` offline di MusicLib `.maintenance` sparisce ma `library/` resta vuota finché l'app non riparte: in quell'intervallo Vibrance vede tutti gli album non disponibili (poi tornano con gli stessi ID). Riportato all'utente a fine fase 0 (2026-10-01).
@@ -94,7 +100,9 @@ Stati: `todo`, `in-progress`, `done`, `blocked`.
 - N-040 (S5) ffprobe non dichiara il bitrate dello stream FLAC: `format.bitrate` di una traccia FLAC sarà `null` nell'API. Alternativa: il bitrate dell'intero file (conta anche cover e tag).
 - N-045 (S6) Un album senza alcun tag ALBUM prende il titolo visibile `Unknown Album` (il §5.3 tace; con MusicLib non può accadere).
 - N-055 (S6m) `CLAUDE.md` e `AGENTS.md` nominano ancora MusicLib 1.1.0 (righe 16 e 33 di ciascuno): la sessione degli agenti non ammette modifiche a `CLAUDE.md` senza il consenso diretto dell'utente. Da aggiornare a 1.2.0 con il suo consenso.
-- N-059 (S7) Se due album scrivono lo stesso artista con grafie diverse (stessa chiave d'identità), vale la grafia dell'ultimo album indicizzato. Con MusicLib non accade.- N-060 (S7) L'avviso `lyrics_unreadable` è elencato nel §6.5 ma nessun passo del §6.3 dice quando scatta: oggi non viene mai emesso.
+- N-059 (S7) Se due album scrivono lo stesso artista con grafie diverse (stessa chiave d'identità), vale la grafia dell'ultimo album indicizzato. Con MusicLib non accade.
+- N-060 (S7) L'avviso `lyrics_unreadable` è elencato nel §6.5 ma nessun passo del §6.3 dice quando scatta: oggi non viene mai emesso.
+- N-064 (S8) Album falliti: non si riprovano finché la ricevuta non cambia solo `probe_failed` e `fingerprint_failed` (costano processi); `file_missing`, `file_size_mismatch`, `receipt_too_large` si riprovano a ogni ciclo. Il revisore la ritiene coerente con §6.2 e §6.3.
 
 ## Errata al design
 Vedi la sezione «Errata» in fondo a DESIGN.md.
@@ -106,3 +114,5 @@ Vedi la sezione «Errata» in fondo a DESIGN.md.
 - 2026-10-02 · S6e · §5.4: limite noto (d), due gemelle entrambe non disponibili (N-050).
 - 2026-10-02 · S6m · passo nuovo: passaggio a MusicLib 1.2.0 (pin, spike con H10–H12 su spostamento e aggiunta di tracce, libreria di prova, documenti). `.ref/musiclib` è ora il tag `v1.2.0`.
 - 2026-10-02 · S7 · chiude nel passo S7 la corsa del test `TestRunCancelKillsTheGroup` (debito di S5).
+- 2026-10-04 · S23 · §12.3 riga A16: con `library/` non elencabile lo stato è `unavailable` e l'indice resta intatto (N-066).
+- 2026-10-04 · S8 · §11.2: codici d'avvio nuovi `musiclib_folder` e `library_index` (N-072).

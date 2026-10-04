@@ -3,6 +3,8 @@ package names
 import (
 	"bytes"
 	"math/rand/v2"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -362,5 +364,28 @@ func TestSortKeySortsAList(t *testing.T) {
 	want := []string{"", "9", "10", "apple", "Banana", "Bj\u00f6rk", "Track 2", "Track 10", "\u6771\u4eac"}
 	if !slices.Equal(sorted, want) {
 		t.Errorf("sorted by key: %q, want %q", sorted, want)
+	}
+}
+
+// CollateVersion is the version of golang.org/x/text that go.mod requires:
+// a change of the module that is not written here would leave the sort keys
+// of an existing database as the old module computed them (T26).
+func TestCollateVersionIsTheOneOfGoMod(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "go.mod"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := 0
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) >= 2 && fields[0] == "golang.org/x/text" {
+			found++
+			if got := fields[0] + " " + fields[1]; got != CollateVersion {
+				t.Fatalf("go.mod requires %q, and CollateVersion is %q", got, CollateVersion)
+			}
+		}
+	}
+	if found != 1 {
+		t.Fatalf("go.mod names golang.org/x/text %d times, want once", found)
 	}
 }

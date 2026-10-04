@@ -57,3 +57,51 @@ WHERE tracks.album_id = excluded.album_id;
 -- stays, with what was last known of the track (I3): favorites and playlists
 -- still show it, and it comes back with the same id if its audio does.
 UPDATE tracks SET available = 0, updated_at = ? WHERE id = ?;
+
+-- name: SetTracksOfAlbumUnavailable :exec
+-- SetTracksOfAlbumUnavailable records that the files of every track of an
+-- album are gone with its folder (DESIGN.md 6.4). The rows stay (I3).
+UPDATE tracks SET available = 0, updated_at = ? WHERE album_id = ? AND available = 1;
+
+-- name: CountTracks :many
+-- CountTracks counts the tracks that are available (1) and those that are
+-- not (0), for the state of the library (DESIGN.md 6.5).
+SELECT available, count(*) AS total FROM tracks GROUP BY available ORDER BY available;
+
+-- name: ListStaleFingerprints :many
+-- ListStaleFingerprints returns a page of the available tracks whose
+-- fingerprint was computed by another ffmpeg than the current one, in the
+-- order of seq and after a given seq, with the folder of their album
+-- (DESIGN.md 6.6). Only such a fingerprint is computed again.
+SELECT tracks.seq, tracks.id, tracks.album_id, albums.rel_path AS album_rel_path, tracks.rel_path,
+    tracks.file_size, tracks.file_mtime_ns, tracks.file_sha256,
+    tracks.fingerprint, tracks.fp_version, tracks.occurrence
+FROM tracks
+JOIN albums ON albums.id = tracks.album_id
+WHERE tracks.available = 1 AND tracks.fp_version <> sqlc.arg(fp_version) AND tracks.seq > sqlc.arg(after_seq)
+ORDER BY tracks.seq
+LIMIT sqlc.arg(page_size);
+
+-- name: ListOccurrences :many
+-- ListOccurrences returns the occurrences that the other rows of an album,
+-- available or not, have for a fingerprint: those a row that takes that
+-- fingerprint cannot have (DESIGN.md 5.4).
+SELECT occurrence FROM tracks WHERE album_id = ? AND fingerprint = ? AND id <> ? ORDER BY occurrence;
+
+-- name: SetTrackFingerprint :execrows
+-- SetTrackFingerprint gives a row the fingerprint that the current ffmpeg
+-- computes for its file (DESIGN.md 6.6): the same row, with the same id
+-- (I3). It writes only if the row is still available and still describes
+-- the file that was read, with the fingerprint it had then; otherwise it
+-- changes nothing, and the number of rows it returns is 0.
+UPDATE tracks SET
+    fingerprint = sqlc.arg(fingerprint),
+    fp_version = sqlc.arg(fp_version),
+    occurrence = sqlc.arg(occurrence),
+    updated_at = sqlc.arg(updated_at)
+WHERE id = sqlc.arg(id)
+  AND available = 1
+  AND fingerprint = sqlc.arg(old_fingerprint)
+  AND fp_version = sqlc.arg(old_fp_version)
+  AND file_size = sqlc.arg(file_size)
+  AND file_mtime_ns = sqlc.arg(file_mtime_ns);

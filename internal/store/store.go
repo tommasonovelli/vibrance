@@ -195,6 +195,18 @@ func migrate(ctx context.Context, db *sql.DB) error {
 	return nil
 }
 
+// Optimize lets SQLite refresh the statistics of its query planner for the
+// tables that changed much since they were last analyzed (PRAGMA optimize).
+// The scanner asks for it at the end of a cycle that changed much of the
+// index (§6.1, T30). It runs on the write connection, outside any
+// transaction, and waits for the one that is running.
+func (s *Store) Optimize(ctx context.Context) error {
+	if _, err := s.write.ExecContext(ctx, pragmaOptimize); err != nil {
+		return fmt.Errorf("store: optimizing: %w", endOf(ctx, err))
+	}
+	return nil
+}
+
 // Close is the clean end (§11.2): it lets SQLite refresh the statistics
 // of its query planner, moves the write-ahead log into the database file
 // and empties it, and closes the two handles. No transaction may be

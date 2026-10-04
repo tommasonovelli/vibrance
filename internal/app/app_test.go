@@ -54,12 +54,20 @@ func (s *syncBuffer) events(t *testing.T) []map[string]any {
 	return out
 }
 
-// messages returns the "msg" of every log event, in order.
+// messages returns the "msg" of every log event, in order, but for the
+// events of the cycles of the scanner ("scan skipped", "scan finished"):
+// they come from the goroutine of the scanner, at any moment between
+// "scanner started" and "scanner stopped", so they have no place in the
+// order of the startup and of the stop. The tests of the scanner look at
+// them through events.
 func (s *syncBuffer) messages(t *testing.T) []string {
 	t.Helper()
 	var out []string
 	for _, ev := range s.events(t) {
 		msg, _ := ev["msg"].(string)
+		if msg == "scan skipped" || msg == "scan finished" {
+			continue
+		}
 		out = append(out, msg)
 	}
 	return out
@@ -119,7 +127,7 @@ type running struct {
 func startServer(t *testing.T, prepare func(*server)) *running {
 	t.Helper()
 	logs := &syncBuffer{}
-	s := newServer(newLogger(logs), t.TempDir(), testWorkers)
+	s := newServer(newLogger(logs), t.TempDir(), t.TempDir(), testWorkers, testScanInterval)
 	if prepare != nil {
 		prepare(s)
 	}
@@ -213,7 +221,7 @@ const (
 // again.
 func TestReadinessFollowsTheStartup(t *testing.T) {
 	var logs syncBuffer
-	s := newServer(newLogger(&logs), t.TempDir(), testWorkers)
+	s := newServer(newLogger(&logs), t.TempDir(), t.TempDir(), testWorkers, testScanInterval)
 	ln := listen(t)
 	base := "http://" + ln.Addr().String()
 
@@ -241,7 +249,7 @@ func TestReadinessFollowsTheStartup(t *testing.T) {
 	// already read, so only the handler can be asked.
 	wantJSON(t, serveDirectly(s, "/health/live"), 200, liveJSON)
 	wantJSON(t, serveDirectly(s, "/health/ready"), 503, shuttingDownJSON)
-	want := []string{"http listening", "database open", "media tools verified", "ready", "http server stopped", "database closed"}
+	want := []string{"http listening", "database open", "media tools verified", "scanner started", "ready", "http server stopped", "scanner stopped", "database closed"}
 	if got := logs.messages(t); !slices.Equal(got, want) {
 		t.Fatalf("log events %q, want %q", got, want)
 	}
@@ -317,7 +325,7 @@ func TestStopWithNothingOpen(t *testing.T) {
 	if elapsed := time.Since(start); elapsed > shutdownGrace/2 {
 		t.Fatalf("the stop took %s with nothing open", elapsed)
 	}
-	want := []string{"http listening", "database open", "media tools verified", "ready", "stopping", "http server stopped", "database closed"}
+	want := []string{"http listening", "database open", "media tools verified", "scanner started", "ready", "stopping", "http server stopped", "scanner stopped", "database closed"}
 	if got := r.logs.messages(t); !slices.Equal(got, want) {
 		t.Fatalf("log events %q, want %q", got, want)
 	}
@@ -481,7 +489,7 @@ func TestStopCutsARequestThatOutlivesTheGracePeriod(t *testing.T) {
 // that the process exits and is restarted.
 func TestRunEndsWhenTheHTTPServerStops(t *testing.T) {
 	logs := &syncBuffer{}
-	s := newServer(newLogger(logs), t.TempDir(), testWorkers)
+	s := newServer(newLogger(logs), t.TempDir(), t.TempDir(), testWorkers, testScanInterval)
 	ln := listen(t)
 	done := make(chan error, 1)
 	go func() { done <- s.run(t.Context(), ln) }()
@@ -509,7 +517,7 @@ func TestRunEndsWhenTheHTTPServerStops(t *testing.T) {
 
 // The limits of §11.1 are those of the server.
 func TestHTTPServerLimits(t *testing.T) {
-	s := newServer(newLogger(io.Discard), t.TempDir(), testWorkers)
+	s := newServer(newLogger(io.Discard), t.TempDir(), t.TempDir(), testWorkers, testScanInterval)
 	got := [...]time.Duration{s.http.ReadHeaderTimeout, s.http.ReadTimeout, s.http.WriteTimeout, s.http.IdleTimeout}
 	want := [...]time.Duration{10 * time.Second, 30 * time.Second, 30 * time.Second, 120 * time.Second}
 	if got != want {
@@ -601,7 +609,7 @@ func TestRunRefusesBeforeListening(t *testing.T) {
 			}
 			var logs syncBuffer
 			stateDir := t.TempDir()
-			err := Run(t.Context(), env(e), tc.euid, 4, stateDir, newLogger(&logs))
+			err := Run(t.Context(), env(e), tc.euid, 4, stateDir, t.TempDir(), newLogger(&logs))
 			if err == nil || Code(err) != tc.code {
 				t.Fatalf("Run returned %v (code %s), want code %s", err, Code(err), tc.code)
 			}
@@ -626,7 +634,7 @@ func TestRunCannotListen(t *testing.T) {
 
 	var logs syncBuffer
 	stateDir := t.TempDir()
-	err := Run(t.Context(), env(validEnv(busy.Addr().String())), 1000, 4, stateDir, newLogger(&logs))
+	err := Run(t.Context(), env(validEnv(busy.Addr().String())), 1000, 4, stateDir, t.TempDir(), newLogger(&logs))
 	var ae *Error
 	if !errors.As(err, &ae) || ae.Code != CodeHTTPListen || ae.Err == nil {
 		t.Fatalf("Run returned %v, want an *Error with code %s and a cause", err, CodeHTTPListen)
@@ -656,7 +664,7 @@ func TestRun(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	done := make(chan error, 1)
-	go func() { done <- Run(ctx, env(validEnv(addr)), 1000, 4, stateDir, newLogger(&logs)) }()
+	go func() { done <- Run(ctx, env(validEnv(addr)), 1000, 4, stateDir, t.TempDir(), newLogger(&logs)) }()
 
 	deadline := time.Now().Add(30 * time.Second)
 	for !slices.Contains(logs.messages(t), "ready") {
@@ -682,7 +690,7 @@ func TestRun(t *testing.T) {
 		t.Fatalf("Run did not end within 30s; logs:\n%s", &logs)
 	}
 
-	want := []string{"starting", "http listening", "database open", "media tools verified", "ready", "stopping", "http server stopped", "database closed", "stopped"}
+	want := []string{"starting", "http listening", "database open", "media tools verified", "scanner started", "ready", "stopping", "http server stopped", "scanner stopped", "database closed", "stopped"}
 	if got := logs.messages(t); !slices.Equal(got, want) {
 		t.Fatalf("log events %q, want %q", got, want)
 	}

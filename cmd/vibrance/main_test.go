@@ -178,12 +178,20 @@ func (s *syncBuffer) events(t *testing.T) []map[string]any {
 	return out
 }
 
-// messages returns the "msg" of every log event, in order.
+// messages returns the "msg" of every log event, in order, but for the
+// events of the cycles of the scanner ("scan skipped", "scan finished"):
+// they come from the goroutine of the scanner, at any moment between
+// "scanner started" and "scanner stopped", so they have no place in the
+// order of the startup and of the stop. The tests of the scanner look at
+// them through events.
 func (s *syncBuffer) messages(t *testing.T) []string {
 	t.Helper()
 	var out []string
 	for _, ev := range s.events(t) {
 		msg, _ := ev["msg"].(string)
+		if msg == "scan skipped" || msg == "scan finished" {
+			continue
+		}
 		out = append(out, msg)
 	}
 	return out

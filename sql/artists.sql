@@ -10,3 +10,13 @@ SELECT * FROM artists WHERE id = ?;
 -- deleted (I3).
 INSERT INTO artists (id, name, sort_key) VALUES (?, ?, ?)
 ON CONFLICT (id) DO UPDATE SET name = excluded.name, sort_key = excluded.sort_key;
+
+-- name: ListArtists :many
+-- ListArtists returns every artist, in the order the rows were created: the
+-- names their sort keys are computed from (DESIGN.md 5.5).
+SELECT * FROM artists ORDER BY seq;
+
+-- name: SetArtistSortKey :exec
+-- SetArtistSortKey gives an artist the sort key of its name, computed again
+-- after the collation changed (DESIGN.md 5.5, T26).
+UPDATE artists SET sort_key = ? WHERE id = ?;
