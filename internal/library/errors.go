@@ -23,6 +23,39 @@ const (
 	CodeListingFailed = "listing_failed"
 )
 
+// The codes of the problems that indexing an album can find (§6.3, §6.5).
+// An album with one of them is not indexed: nothing of it is written.
+const (
+	// CodeFileMissing: a track, the cover or a lyrics file that the receipt
+	// lists is not there, or is not a regular file.
+	CodeFileMissing = "file_missing"
+	// CodeFileSizeMismatch: such a file has not the size the receipt says.
+	CodeFileSizeMismatch = "file_size_mismatch"
+	// CodeProbeFailed: a track file cannot be opened, or ffprobe cannot
+	// read it as the audio its name says.
+	CodeProbeFailed = "probe_failed"
+	// CodeFingerprintFailed: ffmpeg cannot compute the fingerprint of a
+	// track file.
+	CodeFingerprintFailed = "fingerprint_failed"
+)
+
+// The codes of the warnings of an album that is indexed all the same.
+const (
+	// CodeCoverInvalid: the cover is not a JPEG or a PNG as its name says,
+	// or it is too large. The album is indexed without a cover.
+	CodeCoverInvalid = "cover_invalid"
+	// CodeTagsIncomplete: a track lacks its title, its artist or one of its
+	// numbers, which were taken from the name of its file and from the
+	// album (§5.3).
+	CodeTagsIncomplete = "tags_incomplete"
+)
+
+// CodeAlbumChanged is not a problem (§6.3 step 6): the album, on disk or in
+// the index, changed while it was being indexed, so nothing was written,
+// and the next cycle indexes what is there then. It is never listed among
+// the problems.
+const CodeAlbumChanged = "album_changed_during_scan"
+
 // Error is a problem of the library with its stable code. Its message never
 // holds an absolute path.
 type Error struct {

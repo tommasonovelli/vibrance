@@ -98,3 +98,12 @@ func rollback(tx *sql.Tx) error {
 	}
 	return nil
 }
+
+// Conn returns what q runs its queries on: the transaction that WithWriteTx
+// or Read gave it. It is there for internal/search alone, whose statements
+// on the full-text tables sqlc does not generate (DESIGN.md I7, T7) and
+// which must run in the transaction that changes the rows they index
+// (§10.1). Everything else uses the queries of sql/.
+func (q *Queries) Conn() DBTX {
+	return q.db
+}

@@ -84,11 +84,22 @@ func TestRunCancelKillsTheGroup(t *testing.T) {
 			t.Fatalf("process %d: state %q, group %d, exists %v; want it running in group %d", pid, state, pg, ok, pgid)
 		}
 	}
-	members := groupMembers(t, pgid)
-	slices.Sort(members)
+	// The group holds exactly those processes. The tool publishes the file
+	// of the pids with `mv`, a child of its own that is in the group too
+	// and may still be there for an instant after the file appeared: the
+	// members are read again until they are the three, for a short while.
 	slices.Sort(pids)
-	if !slices.Equal(members, pids) {
-		t.Fatalf("the group %d has %v, want %v", pgid, members, pids)
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		members := groupMembers(t, pgid)
+		slices.Sort(members)
+		if slices.Equal(members, pids) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the group %d has %v, want %v", pgid, members, pids)
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 
 	cancel()

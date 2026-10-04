@@ -1,0 +1,67 @@
+-- name: GetIndexedAlbum :one
+-- GetIndexedAlbum returns the row of an album, available or not, with the
+-- name of its artist: what the indexer starts from (DESIGN.md 6.3 step 3).
+-- An album that was never indexed is sql.ErrNoRows.
+SELECT sqlc.embed(albums), artists.name AS artist_name
+FROM albums
+JOIN artists ON artists.id = albums.artist_id
+WHERE albums.id = ?;
+
+-- name: UpsertAlbum :exec
+-- UpsertAlbum writes what the indexer knows of an album and makes it
+-- available (DESIGN.md 6.3 step 8). A new album has no tracks yet; a known
+-- one keeps its first_seen_at and its counters, which UpdateAlbumCounters
+-- sets once the tracks are written. The row is never deleted (I3).
+INSERT INTO albums (
+    id, artist_id, artist_key, title, title_key, year, year_key, genre, compilation,
+    rel_path, album_revision, render_version, receipt_hash,
+    cover_rel, cover_sha256, cover_mime, cover_size, cover_mtime_ns,
+    track_count, duration_ms, available, first_seen_at, updated_at
+) VALUES (
+    ?, ?, ?, ?, ?, ?, ?, ?, ?,
+    ?, ?, ?, ?,
+    ?, ?, ?, ?, ?,
+    0, 0, 1, ?, ?
+)
+ON CONFLICT (id) DO UPDATE SET
+    artist_id = excluded.artist_id,
+    artist_key = excluded.artist_key,
+    title = excluded.title,
+    title_key = excluded.title_key,
+    year = excluded.year,
+    year_key = excluded.year_key,
+    genre = excluded.genre,
+    compilation = excluded.compilation,
+    rel_path = excluded.rel_path,
+    album_revision = excluded.album_revision,
+    render_version = excluded.render_version,
+    receipt_hash = excluded.receipt_hash,
+    cover_rel = excluded.cover_rel,
+    cover_sha256 = excluded.cover_sha256,
+    cover_mime = excluded.cover_mime,
+    cover_size = excluded.cover_size,
+    cover_mtime_ns = excluded.cover_mtime_ns,
+    available = 1,
+    updated_at = excluded.updated_at;
+
+-- name: UpdateAlbumCounters :exec
+-- UpdateAlbumCounters counts the available tracks of an album again, and
+-- adds up their known durations (DESIGN.md 5.2).
+UPDATE albums SET
+    track_count = (
+        SELECT count(*) FROM tracks
+        WHERE tracks.album_id = albums.id AND tracks.available = 1),
+    duration_ms = (
+        SELECT coalesce(sum(tracks.duration_ms), 0) FROM tracks
+        WHERE tracks.album_id = albums.id AND tracks.available = 1)
+WHERE albums.id = ?;
+
+-- name: SetArtistKeyOfAlbums :exec
+-- SetArtistKeyOfAlbums gives every album of an artist the sort key of the
+-- artist, of which albums.artist_key is a copy (DESIGN.md 5.2), after the
+-- name of the artist changed.
+UPDATE albums SET artist_key = ? WHERE artist_id = ?;
+
+-- name: ListAlbumIDsByArtist :many
+-- ListAlbumIDsByArtist returns the ids of the available albums of an artist.
+SELECT id FROM albums WHERE artist_id = ? AND available = 1 ORDER BY seq;
