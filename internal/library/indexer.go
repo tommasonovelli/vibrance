@@ -82,6 +82,9 @@ func NewIndexer(root *Root, st *store.Store, tools Media, warmer CoverWarmer, no
 //     album, its tracks, its counters and its full-text rows;
 //  9. the CoverWarmer is told of a new cover.
 //
+// Step 5 runs before step 4: a cover that cannot be opened is a problem
+// that is tried again at every cycle, and it must cost no process.
+//
 // Nothing of the disk and no process is touched inside the transaction, and
 // the album is written whole or not at all. An album that is in the index
 // exactly as it is on disk is not written again.
@@ -170,6 +173,13 @@ func (ix *Indexer) index(ctx context.Context, c Candidate) (warnings []Problem, 
 	if err != nil {
 		return nil, "", err
 	}
+	// Step 5, before step 4: a cover that cannot be opened stops the album,
+	// and it is tried again at every cycle, so it must stop it before any
+	// process is started.
+	cover, coverWarning, err := ix.cover(c, files.Cover, coverStat, before.album)
+	if err != nil {
+		return nil, "", err
+	}
 	// Step 4. The files are examined one after the other: the albums are
 	// what is indexed in parallel, and the Runner bounds the processes.
 	olds, news := oldTracks(before.tracks), newFiles(tracks)
@@ -182,8 +192,6 @@ func (ix *Indexer) index(ctx context.Context, c Candidate) (warnings []Problem, 
 		news[j].Disc, news[j].No = e.disc, e.no
 		news[j].DurationMS, news[j].Codec, news[j].Fingerprint = e.info.DurationMS, e.info.Codec, e.fingerprint
 	}
-	// Step 5.
-	cover, coverWarning := ix.cover(c, files.Cover, coverStat, before.album)
 	// Step 6.
 	if ix.receiptChanged(c) {
 		return nil, "", albumReplaced()
@@ -298,16 +306,18 @@ type coverData struct {
 // already has, by its SHA-256 and its name, was validated when it was
 // indexed. Any other is validated by its header alone: it must be the
 // format its name says, JPEG or PNG, and of at most maxCoverPixels. One
-// that is not leaves the album without a cover, and warning says why.
-func (ix *Indexer) cover(c Candidate, f *ReceiptFile, stat fs.FileInfo, before *store.GetIndexedAlbumRow) (cover coverData, warning string) {
+// that is not leaves the album without a cover, and warning says why. A
+// cover that cannot be opened says nothing of the image: it is a problem
+// of the album (CodeFileMissing), which is not indexed in this cycle.
+func (ix *Indexer) cover(c Candidate, f *ReceiptFile, stat fs.FileInfo, before *store.GetIndexedAlbumRow) (cover coverData, warning string, err error) {
 	if f == nil {
-		return coverData{}, ""
+		return coverData{}, "", nil
 	}
 	mime := ""
 	if before != nil && before.Album.CoverSha256.String == f.SHA256 && before.Album.CoverRel.String == f.Path {
 		mime = before.Album.CoverMime.String
-	} else if mime, warning = ix.validCover(c, *f); warning != "" {
-		return coverData{}, warning
+	} else if mime, warning, err = ix.validCover(c, *f); err != nil || warning != "" {
+		return coverData{}, warning, err
 	}
 	return coverData{
 		Rel:     nullString(f.Path),
@@ -315,19 +325,21 @@ func (ix *Indexer) cover(c Candidate, f *ReceiptFile, stat fs.FileInfo, before *
 		MIME:    nullString(mime),
 		Size:    nullPositive(stat.Size()),
 		MtimeNS: nullPositive(stat.ModTime().UnixNano()),
-	}, ""
+	}, "", nil
 }
 
 // validCover reads the header of a cover file and returns its MIME type, or
-// why it is not a valid cover.
-func (ix *Indexer) validCover(c Candidate, f ReceiptFile) (mime, warning string) {
+// why it is not a valid cover. A file that cannot be opened is an error
+// and not a warning: the fault may pass, and an album indexed without its
+// cover would stay so until its receipt changes.
+func (ix *Indexer) validCover(c Candidate, f ReceiptFile) (mime, warning string, err error) {
 	want, mime := "jpeg", "image/jpeg"
 	if f.Path == "cover.png" {
 		want, mime = "png", "image/png"
 	}
 	file, err := ix.root.Open(c.RelPath + "/" + f.Path)
 	if err != nil {
-		return "", fmt.Sprintf("%q cannot be opened: %s", f.Path, reason(err))
+		return "", "", &Error{Code: CodeFileMissing, Msg: fmt.Sprintf("%q cannot be opened: %s", f.Path, reason(err))}
 	}
 	// Only the header is decoded: the pixels of a cover of 40 megapixels
 	// would take 160 MB.
@@ -337,11 +349,11 @@ func (ix *Indexer) validCover(c Candidate, f ReceiptFile) (mime, warning string)
 	}
 	switch {
 	case err != nil:
-		return "", fmt.Sprintf("%q is not a JPEG or PNG image: %s", f.Path, reason(err))
+		return "", fmt.Sprintf("%q is not a JPEG or PNG image: %s", f.Path, reason(err)), nil
 	case format != want:
-		return "", fmt.Sprintf("%q is a %s image", f.Path, format)
+		return "", fmt.Sprintf("%q is a %s image", f.Path, format), nil
 	case int64(config.Width)*int64(config.Height) > maxCoverPixels:
-		return "", fmt.Sprintf("%q has %d x %d pixels, and the maximum is 40 megapixels", f.Path, config.Width, config.Height)
+		return "", fmt.Sprintf("%q has %d x %d pixels, and the maximum is 40 megapixels", f.Path, config.Width, config.Height), nil
 	}
-	return mime, ""
+	return mime, "", nil
 }

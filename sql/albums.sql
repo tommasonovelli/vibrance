@@ -93,3 +93,23 @@ SELECT id, title FROM albums ORDER BY seq;
 -- SetAlbumTitleKey gives an album the sort key of its title, computed again
 -- after the collation changed (DESIGN.md 5.5, T26).
 UPDATE albums SET title_key = ? WHERE id = ?;
+
+-- name: GetAlbumCover :one
+-- GetAlbumCover returns what serving the cover of an album needs (DESIGN.md
+-- 9.2): the folder of the album and the cover the scanner saw in it, with
+-- the size and the time of its file. The cover columns are null for an
+-- album without a cover. An album that was never indexed is sql.ErrNoRows.
+SELECT rel_path, cover_rel, cover_sha256, cover_mime, cover_size, cover_mtime_ns, available
+FROM albums
+WHERE id = ?;
+
+-- name: GetAlbumCoverByHash :one
+-- GetAlbumCoverByHash returns an available album that has the cover with
+-- that SHA-256, the oldest one if several do: where the thumbnails of the
+-- cover are made from, ahead of any request (DESIGN.md 9.2). No such album
+-- is sql.ErrNoRows.
+SELECT rel_path, cover_rel, cover_sha256, cover_mime, cover_size, cover_mtime_ns, available
+FROM albums
+WHERE cover_sha256 = ? AND available = 1
+ORDER BY seq
+LIMIT 1;

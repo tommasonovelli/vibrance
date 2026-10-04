@@ -9,11 +9,13 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"vibrance/internal/buildinfo"
 	"vibrance/internal/config"
+	"vibrance/internal/covers"
 	"vibrance/internal/library"
 	"vibrance/internal/media"
 	"vibrance/internal/store"
@@ -37,8 +39,13 @@ const (
 	CodeLibraryIndex = "library_index"
 )
 
-// databaseFile is the name of the database in the state folder (§5.1).
-const databaseFile = "vibrance.db"
+// databaseFile is the name of the database in the state folder (§5.1), and
+// thumbsDir that of the cache of the cover thumbnails (§9.2), which is only
+// a cache: it can be removed at any time.
+const (
+	databaseFile = "vibrance.db"
+	thumbsDir    = "thumbs"
+)
 
 // The limits of the HTTP server (DESIGN.md §11.1).
 const (
@@ -94,7 +101,7 @@ func Code(err error) string {
 //
 // euid is the effective user id of the process, and cpus the number of
 // CPUs available to it. stateDir is the folder of the server's state: the
-// database, and later the thumbnails. musiclibDir is the folder MusicLib's
+// database and the cache of the thumbnails. musiclibDir is the folder MusicLib's
 // data volume is mounted at, which the server only reads.
 func Run(ctx context.Context, getenv func(string) string, euid, cpus int, stateDir, musiclibDir string, log *slog.Logger) error {
 	// Step 1: refuse root, then read and validate the configuration.
@@ -233,7 +240,8 @@ func (s *server) serveHTTP(ln net.Listener) <-chan error {
 //	Step 6: compute the sort keys again if the collation changed
 //	        (library_index). The fingerprints of another ffmpeg are computed
 //	        again by the scanner, in the background.
-//	Step 7: start the scanner (musiclib_folder).
+//	Step 7: start the scanner, and with it the making of the thumbnails
+//	        of new covers (musiclib_folder).
 //
 // What is left of those steps arrives with the components it belongs to:
 //
@@ -315,17 +323,19 @@ func (s *server) startScanner() error {
 	if err != nil {
 		return &Error{Code: CodeMusicLibFolder, Msg: "opening the folder of MusicLib " + s.musiclibDir, Err: err}
 	}
-	indexer := library.NewIndexer(root, s.store, s.tools, library.NoCoverWarmer{}, time.Now)
+	// The covers service makes, one at a time and in the background, the
+	// thumbnails of the covers the indexer finds new (§9.2). It lives as
+	// long as the scanner, which is the one that asks.
+	thumbs := covers.New(root, s.store, filepath.Join(s.stateDir, thumbsDir), s.log)
+	indexer := library.NewIndexer(root, s.store, s.tools, thumbs, time.Now)
 	s.scanner = library.NewScanner(indexer, s.workers, s.scanInterval, s.log)
 	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		s.scanner.Run(ctx)
-	}()
+	var running sync.WaitGroup
+	running.Go(func() { s.scanner.Run(ctx) })
+	running.Go(func() { thumbs.Run(ctx) })
 	s.stopScanner = func() error {
 		cancel()
-		<-done
+		running.Wait()
 		s.log.Info("scanner stopped")
 		if err := root.Close(); err != nil {
 			return &Error{Code: CodeMusicLibFolder, Msg: "closing the folder of MusicLib", Err: err}
@@ -368,8 +378,9 @@ func checkWritable(dir string) error {
 //     at most the grace period; then it closes their connections. A
 //     request cut this way is not a failure of the stop: streams outlive
 //     any grace period.
-//  3. The scanner and its job are cancelled, which ends the child
-//     processes, and waited for: nothing uses the database after this.
+//  3. The scanner, its job and the making of thumbnails are cancelled,
+//     which ends the child processes, and waited for: nothing uses the
+//     database after this.
 //  4. PRAGMA optimize and wal_checkpoint(TRUNCATE); close the database.
 func (s *server) shutdown() error {
 	s.state.Store(stateStopping)

@@ -44,6 +44,78 @@ func (q *Queries) CountAlbums(ctx context.Context) ([]CountAlbumsRow, error) {
 	return items, nil
 }
 
+const getAlbumCover = `-- name: GetAlbumCover :one
+SELECT rel_path, cover_rel, cover_sha256, cover_mime, cover_size, cover_mtime_ns, available
+FROM albums
+WHERE id = ?
+`
+
+type GetAlbumCoverRow struct {
+	RelPath      string
+	CoverRel     sql.NullString
+	CoverSha256  sql.NullString
+	CoverMime    sql.NullString
+	CoverSize    sql.NullInt64
+	CoverMtimeNs sql.NullInt64
+	Available    int64
+}
+
+// GetAlbumCover returns what serving the cover of an album needs (DESIGN.md
+// 9.2): the folder of the album and the cover the scanner saw in it, with
+// the size and the time of its file. The cover columns are null for an
+// album without a cover. An album that was never indexed is sql.ErrNoRows.
+func (q *Queries) GetAlbumCover(ctx context.Context, id string) (GetAlbumCoverRow, error) {
+	row := q.db.QueryRowContext(ctx, getAlbumCover, id)
+	var i GetAlbumCoverRow
+	err := row.Scan(
+		&i.RelPath,
+		&i.CoverRel,
+		&i.CoverSha256,
+		&i.CoverMime,
+		&i.CoverSize,
+		&i.CoverMtimeNs,
+		&i.Available,
+	)
+	return i, err
+}
+
+const getAlbumCoverByHash = `-- name: GetAlbumCoverByHash :one
+SELECT rel_path, cover_rel, cover_sha256, cover_mime, cover_size, cover_mtime_ns, available
+FROM albums
+WHERE cover_sha256 = ? AND available = 1
+ORDER BY seq
+LIMIT 1
+`
+
+type GetAlbumCoverByHashRow struct {
+	RelPath      string
+	CoverRel     sql.NullString
+	CoverSha256  sql.NullString
+	CoverMime    sql.NullString
+	CoverSize    sql.NullInt64
+	CoverMtimeNs sql.NullInt64
+	Available    int64
+}
+
+// GetAlbumCoverByHash returns an available album that has the cover with
+// that SHA-256, the oldest one if several do: where the thumbnails of the
+// cover are made from, ahead of any request (DESIGN.md 9.2). No such album
+// is sql.ErrNoRows.
+func (q *Queries) GetAlbumCoverByHash(ctx context.Context, coverSha256 sql.NullString) (GetAlbumCoverByHashRow, error) {
+	row := q.db.QueryRowContext(ctx, getAlbumCoverByHash, coverSha256)
+	var i GetAlbumCoverByHashRow
+	err := row.Scan(
+		&i.RelPath,
+		&i.CoverRel,
+		&i.CoverSha256,
+		&i.CoverMime,
+		&i.CoverSize,
+		&i.CoverMtimeNs,
+		&i.Available,
+	)
+	return i, err
+}
+
 const getIndexedAlbum = `-- name: GetIndexedAlbum :one
 SELECT albums.seq, albums.id, albums.artist_id, albums.artist_key, albums.title, albums.title_key, albums.year, albums.year_key, albums.genre, albums.compilation, albums.rel_path, albums.album_revision, albums.render_version, albums.receipt_hash, albums.cover_rel, albums.cover_sha256, albums.cover_mime, albums.cover_size, albums.cover_mtime_ns, albums.track_count, albums.duration_ms, albums.available, albums.first_seen_at, albums.updated_at, artists.name AS artist_name
 FROM albums

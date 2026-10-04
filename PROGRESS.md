@@ -14,8 +14,8 @@ Design: DESIGN.md (versione 0.1). Orchestratore: aggiorna questo file a ogni pas
 | S6e | Errata al §5.4: planner più robusto (gemelle, impronte fra versioni) | done | 1 | cdf0d4e | 2026-10-02 · passo aggiunto dall'errata · 11 mutazioni del revisore, 1 equivalente (N-049) |
 | S6m | Passaggio a MusicLib 1.2.0: pin, spike H1–H12, documenti | done | 1 | e0f2a77 | 2026-10-02 · passo aggiunto dall'errata · H1–H12 confermate, spike rieseguito dal revisore |
 | S7 | Indicizzare un album | done | 1 | c061248 | 2026-10-04 · ingegnere ripreso dopo un limite d'uso (stesso round) · 4 mutazioni del revisore, tutte uccise |
-| S8 | Scanner: ciclo, trigger, stato | done | 1 | HASH_S8 | 2026-10-04 · include le errata §6.6 e «i riferimenti seguono l'audio» · 6 mutazioni del revisore, tutte uccise |
-| S9 | Cover e miniature | todo | | | |
+| S8 | Scanner: ciclo, trigger, stato | done | 1 | 517ede1 | 2026-10-04 · include le errata §6.6 e «i riferimenti seguono l'audio» · 6 mutazioni del revisore, tutte uccise |
+| S9 | Cover e miniature | done | 2 | HASH_S9 | 2026-10-04 · round 1: CHANGES REQUIRED (cover illeggibile scoperta dopo ffprobe; N-078 da marcare TO CONFIRM) · round 2 approvato |
 | S10 | Testi LRC | todo | | | |
 | S11 | OpenAPI completa e pipeline di generazione | todo | | | |
 | S12 | Confine HTTP e modello degli errori | todo | | | |
@@ -81,7 +81,6 @@ Stati: `todo`, `in-progress`, `done`, `blocked`.
 - (S6m) `scripts/spike/moves_test.go:208-213`: `TestPollMove` dipende da due `time.Sleep(20ms)`.
 - (S6m) `scripts/spike/moves.go:114` (`highest`): nessun test con due cartelle dello stesso `album_id` (mutazione Min/Max sopravvive; tocca solo l'osservazione senza esito).
 - (S6m) `scripts/spike/compose.yaml`: il commento del servizio `app` cita ancora N-002 (il pin ora è in N-051); `report.go` `reportHeader`: il titolo resta «Spike S1».
-- (S7, per S9) `indexer.go:328-331` (`validCover`): un errore transitorio di `Open` sulla cover diventa `cover_invalid` e l'album resta senza cover finché la ricevuta non cambia (S8 salta gli album con ricevuta invariata).
 - (S7, per S24) `commit.go:128-139` (`syncSearch`): alla rinomina di un artista si riscrivono anche le righe `search_tracks` di tutti i suoi album, dentro la transazione di scrittura. Da misurare.
 - (S7) `store/tx.go` `Conn()`: il vincolo «solo `internal/search`» è solo un commento; un test sui sorgenti lo renderebbe verificato.
 - (S7) `indexer.go:121-125`: sul percorso d'errore con codice c'è una lettura in più della ricevuta, non coperta dal controllo del context (innocuo).
@@ -89,6 +88,10 @@ Stati: `todo`, `in-progress`, `done`, `blocked`.
 - (S8, da S7) `scanner.go:441-446` + `index_rows.go:60`: un errore senza codice e deterministico (`Disc N` > 99 senza tag disco) fa rieseguire `ffprobe` e impronta dell'album a ogni ciclo, con un ERROR ogni intervallo. Rimedio: dare un codice di problema a quel caso in `place`. Con MusicLib non accade.
 - (S8) `scanner.go:553`: con `workers < 1` `indexAll` resterebbe fermo; oggi la configurazione garantisce 1–16, `NewScanner` non lo controlla.
 - (S8, per S24) Il lavoro del §6.6 scorre tutte le tracce disponibili dopo ogni ciclo riuscito (nessun indice su `fp_version`); il piano delle query di P6 non è verificato con `EXPLAIN QUERY PLAN`; soglia di 100 album per `PRAGMA optimize` non misurata (N-073).
+- (S9) N-077 punto 6: una cover con orientamento EXIF appare ruotata diversamente fra originale (il browser lo applica) e miniatura; la nota dichiara «Visible effect: none».
+- (S9, per S24) Memoria nel caso peggiore: un PNG a 16 bit da 40 megapixel si decodifica in circa 320 MB (`NRGBA64`) più il buffer di `Kernel.Scale`; con due slot circa 700 MB (T20 stima 160 MB). `GetAlbumCoverByHash` senza indice; coda di `Warm` in memoria; una cover non decodificabile si riprova a ogni richiesta di miniatura (rilegge fino a 20 MiB dentro uno slot).
+- (S9) `warm.go:80-97`: per una cover oltre i limiti il file viene riletto per entrambe le dimensioni. `thumbnail.go:249`: le miniature nascono `0600`. `service.go:163`: `case err == nil || …` poco leggibile. `library.NoCoverWarmer` resta esportato, usato solo dai test.
+- (S9) `indexer.go:176-195`: l'elenco numerato del doc di `IndexAlbum` resta nell'ordine del design, l'ordine reale (5 prima di 4) è in una frase a parte. `TestIndexAlbumCoverThatCannotBeOpened`: nel sottocaso `indexed=true` il conteggio dei processi non può fallire per l'ordine dei passi.
 
 ## TO CONFIRM aperti (da riportare all'utente a fine fase)
 - N-014 (S1) Dopo un `rebuild` offline di MusicLib `.maintenance` sparisce ma `library/` resta vuota finché l'app non riparte: in quell'intervallo Vibrance vede tutti gli album non disponibili (poi tornano con gli stessi ID). Riportato all'utente a fine fase 0 (2026-10-01).
@@ -99,10 +102,11 @@ Stati: `todo`, `in-progress`, `done`, `blocked`.
 - N-033 (S4) Codici di problema scelti dove il §6.5 tace: ricevuta oltre 16 MiB → `receipt_too_large`; ricevuta illeggibile, non regolare o link → `receipt_invalid`; cartella album sparita fra elenco e lettura → nessun problema; cartella artista sparita → `listing_failed`; nomi che MusicLib non può scrivere (barra rovesciata, non UTF-8) → esclusi dagli elenchi senza problema.
 - N-040 (S5) ffprobe non dichiara il bitrate dello stream FLAC: `format.bitrate` di una traccia FLAC sarà `null` nell'API. Alternativa: il bitrate dell'intero file (conta anche cover e tag).
 - N-045 (S6) Un album senza alcun tag ALBUM prende il titolo visibile `Unknown Album` (il §5.3 tace; con MusicLib non può accadere).
-- N-055 (S6m) `CLAUDE.md` e `AGENTS.md` nominano ancora MusicLib 1.1.0 (righe 16 e 33 di ciascuno): la sessione degli agenti non ammette modifiche a `CLAUDE.md` senza il consenso diretto dell'utente. Da aggiornare a 1.2.0 con il suo consenso.
 - N-059 (S7) Se due album scrivono lo stesso artista con grafie diverse (stessa chiave d'identità), vale la grafia dell'ultimo album indicizzato. Con MusicLib non accade.
 - N-060 (S7) L'avviso `lyrics_unreadable` è elencato nel §6.5 ma nessun passo del §6.3 dice quando scatta: oggi non viene mai emesso.
 - N-064 (S8) Album falliti: non si riprovano finché la ricevuta non cambia solo `probe_failed` e `fingerprint_failed` (costano processi); `file_missing`, `file_size_mismatch`, `receipt_too_large` si riprovano a ogni ciclo. Il revisore la ritiene coerente con §6.2 e §6.3.
+- N-076 (S9) Forma delle miniature: «quadrato 256/640» letto come «entra nel quadrato, proporzioni mantenute, niente ritaglio» (1200×800 → 256×171). Alternativa: ritaglio centrato a quadrato esatto. I due revisori concordano con la lettura attuale (MusicLib non genera miniature; la sua interfaccia ritaglia lato browser).
+- N-078 (S9) Una cover che non si apre è un problema `file_missing` dell'album: l'album non si indicizza (o resta com'era) finché la cover non si apre, e si riprova a ogni ciclo senza lanciare processi. Alternativa: album indicizzato senza cover con avviso `cover_invalid`. Un errore di I/O dopo un `Open` riuscito resta `cover_invalid` duraturo.
 
 ## Errata al design
 Vedi la sezione «Errata» in fondo a DESIGN.md.
@@ -116,3 +120,4 @@ Vedi la sezione «Errata» in fondo a DESIGN.md.
 - 2026-10-02 · S7 · chiude nel passo S7 la corsa del test `TestRunCancelKillsTheGroup` (debito di S5).
 - 2026-10-04 · S23 · §12.3 riga A16: con `library/` non elencabile lo stato è `unavailable` e l'indice resta intatto (N-066).
 - 2026-10-04 · S8 · §11.2: codici d'avvio nuovi `musiclib_folder` e `library_index` (N-072).
+- 2026-10-04 · S9 · §6.3: la cover si valida prima di `ffprobe` e impronte (passo 5 prima del passo 4).

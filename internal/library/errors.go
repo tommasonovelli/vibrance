@@ -27,7 +27,8 @@ const (
 // An album with one of them is not indexed: nothing of it is written.
 const (
 	// CodeFileMissing: a track, the cover or a lyrics file that the receipt
-	// lists is not there, or is not a regular file.
+	// lists is not there, or is not a regular file; or the cover is there
+	// and cannot be opened.
 	CodeFileMissing = "file_missing"
 	// CodeFileSizeMismatch: such a file has not the size the receipt says.
 	CodeFileSizeMismatch = "file_size_mismatch"

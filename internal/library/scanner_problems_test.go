@@ -236,3 +236,42 @@ func TestScanGoesOnAfterAnInternalErrorOfOneAlbum(t *testing.T) {
 		t.Fatalf("rows %+v", got)
 	}
 }
+
+// A cover that cannot be opened keeps its album out of the index for that
+// cycle, and the album is tried again at every cycle: as soon as the cover
+// can be read the album is indexed with it, with the same receipt.
+func TestScanTriesAnAlbumWithACoverItCannotOpenAgain(t *testing.T) {
+	e := newScanEnv(t)
+	cover := e.inAlbum(albumA, "cover.jpg")
+	if err := os.Chmod(cover, 0); err != nil {
+		t.Fatal(err)
+	}
+	for _, indexed := range []int{5, 0} {
+		wantEvent(t, e.scan(), map[string]any{"discovered": 6, "indexed": indexed, "problems": 1})
+		wantStatusProblems(t, e.sc.Status(), albumA+" "+CodeFileMissing)
+		if got := e.rows(); got != (rowCounts{5, 5, 11}) {
+			t.Fatalf("rows %+v: the album was written without its cover", got)
+		}
+		// The cycles after the first try only that album, and trying it
+		// starts no process (DESIGN.md §6.2).
+		if got := e.media.runs(); indexed == 0 && got != 0 {
+			t.Fatalf("%d processes were started for an album whose cover cannot be opened", got)
+		}
+		e.media.reset()
+	}
+	if got := e.warmer.take(); len(got) != 0 {
+		t.Fatalf("covers to warm: %v", got)
+	}
+
+	if err := os.Chmod(cover, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	wantEvent(t, e.scan(), map[string]any{"indexed": 1, "problems": 0})
+	wantStatusProblems(t, e.sc.Status())
+	if a := e.album(fixtureAlbums[albumA]).Album; a.Available != 1 || a.TrackCount != 3 || a.CoverSha256.String != coverASHA256 {
+		t.Fatalf("the album once its cover could be read: %+v", a)
+	}
+	if got := e.warmer.take(); len(got) != 1 || got[0] != coverASHA256 {
+		t.Fatalf("covers to warm: %v", got)
+	}
+}

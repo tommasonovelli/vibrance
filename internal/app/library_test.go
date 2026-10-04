@@ -1,8 +1,10 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"image/jpeg"
 	"os"
 	"path/filepath"
 	"slices"
@@ -320,5 +322,85 @@ esac`)
 	// next start.
 	if err := r.s.store.Read(context.Background(), func(*store.Queries) error { return nil }); err == nil {
 		t.Fatal("the store is still open after the stop")
+	}
+}
+
+// The thumbnails of the covers the first scan finds are made in the
+// background, in the cache of the state folder, without any request
+// (DESIGN.md §9.2): album A is the album of the fixture with a cover. The
+// stop waits for that work too, and a second start makes nothing again.
+func TestStartupMakesTheThumbnailsOfNewCovers(t *testing.T) {
+	const coverA = "8a667cbc03b48ecbe995061ece4187dcd9ab58d96a5879f270c1b4f2d30ffd4e"
+	musiclib, state := fixtureLibrary(t), t.TempDir()
+	prepare := func(s *server) { s.stateDir, s.musiclibDir = state, musiclib }
+	thumbs := []string{
+		filepath.Join(state, "thumbs", "8a", coverA+"_256.jpg"),
+		filepath.Join(state, "thumbs", "8a", coverA+"_640.jpg"),
+	}
+	original, err := os.ReadFile(filepath.Join(musiclib, "library", "Aurora Sines", "Alpha_ Light_", "cover.jpg"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := jpeg.DecodeConfig(bytes.NewReader(original))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	r := startServer(t, prepare)
+	waitReady(t, "http://"+r.addr)
+	waitScanned(t, r)
+	deadline := time.Now().Add(60 * time.Second)
+	made := map[string]os.FileInfo{}
+	for len(made) < len(thumbs) {
+		for _, path := range thumbs {
+			if info, err := os.Stat(path); err == nil {
+				made[path] = info
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%d thumbnails within 60s, want %d; logs:\n%s", len(made), len(thumbs), r.logs)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err := r.stop(t); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range thumbs {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// The cover of the fixture is smaller than both thumbnails: they
+		// have its size.
+		img, err := jpeg.Decode(bytes.NewReader(data))
+		if err != nil || img.Bounds().Dx() != want.Width || img.Bounds().Dy() != want.Height {
+			t.Fatalf("the thumbnail %s: %v", filepath.Base(path), err)
+		}
+	}
+	entries, err := os.ReadDir(filepath.Join(state, "thumbs"))
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("the cache holds %v (%v), want only the folder of the cover of album A", entries, err)
+	}
+	for _, ev := range r.logs.events(t) {
+		if ev["level"] != "INFO" {
+			t.Fatalf("the run logged above INFO: %v", ev)
+		}
+	}
+	// Nothing was written in the folder of MusicLib (I1).
+	if _, err := os.Stat(filepath.Join(musiclib, "thumbs")); !os.IsNotExist(err) {
+		t.Fatalf("something was written in the folder of MusicLib: %v", err)
+	}
+
+	again := startServer(t, prepare)
+	waitReady(t, "http://"+again.addr)
+	waitScanned(t, again)
+	if err := again.stop(t); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range thumbs {
+		info, err := os.Stat(path)
+		if err != nil || !info.ModTime().Equal(made[path].ModTime()) {
+			t.Fatalf("the thumbnail %s was made again by the second run: %v", filepath.Base(path), err)
+		}
 	}
 }

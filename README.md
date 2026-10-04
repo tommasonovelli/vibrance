@@ -96,6 +96,14 @@ Each cycle logs one line, `scan finished` with its counters or `scan skipped` wi
 | `library_index` | The index of the library could not be prepared (its sort keys could not be read or written). |
 | `musiclib_folder` | The folder `/musiclib` does not exist in the container. An empty one is fine. |
 
+## The covers
+
+A cover belongs to an album: it is the `cover.jpg` or `cover.png` MusicLib wrote in the album folder (`internal/covers`). It is served as it is, or as a JPEG thumbnail that fits in a square of 256 or 640 pixels, with the proportions of the cover, never enlarged, on white where the cover is transparent.
+
+Thumbnails are kept in `/var/lib/vibrance/thumbs/<first two characters of the hash>/<hash>_<size>.jpg`, where the hash is the SHA-256 of the cover file. The folder is only a cache: it can be removed at any time, also while the server runs, and nothing removes old thumbnails from it (about 120 KB for each album). A thumbnail is made when the scanner indexes an album with a new cover, in the background and one cover at a time, or at the first request for it. At most two covers are decoded at once, and a thumbnail asked for by several requests at the same moment is made once. A file of the cache that is not a whole thumbnail is made again.
+
+The original is served in place of the thumbnail when the cover file is larger than 20 MiB or has more than 40 megapixels, and when the thumbnail cannot be made or written (the log says why, at `WARN`). A cover file that is no longer the one the scanner saw (another size or time for the original, other bytes for a thumbnail) is never served: MusicLib replaced the album, and the next scan brings the index up to date.
+
 ## Pinned versions
 
 Every image is pinned by exact version and by digest. The pins are copied from MusicLib 1.2.0: Go 1.25.14 on Debian trixie, the `debian:trixie-20260918-slim` runtime base, Dockerfile frontend 1.26.0, shellcheck 0.11.0 and sqlc 1.31.1. `ffmpeg` and `ffprobe` (`8.1.3-musiclib1`) are copied from the published image `ghcr.io/tommasonovelli/musiclib:1.2.0`. The digests are in the `Dockerfile`, `scripts/lint-shell.sh` and `scripts/lib/common.sh`. The Go modules are at exact versions in `go.mod`. [docs/compat.md](docs/compat.md) lists the MusicLib versions Vibrance works with.

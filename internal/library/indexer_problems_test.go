@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -512,5 +513,71 @@ func TestGuardRefusesAToolInsideAWriteTransaction(t *testing.T) {
 	if inside.violations.Load() != 2 || inside.runs() != 2 {
 		t.Fatalf("%d violations and %d runs: the guard must refuse both calls and run nothing",
 			inside.violations.Load(), inside.runs())
+	}
+}
+
+// A cover that is there and cannot be opened says nothing of the image: it
+// is a problem of the album, like a missing file, and not a cover that is
+// not valid. An album indexed without it would stay without a cover until
+// its receipt changes, for a fault that may pass.
+func TestIndexAlbumCoverThatCannotBeOpened(t *testing.T) {
+	for _, indexed := range []bool{false, true} {
+		t.Run(fmt.Sprintf("indexed=%v", indexed), func(t *testing.T) {
+			e := newIndexEnv(t)
+			cover, sha := "cover.jpg", coverASHA256
+			if indexed {
+				// A cover the index does not have yet: one it has is not
+				// looked at again.
+				e.indexAll()
+				png := pngHeader(16, 16)
+				remove(t, e.inAlbum(albumA, "cover.jpg"))
+				writeFile(t, e.inAlbum(albumA, "cover.png"), string(png))
+				rerender(t, e.dir, albumA)
+				cover, sha = "cover.png", sha256Hex(png)
+			}
+			before := e.dump()
+			e.warmer.take()
+			e.media.reset()
+			if err := os.Chmod(e.inAlbum(albumA, cover), 0); err != nil {
+				t.Fatal(err)
+			}
+
+			// The album is tried again at every cycle while its cover
+			// cannot be opened: no attempt may start a process, not even
+			// for an album whose tracks the index does not know.
+			var warnings []Problem
+			var err error
+			for range 3 {
+				warnings, err = e.ix.IndexAlbum(t.Context(), e.candidate(albumA))
+				wantCode(t, err, CodeFileMissing)
+			}
+			if got := e.media.runs(); got != 0 {
+				t.Errorf("%d processes were started for an album whose cover cannot be opened", got)
+			}
+			if warnings != nil {
+				t.Errorf("warnings of an album that was not indexed: %v", warnings)
+			}
+			if !strings.Contains(err.Error(), cover) || strings.Contains(err.Error(), e.dir) {
+				t.Errorf("the message must name %q and no absolute path: %v", cover, err)
+			}
+			e.wantUnchanged(before)
+			if got := e.warmer.take(); len(got) != 0 {
+				t.Errorf("covers to warm: %v", got)
+			}
+
+			// The fault passes: the album is indexed with its cover.
+			if err := os.Chmod(e.inAlbum(albumA, cover), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if warnings := e.index(albumA); len(warnings) != 0 {
+				t.Fatalf("warnings: %v", warnings)
+			}
+			if a := e.album(fixtureAlbums[albumA]).Album; a.CoverRel.String != cover || a.CoverSha256.String != sha {
+				t.Fatalf("the cover: %v %v", a.CoverRel, a.CoverSha256)
+			}
+			if got := e.warmer.take(); !slices.Equal(got, []string{sha}) {
+				t.Fatalf("covers to warm: %v", got)
+			}
+		})
 	}
 }
