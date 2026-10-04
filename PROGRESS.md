@@ -15,8 +15,8 @@ Design: DESIGN.md (versione 0.1). Orchestratore: aggiorna questo file a ogni pas
 | S6m | Passaggio a MusicLib 1.2.0: pin, spike H1–H12, documenti | done | 1 | e0f2a77 | 2026-10-02 · passo aggiunto dall'errata · H1–H12 confermate, spike rieseguito dal revisore |
 | S7 | Indicizzare un album | done | 1 | c061248 | 2026-10-04 · ingegnere ripreso dopo un limite d'uso (stesso round) · 4 mutazioni del revisore, tutte uccise |
 | S8 | Scanner: ciclo, trigger, stato | done | 1 | 517ede1 | 2026-10-04 · include le errata §6.6 e «i riferimenti seguono l'audio» · 6 mutazioni del revisore, tutte uccise |
-| S9 | Cover e miniature | done | 2 | HASH_S9 | 2026-10-04 · round 1: CHANGES REQUIRED (cover illeggibile scoperta dopo ffprobe; N-078 da marcare TO CONFIRM) · round 2 approvato |
-| S10 | Testi LRC | todo | | | |
+| S9 | Cover e miniature | done | 2 | 82f6736 | 2026-10-04 · round 1: CHANGES REQUIRED (cover illeggibile scoperta dopo ffprobe; N-078 da marcare TO CONFIRM) · round 2 approvato |
+| S10 | Testi LRC | done | 1 | HASH_S10 | 2026-10-04 · fuzz 60 s rieseguito dal revisore, 3 file LRC sporchi provati · fine fase A |
 | S11 | OpenAPI completa e pipeline di generazione | todo | | | |
 | S12 | Confine HTTP e modello degli errori | todo | | | |
 | S13 | Autenticazione: nucleo | todo | | | |
@@ -92,6 +92,7 @@ Stati: `todo`, `in-progress`, `done`, `blocked`.
 - (S9, per S24) Memoria nel caso peggiore: un PNG a 16 bit da 40 megapixel si decodifica in circa 320 MB (`NRGBA64`) più il buffer di `Kernel.Scale`; con due slot circa 700 MB (T20 stima 160 MB). `GetAlbumCoverByHash` senza indice; coda di `Warm` in memoria; una cover non decodificabile si riprova a ogni richiesta di miniatura (rilegge fino a 20 MiB dentro uno slot).
 - (S9) `warm.go:80-97`: per una cover oltre i limiti il file viene riletto per entrambe le dimensioni. `thumbnail.go:249`: le miniature nascono `0600`. `service.go:163`: `case err == nil || …` poco leggibile. `library.NoCoverWarmer` resta esportato, usato solo dai test.
 - (S9) `indexer.go:176-195`: l'elenco numerato del doc di `IndexAlbum` resta nell'ordine del design, l'ordine reale (5 prima di 4) è in una frase a parte. `TestIndexAlbumCoverThatCannotBeOpened`: nel sottocaso `indexed=true` il conteggio dei processi non può fallire per l'ordine dei passi.
+- (S10) `lyrics_test.go:650`: la soglia di linearità si valuta solo dopo il ritorno di `Parse`; una regressione quadratica piena appare come timeout del gate, un peggioramento sotto circa 100× non si vede. `lyrics.go:38-40`: `offsetKey` duplica una voce di `identKeys`.
 
 ## TO CONFIRM aperti (da riportare all'utente a fine fase)
 - N-014 (S1) Dopo un `rebuild` offline di MusicLib `.maintenance` sparisce ma `library/` resta vuota finché l'app non riparte: in quell'intervallo Vibrance vede tutti gli album non disponibili (poi tornano con gli stessi ID). Riportato all'utente a fine fase 0 (2026-10-01).
@@ -107,6 +108,7 @@ Stati: `todo`, `in-progress`, `done`, `blocked`.
 - N-064 (S8) Album falliti: non si riprovano finché la ricevuta non cambia solo `probe_failed` e `fingerprint_failed` (costano processi); `file_missing`, `file_size_mismatch`, `receipt_too_large` si riprovano a ogni ciclo. Il revisore la ritiene coerente con §6.2 e §6.3.
 - N-076 (S9) Forma delle miniature: «quadrato 256/640» letto come «entra nel quadrato, proporzioni mantenute, niente ritaglio» (1200×800 → 256×171). Alternativa: ritaglio centrato a quadrato esatto. I due revisori concordano con la lettura attuale (MusicLib non genera miniature; la sua interfaccia ritaglia lato browser).
 - N-078 (S9) Una cover che non si apre è un problema `file_missing` dell'album: l'album non si indicizza (o resta com'era) finché la cover non si apre, e si riprova a ogni ciclo senza lanciare processi. Alternativa: album indicizzato senza cover con avviso `cover_invalid`. Un errore di I/O dopo un `Open` riuscito resta `cover_invalid` duraturo.
+- N-082 (S10) Letture del formato LRC che cambiano ciò che l'ascoltatore vede: (1) solo `ar|ti|al|by|length|offset` sono intestazioni, gli altri tag (`[re:]`, `[la:]`, `[tool:]`…) restano testo nei file non sincronizzati; (2) `[00:01:23]` è ore:minuti:secondi, mentre nei file reali la forma a tre campi è quasi sempre minuti:secondi:centesimi (tempi sbagliati in silenzio: la più rischiosa); (3) `offset` globale, vale l'ultimo; (4) il valore di un tag finisce al primo `]`; (5) nei testi non sincronizzati le righe vuote spariscono (strofe non separate).
 
 ## Errata al design
 Vedi la sezione «Errata» in fondo a DESIGN.md.
