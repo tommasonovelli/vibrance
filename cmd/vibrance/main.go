@@ -5,6 +5,9 @@
 //	vibrance healthcheck  query /health/ready on VIBRANCE_HTTP_ADDR; exit 0 or 1
 //	vibrance version      print the version stamped at build time
 //	vibrance user ...     create an account, reset a password, list the accounts
+//	vibrance backup       copy the database into a new, verified backup under /backup
+//	vibrance restore      put a backup in place as the database of an empty state folder
+//	vibrance doctor       inspect the database; change nothing
 //
 // Configuration comes only from the environment (§11.1). Logs are JSON
 // lines on stdout (§11.5).
@@ -36,6 +39,10 @@ var stateDir = "/var/lib/vibrance"
 // only. It is fixed too (§3.4), and a variable for the same reason.
 var musiclibDir = "/musiclib"
 
+// backupDir is the folder of the backups, the mount of VIBRANCE_BACKUP. It
+// is fixed too (§3.4), and a variable for the same reason.
+var backupDir = "/backup"
+
 func main() {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	os.Exit(run(os.Args[1:], os.Getenv, os.Geteuid(), os.Stdin, os.Stdout, log))
@@ -52,10 +59,16 @@ func run(args []string, getenv func(string) string, euid int, stdin io.Reader, s
 		return printVersion(stdout, log)
 	case len(args) >= 1 && args[0] == "user":
 		return user(args[1:], euid, stdin, stdout, stateDir, log)
+	case len(args) >= 1 && args[0] == "backup":
+		return backup(args[1:], euid, stdout, stateDir, backupDir, log)
+	case len(args) >= 1 && args[0] == "restore":
+		return restore(args[1:], euid, stdout, stateDir, backupDir, log)
+	case len(args) >= 1 && args[0] == "doctor":
+		return doctor(args[1:], euid, stdout, stateDir, log)
 	default:
 		// Only the number of the arguments: a mistyped command line can hold
 		// a password, and the log is kept (I5).
-		log.Error("usage: vibrance serve|healthcheck|version|user", "code", "usage", "args", len(args))
+		log.Error("usage: vibrance serve|healthcheck|version|user|backup|restore|doctor", "code", "usage", "args", len(args))
 		return exitUsage
 	}
 }

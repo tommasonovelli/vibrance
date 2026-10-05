@@ -37,12 +37,14 @@ type world struct {
 	s        *server
 	host     string
 	sessions *auth.Service
-	// store is the database of the world, with its index.
-	store *store.Store
-	logs  *syncBuffer
-	admin *account
-	anna  *account
-	bob   *account
+	// store is the database of the world, with its index; stateDir is the
+	// folder of its file.
+	store    *store.Store
+	stateDir string
+	logs     *syncBuffer
+	admin    *account
+	anna     *account
+	bob      *account
 	// accounts counts the accounts newAccount made.
 	accounts int
 	// musiclib is the folder of MusicLib the files are served from: one
@@ -64,7 +66,8 @@ func newWorld(t *testing.T, origin string) *world {
 	if err != nil {
 		t.Fatal(err)
 	}
-	st, err := store.Open(t.Context(), filepath.Join(t.TempDir(), databaseFile))
+	stateDir := t.TempDir()
+	st, err := store.Open(t.Context(), filepath.Join(stateDir, databaseFile))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +83,7 @@ func newWorld(t *testing.T, origin string) *world {
 	if err := sessions.Bootstrap(t.Context(), env(adminEnv)); err != nil {
 		t.Fatal(err)
 	}
-	w := &world{t: t, s: s, host: u.Host, sessions: sessions, store: st, logs: logs}
+	w := &world{t: t, s: s, host: u.Host, sessions: sessions, store: st, stateDir: stateDir, logs: logs}
 	users, err := sessions.ListUsers(t.Context())
 	if err != nil || len(users) != 1 {
 		t.Fatalf("the first admin: %v, %v", users, err)

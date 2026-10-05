@@ -7,10 +7,7 @@ import (
 	"fmt"
 	"net/url"
 
-	"github.com/pressly/goose/v3"
 	_ "modernc.org/sqlite" // registers the "sqlite" driver of database/sql
-
-	"vibrance/migrations"
 )
 
 // The stable codes of the store's failures. The startup logs them; the
@@ -175,19 +172,9 @@ func checkWAL(ctx context.Context, db *sql.DB) error {
 // transaction. A database that a newer binary migrated is refused before
 // anything is applied (I13).
 func migrate(ctx context.Context, db *sql.DB) error {
-	p, err := goose.NewProvider(goose.DialectSQLite3, db, migrations.FS, goose.WithDisableGlobalRegistry(true))
+	p, _, _, err := schemaVersions(ctx, db)
 	if err != nil {
-		return &Error{Code: CodeMigrate, Msg: "cannot load the migrations", Err: err}
-	}
-	current, err := p.GetDBVersion(ctx)
-	if err != nil {
-		return &Error{Code: CodeMigrate, Msg: "cannot read the schema version", Err: err}
-	}
-	sources := p.ListSources()
-	if latest := sources[len(sources)-1].Version; current > latest {
-		return &Error{Code: CodeSchemaTooNew, Msg: fmt.Sprintf(
-			"the database has schema version %d and this binary knows up to %d: use the newer version of Vibrance that wrote it",
-			current, latest)}
+		return err
 	}
 	if _, err := p.Up(ctx); err != nil {
 		return &Error{Code: CodeMigrate, Msg: "cannot apply the migrations", Err: err}

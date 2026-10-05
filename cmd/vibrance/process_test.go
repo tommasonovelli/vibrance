@@ -30,11 +30,12 @@ import (
 // program as it is released but for one string: its state folder is state,
 // a temporary folder, instead of /var/lib/vibrance.
 var binary struct {
-	once  sync.Once
-	dir   string
-	path  string
-	state string
-	err   error
+	once   sync.Once
+	dir    string
+	path   string
+	state  string
+	backup string
+	err    error
 }
 
 func TestMain(m *testing.M) {
@@ -74,11 +75,16 @@ func vibranceBinary(t *testing.T) string {
 		if binary.err = os.Mkdir(musiclib, 0o755); binary.err != nil {
 			return
 		}
-		if out, err := exec.CommandContext(ctx, goTool, "build", "-race", "-ldflags", "-X main.stateDir="+state+" -X main.musiclibDir="+musiclib, "-o", path, ".").CombinedOutput(); err != nil {
+		// The backup folder of the binary, /backup in the container.
+		backup := filepath.Join(binary.dir, "backup")
+		if binary.err = os.Mkdir(backup, 0o755); binary.err != nil {
+			return
+		}
+		if out, err := exec.CommandContext(ctx, goTool, "build", "-race", "-ldflags", "-X main.stateDir="+state+" -X main.musiclibDir="+musiclib+" -X main.backupDir="+backup, "-o", path, ".").CombinedOutput(); err != nil {
 			binary.err = fmt.Errorf("go build -race: %w\n%s", err, out)
 			return
 		}
-		binary.path, binary.state = path, state
+		binary.path, binary.state, binary.backup = path, state, backup
 	})
 	if binary.err != nil {
 		t.Fatal(binary.err)

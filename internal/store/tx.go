@@ -55,8 +55,13 @@ func (s *Store) WithWriteTx(ctx context.Context, fn func(q *Queries) error) (err
 // queries of fn cannot write. The errors are those of WithWriteTx: the
 // error of fn as it is while ctx lasts, and one that says that ctx ended
 // once it is over.
-func (s *Store) Read(ctx context.Context, fn func(q *Queries) error) (err error) {
-	tx, err := s.read.BeginTx(ctx, nil)
+func (s *Store) Read(ctx context.Context, fn func(q *Queries) error) error {
+	return read(ctx, s.read, fn)
+}
+
+// read is Read on a handle whose connections cannot write.
+func read(ctx context.Context, db *sql.DB, fn func(q *Queries) error) (err error) {
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("store: beginning a read transaction: %w", endOf(ctx, err))
 	}

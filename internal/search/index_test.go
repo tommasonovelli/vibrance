@@ -26,9 +26,14 @@ const (
 	track3  = "0192a5f0-0000-7000-8000-0000000000c3"
 )
 
+// paths are the files of the stores of newStore, for the tests that open
+// them a second time. The tests of this package do not run in parallel.
+var paths = map[*store.Store]string{}
+
 func newStore(t testing.TB) *store.Store {
 	t.Helper()
-	s, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "vibrance.db"))
+	path := filepath.Join(t.TempDir(), "vibrance.db")
+	s, err := store.Open(t.Context(), path)
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
 	}
@@ -37,6 +42,7 @@ func newStore(t testing.TB) *store.Store {
 			t.Errorf("closing the store: %v", err)
 		}
 	})
+	paths[s] = path
 	return s
 }
 

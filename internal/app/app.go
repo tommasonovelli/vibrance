@@ -70,6 +70,11 @@ type Error struct {
 	Code string
 	Msg  string
 	Err  error
+	// Advice tells the operator what to do, for the failures of the
+	// operational commands (backup, restore, doctor).
+	Advice string
+	// Refusal: an operational command refused before it did anything.
+	Refusal bool
 }
 
 func (e *Error) Error() string {

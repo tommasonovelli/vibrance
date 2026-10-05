@@ -54,6 +54,41 @@ The server keeps everything in one SQLite file, `/var/lib/vibrance/vibrance.db`,
 
 A server that is killed needs no repair: the next start recovers from the write-ahead log.
 
+### Backup, restore and doctor
+
+The whole database is precious: the ids of the tracks, which playlists and favorites point to, cannot be rebuilt from the library. Three commands of the image save, restore and check it. `/backup` is the backup folder (`VIBRANCE_BACKUP`); the thumbnails are a cache and are not saved.
+
+```sh
+docker exec <container> vibrance backup --to "/backup/$(date +%F-%H%M)"   # while the server runs
+docker exec <container> vibrance doctor                                   # while the server runs; changes nothing
+vibrance restore --from /backup/2026-10-05-2130                           # in a one-off container, server stopped, empty state volume
+```
+
+- `backup` copies the database with `VACUUM INTO`, a consistent copy also while the server writes, into a new folder: `vibrance.db` (mode 0600: it holds the password hashes) and `manifest.json` (the version of Vibrance and of the schema, the date, the size and SHA-256 of the copy, the number of users, playlists, playlist items, favorites, artists, albums and tracks). It checks the copy with `PRAGMA integrity_check` and reads it again for its SHA-256. It writes under `.vibrance-backup-*.tmp` and gives the folder its name only when it is complete: a backup that fails or is killed leaves only that temporary folder, which you remove. It prints `Backup completed: /backup/NAME`.
+- `restore` puts the copy in place as `/var/lib/vibrance/vibrance.db` only when the state folder has no database (nor a `-wal`, `-shm` or `-journal` file). It checks the manifest strictly and the SHA-256 of the copy, refuses a copy made by a newer Vibrance, writes and syncs a temporary file and gives it its name without ever overwriting one. A copy of an older schema is migrated by the server when it starts. It prints `Restore completed: /backup/NAME. Start the server.`
+- `doctor` reads the database in one transaction: `PRAGMA integrity_check`, `PRAGMA foreign_key_check`, the integrity of each full-text table, every full-text row against an available artist, album or track with the same names and the other way round, `track_count` and `duration_ms` of every album against its available tracks, and at least one enabled admin. It prints one line per finding, `code entity: message. Advice: ...`, and a last line: `Doctor complete: no damage found.` (exit 0) or `Doctor complete: N problems found. Nothing was changed.` (exit 1). It repairs nothing.
+
+Exit codes: 0 done; 2 refused before anything was written (bad arguments, root, the codes marked *refusal* below); 1 failed or damage found. A failure is logged with its `code` and an `advice`.
+
+| `code` | Command | Meaning |
+|---|---|---|
+| `backup_outside_backup` (refusal) | backup | The destination is not a plain absolute path of a new folder under `/backup`. |
+| `backup_exists` (refusal) | backup | A file or folder with that name exists: backups are never overwritten. |
+| `backup_destination` (refusal) | backup | The parent folder does not exist or cannot be written. |
+| `database_missing` (refusal) | backup, doctor | There is no `vibrance.db` in the state folder. |
+| `store_schema_old` (refusal) | backup, doctor | The database was written by an older Vibrance: start the server once, which migrates it. |
+| `store_schema_too_new`, `store_open` (refusal) | backup, doctor | The database is newer than this binary, or is not a database. |
+| `backup_failed`, `backup_verify` | backup | The copy could not be written, or is damaged: remove the temporary folder, run `doctor`, retry. |
+| `restore_outside_backup` (refusal) | restore | The backup is not a folder under `/backup`. |
+| `restore_database_exists` (refusal) | restore | The state folder has a database, or what is left of one: restore into a new, empty volume. |
+| `restore_manifest_invalid`, `restore_hash`, `restore_schema_too_new` (refusal) | restore | The backup does not pass its checks, or a newer Vibrance made it: use another backup, or that version. |
+| `restore_destination` (refusal), `restore_failed` | restore | The state folder cannot be written, or writing failed: nothing was restored. |
+| `doctor_failed` | doctor | The inspection could not be completed. |
+| `doctor_integrity`, `doctor_foreign_key`, `doctor_search_index` | doctor | The file is damaged: keep it, and restore the latest backup that `doctor` finds sound. |
+| `doctor_search_extra`, `doctor_search_missing`, `doctor_search_stale` | doctor | A full-text row does not agree with the index: searches that meet it fail or miss it. Nothing in Vibrance repairs it; restore a sound backup. |
+| `doctor_album_counters` | doctor | An album shows a wrong number of tracks or duration until it is indexed again. |
+| `doctor_no_admin` | doctor | No admin is enabled: `vibrance user create --role admin`. |
+
 The schema is in `migrations/` (goose, embedded in the binary), the queries in `sql/`, and the Go code that `sqlc` generates from both is committed in `internal/store`. After a change to either, run `scripts/sqlc.sh` and commit the result: the gate fails while it is out of date.
 
 - The development containers belong to the Compose project `vibrance-dev` (`compose.dev.yaml`), never to `musiclib`. Its volumes are `vibrance-dev_testdata` (the ext4 `TMPDIR` of the tests), `vibrance-dev_go-build-cache` and `vibrance-dev_go-mod-cache`.
