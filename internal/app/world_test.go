@@ -9,7 +9,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
-	"sync/atomic"
+	"sync"
 	"testing"
 	"time"
 
@@ -47,10 +47,10 @@ type world struct {
 	accounts int
 	// musiclib is the folder of MusicLib the files are served from: one
 	// without library/ until indexFixture gives it a copy of the fixture
-	// library. rescans counts the cycles the operations asked the scanner
-	// for.
+	// library. rescans are the albums the operations asked the scanner to
+	// look at again.
 	musiclib string
-	rescans  *atomic.Int32
+	rescans  *rechecks
 	// indexed is whether indexFixture ran.
 	indexed bool
 }
@@ -214,9 +214,9 @@ func decode[T any](t *testing.T, rec *httptest.ResponseRecorder) T {
 
 // publishMedia gives s, which is not started, the files of the library in
 // musiclib on the index of st, as the startup would publish them, and
-// returns the count of the cycles the operations ask the scanner for. The
+// returns the albums the operations ask the scanner to look at again. The
 // cache of the thumbnails is a folder of the test.
-func publishMedia(t *testing.T, s *server, st *store.Store, musiclib string) *atomic.Int32 {
+func publishMedia(t *testing.T, s *server, st *store.Store, musiclib string) *rechecks {
 	t.Helper()
 	root, err := library.OpenRoot(musiclib)
 	if err != nil {
@@ -227,8 +227,38 @@ func publishMedia(t *testing.T, s *server, st *store.Store, musiclib string) *at
 			t.Error(err)
 		}
 	})
-	rescans := &atomic.Int32{}
+	rescans := &rechecks{}
 	s.media.Store(&api.Media{Files: catalog.NewFiles(root, st, s.log), Covers: covers.New(root, st, t.TempDir(), s.log),
-		Rescan: func() { rescans.Add(1) }})
+		Recheck: rescans.add})
 	return rescans
+}
+
+// rechecks are the ids of the albums the operations of the files asked the
+// scanner to index again, in order.
+type rechecks struct {
+	mu  sync.Mutex
+	ids []string
+}
+
+func (r *rechecks) add(albumID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.ids = append(r.ids, albumID)
+}
+
+// Load is how many were asked for.
+func (r *rechecks) Load() int32 {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return int32(len(r.ids))
+}
+
+// last is the album of the last one, "" before the first.
+func (r *rechecks) last() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if len(r.ids) == 0 {
+		return ""
+	}
+	return r.ids[len(r.ids)-1]
 }

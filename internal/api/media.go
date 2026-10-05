@@ -24,10 +24,11 @@ type Media struct {
 	Files *catalog.Files
 	// Covers opens the covers of the albums and their thumbnails.
 	Covers *covers.Service
-	// Rescan asks the scanner for a cycle and returns at once: a file of
-	// the library is not the one the index describes (T13). Requests for
-	// cycles coalesce.
-	Rescan func()
+	// Recheck asks the scanner to index the album with that id again and
+	// returns at once: a file of the album is not the one the index
+	// describes (T13). The id is the one of the row of the index. Requests
+	// for cycles coalesce.
+	Recheck func(albumID string)
 }
 
 // The Cache-Control of the files (§8.1, §9.2). A file whose URL names its
@@ -73,7 +74,7 @@ func (s Server) GetAlbumCover(ctx context.Context, req GetAlbumCoverRequestObjec
 	}
 	c, err := m.Covers.Open(ctx, req.Id.String(), size)
 	if err != nil {
-		return nil, m.refuse(coverRefusal(err))
+		return nil, m.refuse(coverRefusal(err, req.Id.String()))
 	}
 	cache := revalidate
 	if req.Params.V != nil && *req.Params.V == c.SHA256 {
@@ -82,16 +83,17 @@ func (s Server) GetAlbumCover(ctx context.Context, req GetAlbumCoverRequestObjec
 	return newFileResponse(ctx, c.File, c.MIME, `"`+c.SHA256+"-"+string(name)+`"`, cache)
 }
 
-// coverRefusal is the answer of the API to a refusal of the covers service;
-// any other error is left as it is.
-func coverRefusal(err error) error {
+// coverRefusal is the answer of the API to a refusal of the covers service
+// for the album albumID, the id its row was read with; any other error is
+// left as it is.
+func coverRefusal(err error, albumID string) error {
 	switch covers.Code(err) {
 	case covers.CodeAlbumNotFound:
 		return &httpx.Error{Status: http.StatusNotFound, Code: catalog.CodeAlbumNotFound, Message: "There is no such album."}
 	case covers.CodeCoverNotFound:
-		return &httpx.Error{Status: http.StatusNotFound, Code: covers.CodeCoverNotFound, Message: "The album has no cover."}
+		return &httpx.Error{Status: http.StatusNotFound, Code: covers.CodeCoverNotFound, Message: "The album has no cover, or its cover cannot be read now."}
 	case covers.CodeStale:
-		return catalog.LibraryChanging()
+		return catalog.LibraryChanging(albumID)
 	}
 	return err
 }
@@ -112,12 +114,12 @@ func (s Server) GetTrackLyrics(ctx context.Context, req GetTrackLyricsRequestObj
 	return GetTrackLyrics200JSONResponse{Body: body, Headers: GetTrackLyrics200ResponseHeaders{ETag: `"` + l.SHA256 + `"`}}, nil
 }
 
-// refuse starts a scan when err says that a file of the library is not the
-// one of the index (§9.1 step 4), and returns err.
+// refuse asks the scanner to look at the album again when err says that one
+// of its files is not the one of the index (§9.1 step 4), and returns err.
 func (m *Media) refuse(err error) error {
-	var e *httpx.Error
-	if errors.As(err, &e) && e.Code == catalog.CodeLibraryChanging {
-		m.Rescan()
+	var changing *catalog.Changing
+	if errors.As(err, &changing) {
+		m.Recheck(changing.AlbumID)
 	}
 	return err
 }

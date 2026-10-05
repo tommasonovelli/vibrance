@@ -58,7 +58,7 @@ func (q *Queries) GetAvailableAlbum(ctx context.Context, id string) (GetAvailabl
 }
 
 const getTrackFile = `-- name: GetTrackFile :one
-SELECT tracks.available, albums.rel_path AS album_rel_path, tracks.rel_path,
+SELECT tracks.available, tracks.album_id, albums.rel_path AS album_rel_path, tracks.rel_path,
     tracks.file_size, tracks.file_mtime_ns, tracks.file_sha256, tracks.codec,
     tracks.lyrics_rel, tracks.lyrics_sha256
 FROM tracks
@@ -68,6 +68,7 @@ WHERE tracks.id = ?
 
 type GetTrackFileRow struct {
 	Available    int64
+	AlbumID      string
 	AlbumRelPath string
 	RelPath      string
 	FileSize     int64
@@ -79,15 +80,16 @@ type GetTrackFileRow struct {
 }
 
 // GetTrackFile returns what the index says of the files of a track,
-// available or not: the folder of its album and its own path, both
-// relative to library/ and written only by the scanner (I2), the size, the
-// time and the SHA-256 the scanner saw, its codec, and its lyrics file
+// available or not: its album, the folder of the album and its own path,
+// both relative to library/ and written only by the scanner (I2), the size,
+// the time and the SHA-256 the scanner saw, its codec, and its lyrics file
 // (DESIGN.md 9.1, 9.3).
 func (q *Queries) GetTrackFile(ctx context.Context, id string) (GetTrackFileRow, error) {
 	row := q.db.QueryRowContext(ctx, getTrackFile, id)
 	var i GetTrackFileRow
 	err := row.Scan(
 		&i.Available,
+		&i.AlbumID,
 		&i.AlbumRelPath,
 		&i.RelPath,
 		&i.FileSize,

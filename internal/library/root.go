@@ -25,8 +25,12 @@ var (
 	errSymlink     = errors.New("a symbolic link")
 	errNotRegular  = errors.New("not a regular file")
 	errNotFolder   = errors.New("not a folder")
-	errReplaced    = errors.New("replaced while it was being opened")
 )
+
+// ErrReplaced is why Open refuses a file that was replaced between its
+// Lstat and its opening: what is open is not the entry that was checked. It
+// says that the file is changing, like a file that is not there (T13).
+var ErrReplaced = errors.New("replaced while it was being opened")
 
 // Root is the MusicLib folder (/musiclib), opened once. Every access to
 // the library goes through it, and it only reads (I1).
@@ -204,7 +208,7 @@ func (r *Root) open(name string, folder bool) (*os.File, error) {
 	// very entry that Lstat saw.
 	after, err := f.Stat()
 	if err == nil && !os.SameFile(before, after) {
-		err = &fs.PathError{Op: "open", Path: name, Err: errReplaced}
+		err = &fs.PathError{Op: "open", Path: name, Err: ErrReplaced}
 	}
 	if err != nil {
 		return nil, errors.Join(err, f.Close())

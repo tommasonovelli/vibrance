@@ -425,10 +425,8 @@ func (s *server) startScanner() error {
 	s.scanner = library.NewScanner(indexer, s.workers, s.scanInterval, s.log)
 	// The files are served from the same Root, which the stop closes only
 	// once the HTTP server has stopped. A file that is not the one of the
-	// index asks the scanner for a cycle (§9.1).
-	scanner := s.scanner
-	s.media.Store(&api.Media{Files: catalog.NewFiles(root, s.store, s.log), Covers: thumbs,
-		Rescan: func() { scanner.Trigger(library.ReasonFileReplaced) }})
+	// index asks the scanner to index its album again (§9.1).
+	s.media.Store(&api.Media{Files: catalog.NewFiles(root, s.store, s.log), Covers: thumbs, Recheck: s.scanner.Recheck})
 	ctx, cancel := context.WithCancel(context.Background())
 	var running sync.WaitGroup
 	running.Go(func() { s.scanner.Run(ctx) })

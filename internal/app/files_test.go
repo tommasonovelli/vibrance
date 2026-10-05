@@ -161,16 +161,17 @@ func wantBody(t *testing.T, where string, rec *httptest.ResponseRecorder, status
 
 // wantChanging checks the answer to a file that is not the one of the
 // index (§9.1 step 4): 503 library_changing with Retry-After, nothing of
-// the file, and one more scan asked for.
-func (w *world) wantChanging(where string, rec *httptest.ResponseRecorder, rescans int32) {
+// the file, and the scanner asked to look at the album of the file again,
+// for the rescans-th time.
+func (w *world) wantChanging(where string, rec *httptest.ResponseRecorder, album string, rescans int32) {
 	w.t.Helper()
 	wantCode(w.t, where, rec, http.StatusServiceUnavailable, catalog.CodeLibraryChanging)
 	wantHeader(w.t, where, rec, "Retry-After", "5")
 	for _, name := range []string{"ETag", "Content-Range", "Accept-Ranges"} {
 		wantHeader(w.t, where, rec, name, "")
 	}
-	if got := w.rescans.Load(); got != rescans {
-		w.t.Errorf("%s: %d scans asked for, want %d", where, got, rescans)
+	if got := w.rescans.Load(); got != rescans || w.rescans.last() != album {
+		w.t.Errorf("%s: %d rechecks asked for, the last of the album %q; want %d, the last of %s", where, got, w.rescans.last(), rescans, album)
 	}
 }
 
@@ -309,20 +310,21 @@ func TestTrackAudioOfAReplacedFile(t *testing.T) {
 	anna := w.as(w.anna)
 	audio := func(album string, n int) string { return "/tracks/" + w.fixtureTrack(album, n) + "/audio" }
 	rescans := int32(0)
-	changing := func(where, path string, change func(file string)) {
+	changing := func(where, album string, n int, change func(file string)) {
 		t.Helper()
+		path := audio(album, n)
 		change(w.inLibraryOf(path))
 		rescans++
-		w.wantChanging(where, w.fetch(http.MethodGet, path, anna), rescans)
+		w.wantChanging(where, w.fetch(http.MethodGet, path, anna), album, rescans)
 		rescans++
-		w.wantChanging(where+", a range", w.fetch(http.MethodGet, path, anna, "Range: bytes=0-9"), rescans)
+		w.wantChanging(where+", a range", w.fetch(http.MethodGet, path, anna, "Range: bytes=0-9"), album, rescans)
 	}
-	changing("other bytes of the same size", audio(albumA, 1), func(file string) {
+	changing("other bytes of the same size", albumA, 1, func(file string) {
 		data := readFile(t, file)
 		data[len(data)/2] ^= 0xff
 		writeFile(t, file, data)
 	})
-	changing("the same bytes at another time", audio(albumA, 2), func(file string) {
+	changing("the same bytes at another time", albumA, 2, func(file string) {
 		info, err := os.Stat(file)
 		if err != nil {
 			t.Fatal(err)
@@ -331,7 +333,7 @@ func TestTrackAudioOfAReplacedFile(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
-	changing("another size at the same time", audio(albumA, 3), func(file string) {
+	changing("another size at the same time", albumA, 3, func(file string) {
 		info, err := os.Stat(file)
 		if err != nil {
 			t.Fatal(err)
@@ -341,12 +343,12 @@ func TestTrackAudioOfAReplacedFile(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
-	changing("a file that is gone", audio(albumB, 1), func(file string) {
+	changing("a file that is gone", albumB, 1, func(file string) {
 		if err := os.Remove(file); err != nil {
 			t.Fatal(err)
 		}
 	})
-	changing("an album folder renamed", audio(albumC, 1), func(file string) {
+	changing("an album folder renamed", albumC, 1, func(file string) {
 		folder := filepath.Dir(file)
 		if err := os.Rename(folder, folder+" (renamed)"); err != nil {
 			t.Fatal(err)
@@ -496,13 +498,13 @@ func TestAlbumCoverReplaced(t *testing.T) {
 	file := w.inLibrary("Aurora Sines/Alpha_ Light_/cover.jpg")
 	writeFile(t, file, other.Bytes())
 
-	w.wantChanging("the original", w.fetch(http.MethodGet, coverPath+"?size=original", anna), 1)
-	w.wantChanging("a thumbnail not in the cache", w.fetch(http.MethodGet, coverPath+"?size=256", anna), 2)
+	w.wantChanging("the original", w.fetch(http.MethodGet, coverPath+"?size=original", anna), albumA, 1)
+	w.wantChanging("a thumbnail not in the cache", w.fetch(http.MethodGet, coverPath+"?size=256", anna), albumA, 2)
 	wantStatus(t, "a thumbnail in the cache", w.fetch(http.MethodGet, coverPath+"?size=640", anna), http.StatusOK)
 	if err := os.Remove(file); err != nil {
 		t.Fatal(err)
 	}
-	w.wantChanging("a cover that is gone", w.fetch(http.MethodGet, coverPath+"?size=original", anna), 3)
+	w.wantChanging("a cover that is gone", w.fetch(http.MethodGet, coverPath+"?size=original", anna), albumA, 3)
 }
 
 // §9.3: the lyrics of a track as lines, from its LRC file, which must still
@@ -549,7 +551,7 @@ func TestTrackLyrics(t *testing.T) {
 
 	// A file that is not the one of the index.
 	writeFile(t, file, []byte("[00:01.00]Other words\n"))
-	w.wantChanging("lyrics replaced", w.fetch(http.MethodGet, path, anna), 1)
+	w.wantChanging("lyrics replaced", w.fetch(http.MethodGet, path, anna), albumA, 1)
 
 	if err := os.Remove(file); err != nil {
 		t.Fatal(err)

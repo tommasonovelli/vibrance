@@ -145,6 +145,9 @@ type Scanner struct {
 
 	mu     sync.Mutex
 	status Status
+	// rechecks are the ids of the albums that Recheck asked to look at
+	// again, until a cycle takes them. Guarded by mu.
+	rechecks map[string]struct{}
 }
 
 // NewScanner returns the scanner of the library that ix indexes. workers is
@@ -154,11 +157,31 @@ type Scanner struct {
 func NewScanner(ix *Indexer, workers int, interval time.Duration, log *slog.Logger) *Scanner {
 	return &Scanner{
 		ix: ix, workers: workers, interval: interval, log: log,
-		wake:   make(chan Reason, 1),
-		stale:  make(chan struct{}, 1),
-		memory: map[string]remembered{},
-		status: Status{State: StateIdle},
+		wake:     make(chan Reason, 1),
+		stale:    make(chan struct{}, 1),
+		memory:   map[string]remembered{},
+		status:   Status{State: StateIdle},
+		rechecks: map[string]struct{}{},
 	}
+}
+
+// Recheck asks for a cycle that indexes the album with that id again, even
+// if its folder and its receipt are those it was indexed from: a media
+// endpoint found one of its files with another size or time than the index
+// says (DESIGN.md §9.1). Indexing it again reads the size and the time of
+// its files from the disk, and pairs the files the index knows by their
+// SHA-256 without starting a process (§6.3). An album that the tools could
+// not read with the same receipt is still skipped: a client does not make
+// the scanner run ffprobe again (§6.2).
+//
+// albumID is the id of a row of albums, read from the index: the ids
+// waiting for a cycle are at most as many as the albums. Recheck returns at
+// once, and the cycles it asks for coalesce like those of Trigger.
+func (s *Scanner) Recheck(albumID string) {
+	s.mu.Lock()
+	s.rechecks[albumID] = struct{}{}
+	s.mu.Unlock()
+	s.Trigger(ReasonFileReplaced)
 }
 
 // Trigger asks for a cycle and returns at once. Triggers coalesce: while a
@@ -494,18 +517,25 @@ func (s *Scanner) scan(ctx context.Context) scanOutcome {
 
 // plan is P3: the candidates that are not in the index as they are on disk
 // are the work of the cycle. An album whose folder and receipt are those it
-// was indexed from is skipped, and so is one that the tools could not read
-// with this very receipt. carried are the problems and the warnings
+// was indexed from is skipped, unless Recheck asked for it since the last
+// cycle; one that the tools could not read with this very receipt is
+// skipped all the same. carried are the problems and the warnings
 // remembered of the albums that are skipped. It also forgets the albums
-// that are no longer what was remembered of them.
+// that are no longer what was remembered of them, and the ids Recheck gave
+// that are not among the candidates.
 func (s *Scanner) plan(d Discovery, known map[string]store.ListAlbumStatesRow) (work []Candidate, carried []Problem) {
+	s.mu.Lock()
+	rechecks := s.rechecks
+	s.rechecks = map[string]struct{}{}
+	s.mu.Unlock()
 	memory := map[string]remembered{}
 	for _, c := range d.Candidates {
 		id := c.Receipt.AlbumID
 		m, ok := s.memory[id]
 		same := ok && m.receiptHash == c.ReceiptHash && m.relPath == c.RelPath
 		a, indexed := known[id]
-		current := indexed && a.Available == 1 && a.ReceiptHash == c.ReceiptHash && a.RelPath == c.RelPath
+		_, recheck := rechecks[id]
+		current := indexed && a.Available == 1 && a.ReceiptHash == c.ReceiptHash && a.RelPath == c.RelPath && !recheck
 		switch {
 		case same && (m.failed || current):
 			memory[id] = m

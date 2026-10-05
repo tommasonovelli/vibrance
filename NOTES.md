@@ -494,3 +494,19 @@ Reason: the design as written. Visible effect: none.
 ## N-118 · The cover URL of a track of an album that is not available — DECIDED
 Step: S16 (debt of S15). `GET /tracks/{id}` of a track whose album is not available keeps `album.cover` (§8.2: the last data known), and that URL answers `404 album_not_found`, as §9.2 says of an album that is not available. Nothing changes in the catalog; the description of `getAlbumCover` says it.
 Reason: §8.2 and §9.2 as written; `cover: null` would hide data the design keeps. Visible effect: a client that follows that URL gets 404.
+
+## N-119 · Recheck: where the album id comes from, and who asks — DECIDED
+Step: S16e. `Scanner.Recheck(albumID)` keeps the id in a set guarded by the mutex of the status and calls `Trigger("file_replaced")`; P3 (`plan`) takes and empties the set, and an id in it makes an album that is up to date the work of the cycle; a failed album with the same receipt stays skipped (N-064), and an id that is no candidate is dropped. A cycle stopped before P3 (the markers, `library/` that cannot be listed) leaves the set for the next one. The refusal `library_changing` of `internal/catalog` is now `*catalog.Changing{AlbumID}`, which unwraps to the same `httpx.Error`: the id is the `album_id` of the row `GetTrackFile` read (the query returns it now) and, for a cover, the id the row of the album was read with. `api.Media.Rescan` became `Recheck(albumID)`; the handler still asks, in one place (`refuse`). `library.ErrReplaced` is exported so that the two services can tell that refusal of the Root from the others.
+Reason: the erratum, with the smallest change of N-114. Visible effect: none beyond the erratum.
+
+## N-120 · A lyrics file replaced while it is opened — DECIDED
+Step: S16e. Point 6 of the erratum makes a file replaced between `Lstat` and `Open` a `503` "like `ENOENT` with `library/` there". For the lyrics `ENOENT` is `404 lyrics_not_found` (§9.3, N-115), so a lyrics file replaced in that window is answered the same, `404` and no recheck; the audio and the cover answer `503` and a recheck.
+Reason: the erratum names the rule of `ENOENT`, which for the lyrics is the 404. Visible effect: a 404 in a window of microseconds.
+
+## N-121 · A cover that cannot be read: the thumbnails and the log — DECIDED
+Step: S16e (point 5; it replaces the last sentence of N-115 and the "error without a code" of N-075). `covers.Service` answers `cover_not_found` when the cover file cannot be opened and is not a replaced file: `library/` not there, a symbolic link, a folder, a permission. It logs `a cover file cannot be read` at `WARN`, as the audio does. The same holds for a thumbnail that is not in the cache (the original would get the same answer); one in the cache is still served. The message of the 404 is now "The album has no cover, or its cover cannot be read now."
+Reason: the erratum, and one rule for the two kinds of file. Visible effect: 404 instead of 503 (library gone) or 500 (a link, a permission) for those covers.
+
+## N-122 · After a recheck the index trusts the receipt, not the bytes — TO CONFIRM
+Step: S16e. Risk of point 3 of the erratum as written. The reindexing pairs a file with its row by the SHA-256 of the **receipt** (F1) and never reads the bytes; it then writes the size and the time of the file on disk. So a file changed by hand to other bytes of the **same size**, with the receipt unchanged, is refused once (`503`), healed by the cycle, and then served under the `ETag` of the bytes the receipt names. Before this step it stayed `503` for ever; the first indexing of an album has always trusted the receipt in the same way (§6.3 computes no SHA-256). MusicLib cannot leave this state. The alternative is to hash the files of a rechecked album (reads of whole files, started by a client request), which the erratum does not ask for.
+Visible effect: only for a library edited by hand outside MusicLib.

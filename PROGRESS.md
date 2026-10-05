@@ -22,7 +22,8 @@ Design: DESIGN.md (versione 0.1). Orchestratore: aggiorna questo file a ogni pas
 | S13 | Autenticazione: nucleo | done | 2 | 24632cb | 2026-10-04 · round 1: CHANGES REQUIRED (errore d'uso che registra gli argomenti, I5) · round 2 approvato |
 | S14 | Endpoint di autenticazione, account e amministrazione utenti | done | 1 | 55c3d77 | 2026-10-05 |
 | S15 | Catalogo: artisti, album, tracce | done | 1 | 17f929b | 2026-10-05 · errata §5.2 (indice degli artisti) |
-| S16 | Endpoint media: audio, cover, testi | done | 1 | HASH | 2026-10-05 · `curl -r` e `If-Range` provati a mano dal revisore · difetto del design trovato dal revisore → passo S16e |
+| S16 | Endpoint media: audio, cover, testi | done | 1 | 688002f | 2026-10-05 · `curl -r` e `If-Range` provati a mano dal revisore · difetto del design trovato dal revisore → passo S16e |
+| S16e | Errata al §6.2 e §9: la guardia dei file deve poter guarire | done | 1 | HASH | 2026-10-05 · passo aggiunto dall'errata · `touch -d` provato a mano dal revisore sul server vero |
 | S17 | Ricerca | todo | | | |
 | S18 | Preferiti | todo | | | |
 | S19 | Playlist | todo | | | |
@@ -109,6 +110,7 @@ Stati: `todo`, `in-progress`, `done`, `blocked`.
 - (S15, per S16) `GetTrack` di una traccia di un album non disponibile restituisce `album.cover` con l'URL della cover, che dopo S16 risponderà probabilmente 404 `cover_not_found`: dirlo in NOTES.md o dare `cover: null` quando l'album non è disponibile.
 - (S15, per S24) Il filtro `?artist=` percorre l'indice dell'ordinamento scartando gli album di altri artisti (caso peggiore: la lista intera, più una lettura in tabella per riga); il test `EXPLAIN QUERY PLAN` gira su tabelle vuote senza statistiche. Da misurare.
 - (S16) `internal/api/media.go` (`serve`): un errore di `Close` dopo che il corpo è già scritto finisce in `ResponseErrorHandlerFunc`, che proverebbe a scrivere un errore su una risposta iniziata: andrebbe solo loggato. Il design dice `Scanner.Trigger("stale")`, il codice usa `ReasonFileReplaced` (`"file_replaced"`, costante di S8): citarlo in N-114. Con `If-Match` sbagliato su una cover con `v` giusto il 412 conserva `Cache-Control: immutable` (trascurabile).
+- (S16e) Manca un test che un ciclo fermato a P0 (`.maintenance`) o da `Discover` lasci l'insieme dei ricontrolli al ciclo dopo (N-119 lo dichiara). README: dire che F1 abbina per lo SHA-256 della ricevuta senza leggere i byte, e una riga sul caso di N-122. `api/openapi.yaml`, `UnavailableOrChanging`: riga molto lunga da riformattare. `catalog.LibraryChanging(albumID)` è solo un costruttore di `&Changing{}`. `covers.openLibrary`: `switch` senza `default` poco leggibile. Il godoc di `Scanner` e il commento di `Scanner.mu` non nominano `Recheck`. Ogni altro errore di `Open` (EIO, EMFILE) su audio e cover diventa 404 con WARN invece di 500.
 
 ## TO CONFIRM aperti (da riportare all'utente a fine fase)
 - N-014 (S1) Dopo un `rebuild` offline di MusicLib `.maintenance` sparisce ma `library/` resta vuota finché l'app non riparte: in quell'intervallo Vibrance vede tutti gli album non disponibili (poi tornano con gli stessi ID). Riportato all'utente a fine fase 0 (2026-10-01).
@@ -136,6 +138,7 @@ Stati: `todo`, `in-progress`, `done`, `blocked`.
 - N-107 (S14) Il cookie ha `Max-Age` 30 giorni dal login e non è rinviato al rinnovo: un browser rientra 30 giorni dopo l'accesso per quanto lo usi (come MusicLib); il rinnovo vale per i token. Alternativa più fedele all'intento del §7.3: rimandare `Set-Cookie` quando una richiesta rinnova la sessione.
 - N-112 (S15) Il catalogo dove il §8 è breve: artista senza album disponibili → `404 artist_not_found`; `?artist=` con id sconosciuto → 200 lista vuota; `after=` vuoto → `400 invalid_cursor`; un cursore letto con un altro filtro `artist` è accettato (il §8.5 lo lega solo a `sort` e `order`). Il revisore le ritiene le più prudenti.
 - N-115 (S16) Un file illeggibile non è un file sostituito: `ENOENT` dà `503 library_changing` e scan solo se `library/` esiste; con `library/` assente, o un link, una cartella, un permesso negato al posto del file, l'audio risponde `404 track_unavailable` senza scan (il §9.1 alla lettera darebbe 503 a un'entrata non regolare). Coerente con l'errata ad A16 e I14. Le cover si allineano nel passo S16e.
+- N-122 (S16e) Dopo un ricontrollo l'indice si fida della ricevuta, non dei byte: un file modificato a mano con byte diversi e la stessa dimensione, a ricevuta invariata (es. editor di tag che riscrive nel padding di un FLAC), dà 503 una volta, poi si serve sotto l'`ETag` della ricevuta con i metadati vecchi. Prima di S16e restava 503 per sempre. Alternativa: ricalcolare lo SHA dei file di un album ricontrollato (letture intere comandate dai client). Il revisore ritiene accettabile la scelta attuale. MusicLib non produce questo stato.
 
 ## Errata al design
 Vedi la sezione «Errata» in fondo a DESIGN.md.

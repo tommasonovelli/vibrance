@@ -1008,9 +1008,13 @@ paths:
         `400 unsupported_profile`: `profile` is something other than
         `original`.
         `503 library_changing`, with `Retry-After`: the file on disk is not
-        the one the index describes, because MusicLib has just replaced the
-        album. A scan starts by itself: ask again after the delay, and read
-        the track again if it still fails.
+        the one the index describes (another size or time, a file that is
+        gone while `library/` is there, a file replaced while it was being
+        opened), because MusicLib has just replaced the album or the volume
+        was copied without its times. The scanner looks at the album again
+        by itself: ask again after the delay, and read the track again if it
+        still fails. It keeps failing only for a file whose bytes are not
+        those MusicLib recorded for it.
       parameters:
         - $ref: "#/components/parameters/PathId"
         - name: profile
@@ -1144,10 +1148,13 @@ paths:
 
         `404 album_not_found`: there is no such album or it is not available
         (a track that is not available may still name it in `album.cover`).
-        `404 cover_not_found`: the album has no cover.
+        `404 cover_not_found`: the album has no cover, or its cover file
+        cannot be read now: `library/` is not there (MusicLib's volume is
+        not mounted, or is being rebuilt) or the file cannot be opened.
         `503 library_changing`, with `Retry-After`: the cover on disk is not
         the one the index describes, because MusicLib has just replaced the
-        album. A scan starts by itself: ask again after the delay, and read
+        album or the volume was copied without its times. The scanner looks
+        at the album again by itself: ask again after the delay, and read
         the album again if it still fails.
       parameters:
         - $ref: "#/components/parameters/PathId"
@@ -1253,7 +1260,8 @@ paths:
         or its lyrics file is gone, cannot be read or is over 2 MiB.
         `503 library_changing`, with `Retry-After`: the lyrics on disk are
         not the ones the index describes, because MusicLib has just replaced
-        the album. A scan starts by itself: ask again after the delay.
+        the album. The scanner looks at the album again by itself: ask again
+        after the delay.
       parameters:
         - $ref: "#/components/parameters/PathId"
       responses:
@@ -2095,8 +2103,8 @@ components:
     UnavailableOrChanging:
       description: |
         `library_changing`, with `Retry-After`: the file is not the one the
-        index describes, because MusicLib has just replaced it; a scan has
-        started. `not_ready`: the server is starting. `shutting_down`: the
+        index describes, because MusicLib has just replaced it; the scanner
+        has been asked to look at its album again. `not_ready`: the server is starting. `shutting_down`: the
         server is stopping.
       headers:
         X-Request-Id:

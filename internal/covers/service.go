@@ -33,7 +33,8 @@ const (
 const (
 	// CodeAlbumNotFound: no such album, or the album is not available.
 	CodeAlbumNotFound = "album_not_found"
-	// CodeCoverNotFound: the album has no cover.
+	// CodeCoverNotFound: the album has no cover, or its cover file cannot be
+	// read now.
 	CodeCoverNotFound = "cover_not_found"
 	// CodeStale: the cover file is not the one the index describes. MusicLib
 	// replaced the album after the last scan: nothing of the file is
@@ -194,14 +195,26 @@ func (s *Service) original(a album) (*Cover, error) {
 
 // openLibrary opens the cover file of the album through the Root, which
 // follows no link and never leaves the library (I1). A file that is not
-// there is a replaced album.
+// there while library/ is, or that was replaced while it was being opened,
+// is a replaced album (CodeStale). Any other file that cannot be opened,
+// library/ that is not there among them, is CodeCoverNotFound: a scan
+// would not repair it, and the index is kept as it is (I14).
 func (s *Service) openLibrary(a album) (*os.File, error) {
 	f, err := s.root.Open(a.file())
 	switch {
+	case err == nil:
+		return f, nil
+	case errors.Is(err, library.ErrReplaced):
+		return nil, stale(a, "was replaced while it was being opened")
 	case errors.Is(err, fs.ErrNotExist):
-		return nil, stale(a, "is no longer there")
-	case err != nil:
-		return nil, fmt.Errorf("covers: opening the cover: %w", err)
+		present, perr := s.root.LibraryPresent()
+		if perr == nil && present {
+			return nil, stale(a, "is no longer there")
+		}
+		if perr != nil {
+			err = errors.Join(err, perr)
+		}
 	}
-	return f, nil
+	s.log.Warn("a cover file cannot be read", "path", a.file(), "err", err.Error())
+	return nil, &Error{Code: CodeCoverNotFound, Msg: "the cover file cannot be read"}
 }

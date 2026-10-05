@@ -38,7 +38,7 @@ var errTooLarge = errors.New("the cover is beyond the limits of a thumbnail")
 
 // thumbnail opens the thumbnail of the cover of a, from the cache or just
 // made. When it cannot be made the original is served instead, unless the
-// cover is stale or ctx ended.
+// cover file is stale or cannot be read, or ctx ended.
 func (s *Service) thumbnail(ctx context.Context, a album, size Size) (*Cover, error) {
 	path, err := s.thumbPath(a.sha256, size)
 	if err != nil {
@@ -58,7 +58,8 @@ func (s *Service) thumbnail(ctx context.Context, a album, size Size) (*Cover, er
 		return &Cover{File: f, MIME: thumbMIME, SHA256: a.sha256}, nil
 	case ctx.Err() != nil:
 		return nil, fmt.Errorf("covers: making a thumbnail: %w", ctx.Err())
-	case Code(err) == CodeStale:
+	// A refusal of the cover file itself: the original would get the same.
+	case Code(err) != "":
 		return nil, err
 	case !errors.Is(err, errTooLarge):
 		s.log.Warn("the thumbnail cannot be made: serving the original cover", "cover", a.sha256, "size", int(size), "error", err.Error())

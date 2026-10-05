@@ -83,7 +83,7 @@ func testHandler(t *testing.T, wrap func(Server) StrictServerInterface) (http.Ha
 		}
 	})
 	files := &atomic.Pointer[Media]{}
-	files.Store(&Media{Files: catalog.NewFiles(root, st, log), Covers: covers.New(root, st, t.TempDir(), log), Rescan: func() {}})
+	files.Store(&Media{Files: catalog.NewFiles(root, st, log), Covers: covers.New(root, st, t.TempDir(), log), Recheck: func(string) {}})
 	var srv StrictServerInterface = NewServer(published, index, files, "https://vibrance.example.net")
 	if wrap != nil {
 		srv = wrap(srv.(Server))

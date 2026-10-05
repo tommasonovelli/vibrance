@@ -40,11 +40,28 @@ const MaxLyricsBytes = 2 << 20
 // file as it is (D10).
 const originalProfile = "original"
 
-// LibraryChanging is the 503 of a file that is not the one of the index,
-// with Retry-After.
-func LibraryChanging() *httpx.Error {
+// Changing is the refusal of a file of the album AlbumID that is not the
+// one the index describes. It is answered as 503 library_changing with
+// Retry-After (its Unwrap), and the caller asks the scanner to look at the
+// album again: AlbumID is read from the index, never from the request.
+type Changing struct {
+	AlbumID string
+}
+
+func (e *Changing) Error() string {
+	return "a file of the album " + e.AlbumID + " is not the one of the index"
+}
+
+// Unwrap is the answer of the API.
+func (e *Changing) Unwrap() error {
 	return &httpx.Error{Status: http.StatusServiceUnavailable, Code: CodeLibraryChanging,
 		Message: "The library is changing. Try again shortly.", RetryAfter: retryAfterSeconds}
+}
+
+// LibraryChanging is the refusal of a file of the album albumID that is not
+// the one of the index.
+func LibraryChanging(albumID string) error {
+	return &Changing{AlbumID: albumID}
 }
 
 func trackUnavailable() *httpx.Error {
@@ -96,7 +113,9 @@ type Audio struct {
 // profile is given and is not "original". Then the file is opened and must
 // still be a regular file with the size and the time the scanner saw:
 // otherwise MusicLib replaced it, and the answer is 503 library_changing
-// (T13), for the caller to start a scan.
+// (T13), a *Changing for the caller to ask the scanner to look at the album
+// again. So is a file that is not there while library/ is, and one that was
+// replaced while it was being opened.
 //
 // A file that cannot be read for another reason, library/ that is not there
 // among them, is 404 track_unavailable: the index is kept as it is, and the
@@ -120,11 +139,11 @@ func (f *Files) OpenAudio(ctx context.Context, id string, profile *string) (*Aud
 	rel := row.AlbumRelPath + "/" + row.RelPath
 	file, err := f.root.Open(rel)
 	if err != nil {
-		return nil, f.unreadable(rel, err)
+		return nil, f.unreadable(row.AlbumID, rel, err)
 	}
 	info, err := file.Stat()
 	if err == nil && (!info.Mode().IsRegular() || info.Size() != row.FileSize || info.ModTime().UnixNano() != row.FileMtimeNs) {
-		err = LibraryChanging()
+		err = LibraryChanging(row.AlbumID)
 	}
 	if err != nil {
 		var refusal *httpx.Error
@@ -139,14 +158,18 @@ func (f *Files) OpenAudio(ctx context.Context, id string, profile *string) (*Aud
 	return &Audio{File: file, MIME: mime, SHA256: row.FileSha256}, nil
 }
 
-// unreadable answers an audio file of the index that cannot be opened. A
-// file that is not there while library/ is means that MusicLib replaced or
-// moved its album; anything else means that nothing can be read now.
-func (f *Files) unreadable(rel string, err error) error {
+// unreadable answers an audio file of the album albumID that cannot be
+// opened. A file that is not there while library/ is, or that was replaced
+// while it was being opened, means that MusicLib replaced or moved its
+// album; anything else means that nothing can be read now.
+func (f *Files) unreadable(albumID, rel string, err error) error {
+	if errors.Is(err, library.ErrReplaced) {
+		return LibraryChanging(albumID)
+	}
 	if errors.Is(err, fs.ErrNotExist) {
 		present, perr := f.root.LibraryPresent()
 		if perr == nil && present {
-			return LibraryChanging()
+			return LibraryChanging(albumID)
 		}
 		if perr != nil {
 			err = errors.Join(err, perr)
@@ -167,7 +190,9 @@ type Lyrics struct {
 // track_not_found when there is no such track; 404 lyrics_not_found when
 // it has no lyrics, is not available, or its file is not there, cannot be
 // read or is over MaxLyricsBytes; 503 library_changing when its SHA-256 is
-// not the one of the index, for the caller to start a scan.
+// not the one of the index (a *Changing). A lyrics file replaced while it
+// was being opened is answered like one that is gone, as §9.3 wants of the
+// lyrics.
 func (f *Files) ReadLyrics(ctx context.Context, id string) (Lyrics, error) {
 	row, err := f.track(ctx, id)
 	if err != nil {
@@ -189,7 +214,7 @@ func (f *Files) ReadLyrics(ctx context.Context, id string) (Lyrics, error) {
 	}
 	sum := sha256.Sum256(data)
 	if hex.EncodeToString(sum[:]) != row.LyricsSha256.String {
-		return Lyrics{}, LibraryChanging()
+		return Lyrics{}, LibraryChanging(row.AlbumID)
 	}
 	return Lyrics{Data: data, SHA256: row.LyricsSha256.String}, nil
 }
