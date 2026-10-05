@@ -19,7 +19,8 @@ type SearchResults struct {
 // Search finds the artists, albums and tracks that have every word of text
 // (DESIGN.md §10.2), at most limit of each of the kinds asked for, with
 // whether each track is a favorite of userID. Only what is available is
-// found. A text without a letter or a number finds nothing.
+// found. A text in which the tokenizer of the index finds no word
+// (punctuation alone) finds nothing, and is not an error.
 //
 // The full-text tables and the rows they describe are read in one
 // transaction, so a result is never a row the scanner took away meanwhile.

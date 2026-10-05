@@ -84,7 +84,10 @@ func testHandler(t *testing.T, wrap func(Server) StrictServerInterface) (http.Ha
 	})
 	files := &atomic.Pointer[Media]{}
 	files.Store(&Media{Files: catalog.NewFiles(root, st, log), Covers: covers.New(root, st, t.TempDir(), log), Recheck: func(string) {}})
-	var srv StrictServerInterface = NewServer(published, index, files, "https://vibrance.example.net")
+	// A scanner that is never run: it is idle, and a cycle asked of it waits.
+	scanner := &atomic.Pointer[library.Scanner]{}
+	scanner.Store(library.NewScanner(library.NewIndexer(root, st, nil, library.NoCoverWarmer{}, time.Now), 1, time.Hour, log))
+	var srv StrictServerInterface = NewServer(published, index, files, scanner, "https://vibrance.example.net")
 	if wrap != nil {
 		srv = wrap(srv.(Server))
 	}
@@ -102,18 +105,6 @@ func testHandler(t *testing.T, wrap func(Server) StrictServerInterface) (http.Ha
 		}
 		mux.ServeHTTP(w, r)
 	}), logs
-}
-
-// implemented are the operations a step has implemented. Every other one
-// answers 501 not_implemented until its step moves it here.
-var implemented = []string{
-	"getServerInfo", "login", "createToken", "logout", "getMe", "changePassword", "listSessions", "revokeSession",
-	"listUsers", "createUser", "getUser", "updateUser", "deleteUser", "resetUserPassword",
-	"listArtists", "getArtist", "listAlbums", "getAlbum", "getTrack", "search",
-	"getTrackAudio", "getAlbumCover", "getTrackLyrics",
-	"listFavoriteTracks", "addFavoriteTrack", "removeFavoriteTrack",
-	"listPlaylists", "createPlaylist", "getPlaylist", "updatePlaylist", "deletePlaylist", "listPlaylistItems",
-	"addPlaylistItems", "removePlaylistItem", "movePlaylistItem",
 }
 
 // exampleRequest builds a request for one operation of the specification
@@ -187,9 +178,9 @@ func wantError(t *testing.T, where string, rec *httptest.ResponseRecorder, statu
 	return *body.Message
 }
 
-// Every operation of the specification is routed. Until its step implements
-// it, it answers 501 not_implemented; once implemented, never. A path of the
-// specification the generated router did not know would answer 404 here.
+// Every operation of the specification is routed and implemented: none
+// answers 501, and none the 404 not_found of a path the generated router
+// does not know.
 func TestEveryOperationIsRouted(t *testing.T) {
 	doc := loadSpec(t)
 	handler, _ := testHandler(t, nil)
@@ -198,21 +189,12 @@ func TestEveryOperationIsRouted(t *testing.T) {
 	if len(ops) != len(designOperations) {
 		t.Fatalf("the specification has %d operations, the design %d", len(ops), len(designOperations))
 	}
-	done := 0
 	for _, o := range ops {
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, exampleRequest(t, o))
-		if !slices.Contains(implemented, o.op.OperationID) {
-			wantError(t, o.op.OperationID, rec, http.StatusNotImplemented, "not_implemented")
-			continue
-		}
-		done++
 		if rec.Code == http.StatusNotImplemented || rec.Code == http.StatusNotFound && strings.Contains(rec.Body.String(), `"not_found"`) {
-			t.Errorf("%s is implemented and answers %d", o.op.OperationID, rec.Code)
+			t.Errorf("%s answers %d", o.op.OperationID, rec.Code)
 		}
-	}
-	if done != len(implemented) {
-		t.Fatalf("%d implemented operations found in the specification, want %d", done, len(implemented))
 	}
 }
 
@@ -343,13 +325,12 @@ func TestUnexpectedErrorHidesItsCause(t *testing.T) {
 		t.Errorf("the cause is not in the log at ERROR: %q", logs.String())
 	}
 
-	// The other operations are untouched, and a 501 is not logged.
+	// The other operations are untouched.
 	logs.Reset()
 	rec = httptest.NewRecorder()
 	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, BasePath+"/admin/library", nil))
-	wantError(t, "getLibraryStatus", rec, http.StatusNotImplemented, "not_implemented")
-	if logs.Len() != 0 {
-		t.Errorf("a 501 was logged: %q", logs.String())
+	if rec.Code != http.StatusOK || strings.Contains(logs.String(), `"level":"ERROR"`) {
+		t.Errorf("getLibraryStatus: status %d, log %q", rec.Code, logs.String())
 	}
 }
 

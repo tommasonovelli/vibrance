@@ -189,7 +189,7 @@ func TestStartupRefusesWithoutTheFirstAdmin(t *testing.T) {
 			if Code(err) != tc.code {
 				t.Fatalf("run returned %v (code %q), want code %q", err, Code(err), tc.code)
 			}
-			if r.s.sessions.Load() != nil || r.s.scanner != nil {
+			if r.s.sessions.Load() != nil || r.s.scanner.Load() != nil {
 				t.Fatal("a refused startup published its services")
 			}
 			want := []string{"http listening", "database open", "media tools verified", "http server stopped", "database closed"}
@@ -292,7 +292,7 @@ func TestAuthenticatedConcurrently(t *testing.T) {
 				req.Header.Set("Authorization", "Bearer "+token)
 			}
 			rec := send(s.http.Handler, req)
-			if rec.Code >= 500 && rec.Code != http.StatusNotImplemented {
+			if rec.Code >= 500 {
 				t.Errorf("a concurrent request answered %d: %s", rec.Code, redacted(rec))
 			}
 		}()

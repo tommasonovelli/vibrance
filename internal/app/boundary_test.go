@@ -235,7 +235,7 @@ var refusals = []string{"host_not_allowed", "origin_not_allowed", "request_heade
 // a failure.
 func wantReached(t *testing.T, where string, rec *httptest.ResponseRecorder) {
 	t.Helper()
-	if rec.Code >= 500 && rec.Code != http.StatusNotImplemented {
+	if rec.Code >= 500 {
 		t.Errorf("%s: status %d (%s)", where, rec.Code, redacted(rec))
 		return
 	}

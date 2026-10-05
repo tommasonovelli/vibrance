@@ -20,9 +20,10 @@ const (
 //
 //   - the two health endpoints, which are outside the checks of Host, Origin
 //     and X-Vibrance-Request: a probe addresses the container by IP;
-//   - behind those checks, the operations of the API under /api/v1 and `/`,
-//     which leads to the API documentation until a web interface exists
-//     (D20). The router of these is where that interface will be added.
+//   - behind those checks, the operations of the API under /api/v1, the
+//     specification and the page that documents it (§8.8), and `/`, which
+//     leads to that page until a web interface exists (D20). The router of
+//     these is where that interface will be added.
 //
 // A path that is not there answers 404 not_found and a method a path does
 // not take 405 method_not_allowed, both in the error model. publicOrigin is
@@ -47,10 +48,11 @@ func (s *server) routes(publicOrigin string) (http.Handler, error) {
 
 	mux := http.NewServeMux()
 	s.access = api.Access(doc)
-	api.Register(mux, doc, api.NewServer(&s.sessions, &s.catalog, &s.media, publicOrigin), s.authenticated, s.log)
+	api.Register(mux, doc, api.NewServer(&s.sessions, &s.catalog, &s.media, &s.scanner, publicOrigin), s.authenticated, s.log)
+	api.RegisterDocs(mux, s.log)
 	// 302, not 301: browsers cache a permanent redirect, and `/` is where
 	// the web interface will be.
-	mux.Handle("GET /{$}", http.RedirectHandler("/api/docs", http.StatusFound))
+	mux.Handle("GET /{$}", http.RedirectHandler(api.DocsPath, http.StatusFound))
 	mux.Handle("/{$}", getOnly)
 	mux.Handle("/", notFound)
 	guarded := boundary(canonical(mux, notFound))

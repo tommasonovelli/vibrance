@@ -2,7 +2,7 @@
 
 Vibrance is the listening side of [Vibrance MusicLib](https://github.com/tommasonovelli/vibrance-musiclib). It is a read-only server over the `library/` folder that MusicLib produces, with multiple users, favorites, playlists, full-text search and an HTTP API documented with OpenAPI. The two products share only that folder.
 
-**Status:** in development toward v0.1. So far the server starts, creates and migrates its SQLite database, checks its `ffmpeg` and `ffprobe`, keeps an index of the MusicLib library up to date in the background, answers its health endpoints and stops. Its API is specified in `api/openapi.yaml`, and the server does not serve it yet.
+**Status:** in development toward v0.1. The server keeps an index of the MusicLib library up to date in the background and serves the whole API of `api/openapi.yaml`: accounts and sessions, the catalog, the audio, the covers and the lyrics, the search, the favorites, the playlists and the state of the library. It also serves that specification and a page that documents it. What is still to come is the operations side: backup and restore, the Compose stack next to MusicLib, and the release.
 
 ## Trying it
 
@@ -24,7 +24,7 @@ docker run --rm --init -p 127.0.0.1:8090:8080 -e VIBRANCE_PUBLIC_ORIGIN=http://1
   -e VIBRANCE_ADMIN_PASSWORD='choose a long password' vibrance:local serve
 ```
 
-The last command runs the server until Ctrl-C. It keeps its state in `/var/lib/vibrance` (the database `vibrance.db`), which lasts as long as the container unless a volume is mounted there, and it reads the library from `/musiclib`, which is empty unless the data volume of MusicLib is mounted there (read-only). `http://127.0.0.1:8090/health/live` answers `{"status":"live"}`, and `/health/ready` answers `{"status":"ready"}` once the startup is complete. In the container, `vibrance healthcheck` asks `/health/ready` and exits 0 or 1.
+The last command runs the server until Ctrl-C. It keeps its state in `/var/lib/vibrance` (the database `vibrance.db`), which lasts as long as the container unless a volume is mounted there, and it reads the library from `/musiclib`, which is empty unless the data volume of MusicLib is mounted there (read-only). `http://127.0.0.1:8090/health/live` answers `{"status":"live"}`, and `/health/ready` answers `{"status":"ready"}` once the startup is complete. In the container, `vibrance healthcheck` asks `/health/ready` and exits 0 or 1. `http://127.0.0.1:8090/` leads to the documentation of the API, and [docs/api.md](docs/api.md) is a short tour of the API with `curl`.
 
 ## Configuration
 
@@ -65,7 +65,14 @@ The schema is in `migrations/` (goose, embedded in the binary), the queries in `
 
 The API is described in [api/openapi.yaml](api/openapi.yaml) (OpenAPI 3.0.3), written by hand before the code: every operation under `/api/v1`, its parameters, its responses and its errors. The Go types, the router and the interface the handlers implement are generated from it by `oapi-codegen` (`api/oapi-codegen.yaml`) into `internal/api/api.gen.go`, which is committed and never edited by hand. After a change to the specification, run `scripts/generate.sh` and commit the result: the gate fails while the generated file is out of date. `oapi-codegen` is pinned as a `tool` directive of `go.mod` and runs from the module cache of the image, without network.
 
-The tests of `internal/api` hold the table of operations and the list of error codes of the design, and fail when the specification has an operation, a status or a code more or less. Until the step that implements it, an operation answers `501 not_implemented`.
+The tests of `internal/api` hold the table of operations and the list of error codes of the design, and fail when the specification has an operation, a status or a code more or less. The tests of `internal/app` hold the authorization matrix, one row per operation, and check every response they look at against the specification.
+
+The server serves its own documentation, without a session:
+
+- `GET /api/openapi.yaml` is the specification, the bytes of `api/openapi.yaml` the binary was built with: the same ones the requests are validated against.
+- `GET /api/docs` is a page that shows it and can send requests to the server, and `GET /` redirects there. The page is `web/docs/index.html` and loads one script, a vendored release of [Scalar API Reference](https://github.com/scalar/scalar) served at `/api/docs/scalar.js`. [web/docs/VENDOR.md](web/docs/VENDOR.md) records its version, its source and its SHA-256, and a test fails when the file is another. Nothing comes from another host: the page has its own `Content-Security-Policy`, which allows the script of the server, inline styles and requests to the server, and nothing else. To try a request other than GET from the page, add the header `X-Vibrance-Request: 1` in its request client.
+
+[docs/api.md](docs/api.md) shows the main operations with `curl`.
 
 ## The HTTP boundary
 
@@ -82,7 +89,9 @@ Every request crosses the same boundary (`internal/httpx`) before it reaches an 
 
 The two health endpoints are outside the first three checks: a probe asks the container by its address. `X-Forwarded-*` headers are never read, so a reverse proxy must pass `Host` unchanged. No CORS header is ever sent.
 
-Every response carries `X-Request-Id` (a UUIDv7 the server makes), `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer`; a JSON response also `Cache-Control: private, no-store` and `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`. An unexpected failure, a panic included, answers `500 internal` and nothing else: its cause is in the log, under the same `request_id`.
+Every response carries `X-Request-Id` (a UUIDv7 the server makes), `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer`; a JSON response also `Cache-Control: private, no-store` and `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`. The page of the documentation is the one response with a wider policy, and the files of the documentation are `Cache-Control: no-cache` with an `ETag`. An unexpected failure, a panic included, answers `500 internal` and nothing else: its cause is in the log, under the same `request_id`.
+
+A few answers come from Go's HTTP server before any of this runs, as plain text and without `X-Request-Id`: `431` for headers larger than 64 KiB, and `400` for a request line or a `Host` header that cannot be parsed.
 
 The access log is one line per request, with `request_id`, `method`, `route` (the pattern of the router, such as `GET /api/v1/tracks/{id}`, never the path), `status`, `duration_ms` and `bytes`, and `user_id` when the request carried a session. It never holds a path, a query string, a header or a body. It is at `INFO`, and at `DEBUG` (not written by default) for the audio, the covers and the health endpoints, which are asked all the time.
 
@@ -138,11 +147,15 @@ The scanner keeps the index in the database aligned with `library/`. A cycle run
 
 The server is ready whatever the state of the library: with MusicLib stopped, or with an empty `/musiclib`, everything else works.
 
+An admin reads the state with `GET /api/v1/admin/library`: the state above, when the last cycle that went through the library started and ended and whether it reached its end, how many albums and tracks are available and unavailable, how far a running cycle has come, whether MusicLib is in maintenance, and the problems of the last cycle (at most 200, kept in memory: the list is empty after a restart until the first cycle ends). `POST /api/v1/admin/library/scan` asks for a cycle and answers `202` at once with the state as it is; it is the only operation that makes the scanner do anything, and it coalesces like every other request for a cycle.
+
 An album that cannot be indexed is listed among the problems of the library with a stable code (`receipt_missing`, `receipt_invalid`, `receipt_schema_unsupported`, `receipt_too_large`, `file_missing`, `file_size_mismatch`, `probe_failed`, `fingerprint_failed`, `listing_failed`), and nothing of it is written; the warnings `cover_invalid` and `tags_incomplete` do not keep an album out. An album that `ffprobe` or `ffmpeg` could not read is not examined again until its receipt changes or the server restarts.
 
 An album whose folder and receipt have not changed is not looked at again, with one exception. When a request for the audio, the cover or the lyrics finds a file that is not the one the index describes, it asks the scanner to index the album of that file again. That cycle reads the size and the time of every file of the album from the disk and matches the files to their rows by SHA-256, without running `ffprobe` or `ffmpeg`, so files that only have another modification time (a volume copied or restored without its times, a `touch`) are served again after one cycle, with the same ids. An album that `ffprobe` or `ffmpeg` could not read is not examined again for such a request either.
 
 One state does not heal by itself: a file whose bytes are not those of its receipt (another size, which the scanner reports as `file_size_mismatch`, or lyrics with another SHA-256) while the receipt is unchanged. The album stays as it was indexed and every request for that file answers `503 library_changing` and asks for a cycle. MusicLib does not leave a library in this state, because every change it makes writes a new receipt; render the album again in MusicLib to repair it.
+
+The match is by the SHA-256 the receipt records: the bytes of the files are not read again. So a file changed by hand into other bytes of the same size, under an unchanged receipt (a tag editor that writes into the padding of a FLAC file), answers `503` once and is then served under the `ETag` of the receipt, with the metadata the index had. Neither does the first indexing read the bytes against the receipt: the receipt is what MusicLib verified.
 
 When MusicLib moves a track to another album, or an album is deleted and imported again, the track gets a new id in Vibrance. At the end of every cycle the playlist items and the favorites that point to a track that is no longer available move to an available track with the same audio, if there is one: the item keeps its place in the playlist and shows the new title, artist and album.
 
@@ -169,6 +182,18 @@ The original is served in place of the thumbnail when the cover file is larger t
 
 `GET /api/v1/tracks/{id}/lyrics` reads the `.lrc` file of the track (at most 2 MiB), checks its SHA-256 against the index and answers its lines as JSON (`internal/lyrics`). Other bytes answer `503 library_changing` like the audio; a lyrics file that is gone or cannot be read answers `404 lyrics_not_found`.
 
+## The search
+
+`GET /api/v1/search?q=...` searches the artists, the albums and the tracks that are available, with the full-text index of SQLite (FTS5, `internal/search`), which the scanner keeps in the same transactions as the index. A result has every word of `q`, each as the beginning of one of its words, so the search works while the user types: `mil dav` finds Miles Davis. Case and accents do not count. Nothing in `q` is an operator: quotes, `*`, `-`, `OR` and the like are separators or plain words.
+
+`q` is split into words only at the ASCII characters that are not letters or digits, at the Unicode spaces and at the control characters; at most 8 words of at most 64 characters count. Inside a word SQLite's tokenizer decides, exactly as it did for the names in the index. This has effects worth knowing:
+
+- Words joined by punctuation that is not ASCII are a phrase, in their order: `Sigur—Rós` finds Sigur Rós and `Rós—Sigur` does not, while `rós sigur` does.
+- A word made only of such punctuation is left out; alone, it finds nothing, without an error.
+- The emoji and symbols the tokenizer does not know as such (most recent emoji) are part of the word they touch, in the names and in `q`: Disco🪩Ball is found by `disco🪩` and not by `disco ball`.
+- An accent sent as a separate character is found like the letter that carries it for Latin letters, not for every script: a kana with a separate voicing mark does not find the composed name.
+- There is no tolerance for typing mistakes, and a run of Chinese or Japanese characters is one word, found only from its beginning.
+
 ## The playlists
 
 A playlist belongs to the user who made it and to nobody else: for every other account, an admin included, it answers `404 playlist_not_found`. A user has at most 500 playlists, and a playlist at most 10,000 items; the same track can be in a playlist more than once, because each item has an id of its own.
@@ -179,7 +204,7 @@ The positions of the items are always `0` to `item_count - 1`, without gaps. A t
 
 ## Pinned versions
 
-Every image is pinned by exact version and by digest. The pins are copied from MusicLib 1.2.0: Go 1.25.14 on Debian trixie, the `debian:trixie-20260918-slim` runtime base, Dockerfile frontend 1.26.0, shellcheck 0.11.0 and sqlc 1.31.1. `ffmpeg` and `ffprobe` (`8.1.3-musiclib1`) are copied from the published image `ghcr.io/tommasonovelli/musiclib:1.2.0`. The digests are in the `Dockerfile`, `scripts/lint-shell.sh` and `scripts/lib/common.sh`. The Go modules are at exact versions in `go.mod`, `oapi-codegen` among them. [docs/compat.md](docs/compat.md) lists the MusicLib versions Vibrance works with.
+Every image is pinned by exact version and by digest. The pins are copied from MusicLib 1.2.0: Go 1.25.14 on Debian trixie, the `debian:trixie-20260918-slim` runtime base, Dockerfile frontend 1.26.0, shellcheck 0.11.0 and sqlc 1.31.1. `ffmpeg` and `ffprobe` (`8.1.3-musiclib1`) are copied from the published image `ghcr.io/tommasonovelli/musiclib:1.2.0`. The digests are in the `Dockerfile`, `scripts/lint-shell.sh` and `scripts/lib/common.sh`. The Go modules are at exact versions in `go.mod`, `oapi-codegen` among them. The script of the documentation page is Scalar API Reference 1.72.4, with its SHA-256 in `web/docs/VENDOR.md`. [docs/compat.md](docs/compat.md) lists the MusicLib versions Vibrance works with.
 
 ## License
 

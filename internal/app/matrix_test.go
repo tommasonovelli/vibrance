@@ -81,12 +81,6 @@ var authorizationMatrix = map[string]access{
 	"movePlaylistItem":    {s401, s200, s200, s404},
 }
 
-// pendingOperations answer 501 not_implemented until their step implements
-// them; the step then removes them from here and gives them a request in
-// matrixRequests. Until then the matrix checks their refusals (401, 403)
-// exactly, and expects 501 where it says success or 404.
-var pendingOperations = []string{"getLibraryStatus", "scanLibrary"}
-
 // matrixRequest builds, in w, a request of an operation that succeeds when
 // actor (nil: nobody) may make it on a resource of owner: the method, the
 // path under /api/v1, the body (nil: none) and the If-Match header ("":
@@ -127,6 +121,12 @@ var matrixRequests = map[string]matrixRequest{
 	},
 	"resetUserPassword": func(w *world, _, _ *account) (string, string, any, string) {
 		return "PUT", "/admin/users/" + w.newAccount(auth.RoleUser).id + "/password", map[string]any{"password": "the password of the matrix"}, ""
+	},
+	"getLibraryStatus": func(*world, *account, *account) (string, string, any, string) {
+		return "GET", "/admin/library", nil, ""
+	},
+	"scanLibrary": func(*world, *account, *account) (string, string, any, string) {
+		return "POST", "/admin/library/scan", nil, ""
 	},
 	"listArtists": func(w *world, _, _ *account) (string, string, any, string) {
 		w.catalogEntry()
@@ -236,8 +236,8 @@ func matrixMismatch(doc *openapi3.T, matrix map[string]access) []string {
 }
 
 // The matrix has a row for every operation of the specification and for
-// nothing else; every operation is either pending or has its request; and
-// a row says what the access rule of its operation implies.
+// nothing else; every operation has its request; and a row says what the
+// access rule of its operation implies.
 func TestAuthorizationMatrixCoversTheSpecification(t *testing.T) {
 	doc, ops := specOperations(t)
 	if problems := matrixMismatch(doc, authorizationMatrix); len(problems) != 0 {
@@ -246,9 +246,8 @@ func TestAuthorizationMatrixCoversTheSpecification(t *testing.T) {
 	rules := api.Access(doc)
 	for _, o := range ops {
 		id := o.op.OperationID
-		_, has := matrixRequests[id]
-		if pending := slices.Contains(pendingOperations, id); pending == has {
-			t.Errorf("%s: pending %v, with a request %v: it must be one of the two", id, pending, has)
+		if _, has := matrixRequests[id]; !has {
+			t.Errorf("%s has no request in the matrix", id)
 		}
 		row := authorizationMatrix[id]
 		switch rules[o.method+" "+api.BasePath+o.path] {
@@ -323,28 +322,23 @@ func TestAuthorizationMatrix(t *testing.T) {
 		if row.other != 0 {
 			cases = append(cases, cell{"another user", w.bob, w.anna, row.other}, cell{"an admin, on a resource of a user", w.admin, w.anna, row.other})
 		}
-		pending := slices.Contains(pendingOperations, id)
+		build, ok := matrixRequests[id]
+		if !ok {
+			t.Errorf("%s has no request", id)
+			continue
+		}
 		for _, c := range cases {
 			where := id + " as " + c.who
-			var req = o.example(t)
-			if !pending {
-				method, path, body, ifMatch := matrixRequests[id](w, c.actor, c.owner)
-				req = w.request(method, path, body)
-				if ifMatch != "" {
-					req.Header.Set("If-Match", ifMatch)
-				}
+			method, path, body, ifMatch := build(w, c.actor, c.owner)
+			req := w.request(method, path, body)
+			if ifMatch != "" {
+				req.Header.Set("If-Match", ifMatch)
 			}
-			// The example asks for its Host; the world has the same.
-			req.Host = w.host
 			w.as(c.actor)(req)
 			rec := send(w.s.http.Handler, req)
 			assertConforms(t, where, req, rec)
-			want := c.want
-			if pending && want != s401 && want != s403 {
-				want = http.StatusNotImplemented
-			}
-			if rec.Code != want {
-				t.Errorf("%s: status %d, want %d (%s)", where, rec.Code, want, redacted(rec))
+			if rec.Code != c.want {
+				t.Errorf("%s: status %d, want %d (%s)", where, rec.Code, c.want, redacted(rec))
 			}
 			switch rec.Code {
 			case s401:
@@ -365,32 +359,29 @@ func TestAuthorizationMatrix(t *testing.T) {
 }
 
 // §8.3, §12.4: the routes outside the specification are listed apart. They
-// need no session, and answer the same with one and without. step is the
-// step that serves a route not served yet: it answers 404 until then.
+// need no session, and answer the same with one and without. The script of
+// the page of the documentation is one of them: the page is not whole
+// without it.
 func TestInfrastructureRoutes(t *testing.T) {
 	w := newWorld(t, apiOrigin)
 	for _, r := range []struct {
 		path   string
 		status int
-		step   string
 	}{
-		{livePath, s200, ""},
-		{readyPath, s200, ""},
-		{"/", http.StatusFound, ""},
-		{"/api/openapi.yaml", s200, "S20"},
-		{"/api/docs", s200, "S20"},
+		{livePath, s200},
+		{readyPath, s200},
+		{"/", http.StatusFound},
+		{"/api/openapi.yaml", s200},
+		{"/api/docs", s200},
+		{"/api/docs/scalar.js", s200},
 	} {
-		want := r.status
-		if r.step != "" {
-			want = s404
-		}
 		for who, c := range map[string]credential{"anonymous": nobody, "a user": w.as(w.anna), "an admin": w.as(w.admin)} {
 			req := w.request("GET", "", nil)
 			req.URL.Path = r.path
 			c(req)
 			rec := send(w.s.http.Handler, req)
-			if rec.Code != want {
-				t.Errorf("GET %s as %s: status %d, want %d", r.path, who, rec.Code, want)
+			if rec.Code != r.status {
+				t.Errorf("GET %s as %s: status %d, want %d", r.path, who, rec.Code, r.status)
 			}
 			wantHeaders(t, "GET "+r.path, rec.Header())
 			if rec.Header().Get("Content-Type") == "application/json" && !json.Valid(rec.Body.Bytes()) {

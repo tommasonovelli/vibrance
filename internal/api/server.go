@@ -16,17 +16,12 @@ import (
 	"vibrance/internal/auth"
 	"vibrance/internal/catalog"
 	"vibrance/internal/httpx"
+	"vibrance/internal/library"
 )
 
 // BasePath is where the operations of the specification are served: the
 // `servers` entry of api/openapi.yaml.
 const BasePath = "/api/v1"
-
-// errNotImplemented is what an operation returns until its step implements
-// it. Its code is not in the specification, because no released server
-// answers it: it leaves with the last unimplemented operation.
-var errNotImplemented = &httpx.Error{Status: http.StatusNotImplemented, Code: "not_implemented",
-	Message: "This operation is not implemented yet."}
 
 // Server implements every operation of the specification.
 type Server struct {
@@ -40,6 +35,10 @@ type Server struct {
 	// media serves the files of the library: audio, covers and lyrics. The
 	// server publishes it before accounts, like catalog.
 	media *atomic.Pointer[Media]
+	// scanner keeps the index aligned with the library: the operations of
+	// the admins read its state and ask it for a cycle. The server publishes
+	// it before accounts, like catalog.
+	scanner *atomic.Pointer[library.Scanner]
 	// secureCookie says that the public origin is https: the session cookie
 	// is Secure then, and only then (DESIGN.md §7.3, T14).
 	secureCookie bool
@@ -47,10 +46,11 @@ type Server struct {
 
 // NewServer returns the operations of a server whose public origin is
 // publicOrigin (VIBRANCE_PUBLIC_ORIGIN), on the services that accounts,
-// catalog and media hold once the startup has published them.
+// catalog, media and scanner hold once the startup has published them.
 func NewServer(accounts *atomic.Pointer[auth.Service], catalog *atomic.Pointer[catalog.Service], media *atomic.Pointer[Media],
-	publicOrigin string) Server {
-	return Server{accounts: accounts, catalog: catalog, media: media, secureCookie: strings.HasPrefix(publicOrigin, "https://")}
+	scanner *atomic.Pointer[library.Scanner], publicOrigin string) Server {
+	return Server{accounts: accounts, catalog: catalog, media: media, scanner: scanner,
+		secureCookie: strings.HasPrefix(publicOrigin, "https://")}
 }
 
 // The compiler checks that no operation of the specification is missing.

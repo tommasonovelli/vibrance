@@ -344,7 +344,9 @@ func (e SearchParamsTypes) Valid() bool {
 	}
 }
 
-// AddPlaylistItemsRequest Example: {"position":null,"track_ids":["0199a5c0-7b1e-7c3a-9d2f-4b6a8c0e1f23"]}
+// AddPlaylistItemsRequest The tracks to add to a playlist, and where.
+//
+// Example: {"position":null,"track_ids":["0199a5c0-7b1e-7c3a-9d2f-4b6a8c0e1f23"]}
 type AddPlaylistItemsRequest struct {
 	// Position `null` to add at the end; or the position of the item the block goes before, from `0` to the `item_count` of the playlist (the end), which needs `If-Match`.
 	Position *int `json:"position"`
@@ -353,7 +355,7 @@ type AddPlaylistItemsRequest struct {
 	TrackIds []openapi_types.UUID `json:"track_ids"`
 }
 
-// AddPlaylistItemsResult defines model for AddPlaylistItemsResult.
+// AddPlaylistItemsResult The playlist after the addition, and the items that were made, in the order of the request.
 type AddPlaylistItemsResult struct {
 	// Added The new items, in the order of `track_ids`.
 	Added []AddedPlaylistItem `json:"added"`
@@ -364,7 +366,9 @@ type AddPlaylistItemsResult struct {
 	Playlist Playlist `json:"playlist"`
 }
 
-// AddedPlaylistItem Example: {"item_id":"0199a5c4-2f6b-7a90-b1c3-5d7e9f1a3b5c","position":12,"track_id":"0199a5c0-7b1e-7c3a-9d2f-4b6a8c0e1f23"}
+// AddedPlaylistItem One item an addition made.
+//
+// Example: {"item_id":"0199a5c4-2f6b-7a90-b1c3-5d7e9f1a3b5c","position":12,"track_id":"0199a5c0-7b1e-7c3a-9d2f-4b6a8c0e1f23"}
 type AddedPlaylistItem struct {
 	// ItemId A UUID in its canonical form, lowercase with hyphens. An id has one spelling, in requests as in responses.
 	//
@@ -385,7 +389,9 @@ type AlbumDetail struct {
 	// Example: 2026-09-30T12:34:56.000Z
 	AddedAt Timestamp `json:"added_at"`
 
-	// Artist Example: {"id":"5b0c8f6e-1d2a-5e3f-9a4b-6c7d8e9f0a1b","name":"Miles Davis"}
+	// Artist The artist of an album, by id and name.
+	//
+	// Example: {"id":"5b0c8f6e-1d2a-5e3f-9a4b-6c7d8e9f0a1b","name":"Miles Davis"}
 	Artist ArtistRef `json:"artist"`
 
 	// Compilation Whether the album gathers tracks of several artists.
@@ -411,7 +417,7 @@ type AlbumDetail struct {
 	Year       *int    `json:"year"`
 }
 
-// AlbumList defines model for AlbumList.
+// AlbumList One page of the albums.
 type AlbumList struct {
 	Albums []AlbumSummary `json:"albums"`
 
@@ -425,7 +431,9 @@ type AlbumList struct {
 //
 // Example: {"artist":{"id":"5b0c8f6e-1d2a-5e3f-9a4b-6c7d8e9f0a1b","name":"Miles Davis"},"cover":{"hash":"9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08","url":"/api/v1/albums/7d4c2f0a-3b1e-4c5d-8e9f-0a1b2c3d4e5f/cover?v=9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"},"id":"7d4c2f0a-3b1e-4c5d-8e9f-0a1b2c3d4e5f","title":"Kind of Blue","year":1959}
 type AlbumRef struct {
-	// Artist Example: {"id":"5b0c8f6e-1d2a-5e3f-9a4b-6c7d8e9f0a1b","name":"Miles Davis"}
+	// Artist The artist of an album, by id and name.
+	//
+	// Example: {"id":"5b0c8f6e-1d2a-5e3f-9a4b-6c7d8e9f0a1b","name":"Miles Davis"}
 	Artist ArtistRef `json:"artist"`
 	Cover  *Cover    `json:"cover"`
 
@@ -437,14 +445,18 @@ type AlbumRef struct {
 	Year  *int   `json:"year"`
 }
 
-// AlbumSummary Example: {"added_at":"2026-09-30T12:34:56.000Z","artist":{"id":"5b0c8f6e-1d2a-5e3f-9a4b-6c7d8e9f0a1b","name":"Miles Davis"},"compilation":false,"cover":{"hash":"9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08","url":"/api/v1/albums/7d4c2f0a-3b1e-4c5d-8e9f-0a1b2c3d4e5f/cover?v=9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"},"duration_ms":2745000,"genre":"Jazz","id":"7d4c2f0a-3b1e-4c5d-8e9f-0a1b2c3d4e5f","title":"Kind of Blue","track_count":5,"year":1959}
+// AlbumSummary An album as the lists give it, without its tracks.
+//
+// Example: {"added_at":"2026-09-30T12:34:56.000Z","artist":{"id":"5b0c8f6e-1d2a-5e3f-9a4b-6c7d8e9f0a1b","name":"Miles Davis"},"compilation":false,"cover":{"hash":"9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08","url":"/api/v1/albums/7d4c2f0a-3b1e-4c5d-8e9f-0a1b2c3d4e5f/cover?v=9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"},"duration_ms":2745000,"genre":"Jazz","id":"7d4c2f0a-3b1e-4c5d-8e9f-0a1b2c3d4e5f","title":"Kind of Blue","track_count":5,"year":1959}
 type AlbumSummary struct {
 	// AddedAt A moment, RFC 3339 in UTC, always with three digits of milliseconds and `Z`.
 	//
 	// Example: 2026-09-30T12:34:56.000Z
 	AddedAt Timestamp `json:"added_at"`
 
-	// Artist Example: {"id":"5b0c8f6e-1d2a-5e3f-9a4b-6c7d8e9f0a1b","name":"Miles Davis"}
+	// Artist The artist of an album, by id and name.
+	//
+	// Example: {"id":"5b0c8f6e-1d2a-5e3f-9a4b-6c7d8e9f0a1b","name":"Miles Davis"}
 	Artist ArtistRef `json:"artist"`
 
 	// Compilation Whether the album gathers tracks of several artists.
@@ -466,7 +478,7 @@ type AlbumSummary struct {
 	Year       *int `json:"year"`
 }
 
-// ArtistDetail defines model for ArtistDetail.
+// ArtistDetail An artist with its available albums.
 type ArtistDetail struct {
 	// Albums The available albums of the artist.
 	Albums []AlbumSummary `json:"albums"`
@@ -478,7 +490,7 @@ type ArtistDetail struct {
 	Name string `json:"name"`
 }
 
-// ArtistList defines model for ArtistList.
+// ArtistList One page of the artists.
 type ArtistList struct {
 	Artists []ArtistSummary `json:"artists"`
 
@@ -488,7 +500,9 @@ type ArtistList struct {
 	Next *Cursor `json:"next"`
 }
 
-// ArtistRef Example: {"id":"5b0c8f6e-1d2a-5e3f-9a4b-6c7d8e9f0a1b","name":"Miles Davis"}
+// ArtistRef The artist of an album, by id and name.
+//
+// Example: {"id":"5b0c8f6e-1d2a-5e3f-9a4b-6c7d8e9f0a1b","name":"Miles Davis"}
 type ArtistRef struct {
 	// Id A UUID in its canonical form, lowercase with hyphens. An id has one spelling, in requests as in responses.
 	//
@@ -497,7 +511,9 @@ type ArtistRef struct {
 	Name string `json:"name"`
 }
 
-// ArtistSummary Example: {"album_count":3,"id":"5b0c8f6e-1d2a-5e3f-9a4b-6c7d8e9f0a1b","name":"Miles Davis"}
+// ArtistSummary An artist as the lists give it.
+//
+// Example: {"album_count":3,"id":"5b0c8f6e-1d2a-5e3f-9a4b-6c7d8e9f0a1b","name":"Miles Davis"}
 type ArtistSummary struct {
 	// AlbumCount How many available albums the artist has.
 	AlbumCount int `json:"album_count"`
@@ -533,7 +549,9 @@ type AudioFormat struct {
 // AudioFormatCodec `aac` and `alac` are in an MP4 file (`.m4a`).
 type AudioFormatCodec string
 
-// ChangePasswordRequest Example: {"current_password":"correct horse battery staple","new_password":"a much longer and better passphrase"}
+// ChangePasswordRequest The password the user has and the one that replaces it.
+//
+// Example: {"current_password":"correct horse battery staple","new_password":"a much longer and better passphrase"}
 type ChangePasswordRequest struct {
 	CurrentPassword string `json:"current_password"`
 
@@ -552,7 +570,9 @@ type Cover struct {
 	Url string `json:"url"`
 }
 
-// CreateTokenRequest Example: {"device_name":"Anna's phone","password":"correct horse battery staple","username":"anna"}
+// CreateTokenRequest The credentials of an account and a name for the device, to sign in with a token.
+//
+// Example: {"device_name":"Anna's phone","password":"correct horse battery staple","username":"anna"}
 type CreateTokenRequest struct {
 	// DeviceName A name for this sign-in, shown in the list of sessions.
 	DeviceName string `json:"device_name"`
@@ -562,7 +582,9 @@ type CreateTokenRequest struct {
 	Username string `json:"username"`
 }
 
-// CreateUserRequest Example: {"password":"correct horse battery staple","role":"user","username":"anna"}
+// CreateUserRequest A new account.
+//
+// Example: {"password":"correct horse battery staple","role":"user","username":"anna"}
 type CreateUserRequest struct {
 	// Password 12 to 1024 bytes, no control characters.
 	Password string `json:"password"`
@@ -664,7 +686,7 @@ type Favorite struct {
 	Track Track `json:"track"`
 }
 
-// FavoriteList defines model for FavoriteList.
+// FavoriteList One page of the favorite tracks, the most recent first.
 type FavoriteList struct {
 	Favorites []Favorite `json:"favorites"`
 
@@ -687,7 +709,9 @@ type LibraryCounts struct {
 	Unavailable int64 `json:"unavailable"`
 }
 
-// LibraryProblem Example: {"code":"file_missing","message":"A file the receipt lists is not in the folder.","rel_path":"Miles Davis/Kind of Blue"}
+// LibraryProblem One album folder the scanner could not index, or a warning about one it did.
+//
+// Example: {"code":"file_missing","message":"A file the receipt lists is not in the folder.","rel_path":"Miles Davis/Kind of Blue"}
 type LibraryProblem struct {
 	// Code A stable code. Problems, which keep the album out of the index
 	// (or as it was): `receipt_missing`, `receipt_invalid`,
@@ -752,7 +776,10 @@ type LibraryStatus struct {
 	// MusiclibMaintenance Whether the last cycle found the maintenance marker of MusicLib.
 	MusiclibMaintenance bool `json:"musiclib_maintenance"`
 
-	// Problems The album folders the last finished cycle could not index, and its warnings; at most 200. The list is made again at every cycle and is empty after a restart until the first one ends.
+	// Problems The album folders the last finished cycle could not index, and its
+	// warnings, ordered by path; at most 200. The list is made again by
+	// every cycle that goes through the library, and is empty after a
+	// restart until the first one ends.
 	Problems []LibraryProblem `json:"problems"`
 
 	// Progress How far the running cycle has come; `null` when none is running.
@@ -780,7 +807,9 @@ type LibraryStatus struct {
 //     library cannot be listed; the index is left as it is.
 type LibraryStatusState string
 
-// LoginRequest Example: {"device_name":"Firefox on the laptop","password":"correct horse battery staple","username":"anna"}
+// LoginRequest The credentials of an account, to sign in with a cookie.
+//
+// Example: {"device_name":"Firefox on the laptop","password":"correct horse battery staple","username":"anna"}
 type LoginRequest struct {
 	// DeviceName A name for this sign-in, shown in the list of sessions. Optional.
 	DeviceName *string `json:"device_name,omitempty"`
@@ -790,7 +819,7 @@ type LoginRequest struct {
 	Username string `json:"username"`
 }
 
-// LoginResult defines model for LoginResult.
+// LoginResult The account that signed in and its new session. The session itself is in the cookie.
 type LoginResult struct {
 	// Session One sign-in of a user. The `id` is a handle to list and revoke it; it
 	// is not the token and cannot be used to sign in.
@@ -818,7 +847,9 @@ type Lyrics struct {
 	Synced bool `json:"synced"`
 }
 
-// LyricsLine Example: {"text":"First line of the song","time_ms":12340}
+// LyricsLine One line of the lyrics.
+//
+// Example: {"text":"First line of the song","time_ms":12340}
 type LyricsLine struct {
 	// Text The line. Empty, in synced lyrics, for a pause without words.
 	Text string `json:"text"`
@@ -827,7 +858,9 @@ type LyricsLine struct {
 	TimeMs *int64 `json:"time_ms"`
 }
 
-// MovePlaylistItemRequest Example: {"position":0}
+// MovePlaylistItemRequest Where an item of a playlist goes.
+//
+// Example: {"position":0}
 type MovePlaylistItemRequest struct {
 	// Position Where the item is after the move, from `0` to the `item_count` of the playlist less one.
 	Position int `json:"position"`
@@ -871,7 +904,9 @@ type Playlist struct {
 	UpdatedAt Timestamp `json:"updated_at"`
 }
 
-// PlaylistInput Example: {"description":"","name":"Sunday morning"}
+// PlaylistInput The name and the description of a playlist: both are sent, at creation and at every change.
+//
+// Example: {"description":"","name":"Sunday morning"}
 type PlaylistInput struct {
 	// Description At most 2000 characters; `""` for none.
 	Description string `json:"description"`
@@ -915,7 +950,7 @@ type PlaylistItem struct {
 	Track Track `json:"track"`
 }
 
-// PlaylistItemList defines model for PlaylistItemList.
+// PlaylistItemList One page of the items of a playlist, by position.
 type PlaylistItemList struct {
 	Items []PlaylistItem `json:"items"`
 
@@ -925,7 +960,7 @@ type PlaylistItemList struct {
 	Next *Cursor `json:"next"`
 }
 
-// PlaylistList defines model for PlaylistList.
+// PlaylistList The playlists of the user, the oldest first.
 type PlaylistList struct {
 	Playlists []Playlist `json:"playlists"`
 }
@@ -947,7 +982,9 @@ type ReplayGain struct {
 	TrackPeak *float64 `json:"track_peak"`
 }
 
-// ResetUserPasswordRequest Example: {"password":"correct horse battery staple"}
+// ResetUserPasswordRequest The new password of an account.
+//
+// Example: {"password":"correct horse battery staple"}
 type ResetUserPasswordRequest struct {
 	// Password 12 to 1024 bytes, no control characters.
 	Password string `json:"password"`
@@ -958,14 +995,16 @@ type ResetUserPasswordRequest struct {
 // Example: user
 type Role string
 
-// SearchResult defines model for SearchResult.
+// SearchResult What a search found, the best first in each list. The three lists are always present; a kind that was not asked for is empty.
 type SearchResult struct {
 	Albums  []AlbumSummary  `json:"albums"`
 	Artists []ArtistSummary `json:"artists"`
 	Tracks  []Track         `json:"tracks"`
 }
 
-// ServerInfo Example: {"api_version":1,"name":"Vibrance","version":"0.1.0"}
+// ServerInfo What the server is.
+//
+// Example: {"api_version":1,"name":"Vibrance","version":"0.1.0"}
 type ServerInfo struct {
 	// ApiVersion The version of this API. Always `1` under `/api/v1`.
 	ApiVersion ServerInfoApiVersion `json:"api_version"`
@@ -1021,7 +1060,7 @@ type Session struct {
 // SessionKind `cookie`: from `POST /auth/login`. `token`: from `POST /auth/tokens`.
 type SessionKind string
 
-// SessionList defines model for SessionList.
+// SessionList The live sessions of the user.
 type SessionList struct {
 	Sessions []Session `json:"sessions"`
 }
@@ -1031,7 +1070,7 @@ type SessionList struct {
 // Example: 2026-09-30T12:34:56.000Z
 type Timestamp = string
 
-// TokenResult defines model for TokenResult.
+// TokenResult The token of a new session, the account and the session. The token is shown only here.
 type TokenResult struct {
 	// Session One sign-in of a user. The `id` is a handle to list and revoke it; it
 	// is not the token and cannot be used to sign in.
@@ -1099,7 +1138,9 @@ type Track struct {
 	Title      string      `json:"title"`
 }
 
-// UpdateUserRequest Example: {"disabled":true,"role":"user"}
+// UpdateUserRequest The role of an account and whether it is disabled: both are sent at every change.
+//
+// Example: {"disabled":true,"role":"user"}
 type UpdateUserRequest struct {
 	Disabled bool `json:"disabled"`
 
@@ -1135,7 +1176,7 @@ type User struct {
 	Username string `json:"username"`
 }
 
-// UserList defines model for UserList.
+// UserList Every account.
 type UserList struct {
 	Users []User `json:"users"`
 }
@@ -1292,7 +1333,7 @@ type ListAlbumsParams struct {
 	// Order The direction of the order.
 	Order *ListAlbumsParamsOrder `form:"order,omitempty" json:"order,omitempty"`
 
-	// Artist The id of an artist, to list only its albums.
+	// Artist The id of an artist, to list only its albums. An id that no artist has gives an empty list, not an error.
 	Artist *openapi_types.UUID `form:"artist,omitempty" json:"artist,omitempty"`
 
 	// Limit The most rows in a page.
@@ -1300,7 +1341,7 @@ type ListAlbumsParams struct {
 
 	// After The `next` of the page before, to read the page after it. Opaque: do
 	// not build or change one. `400 invalid_cursor` when it is not a cursor
-	// of this list with these parameters.
+	// of this list, or was read with another `sort` or `order`.
 	After *After `form:"after,omitempty" json:"after,omitempty"`
 }
 
@@ -1332,7 +1373,7 @@ type ListArtistsParams struct {
 
 	// After The `next` of the page before, to read the page after it. Opaque: do
 	// not build or change one. `400 invalid_cursor` when it is not a cursor
-	// of this list with these parameters.
+	// of this list, or was read with another `sort` or `order`.
 	After *After `form:"after,omitempty" json:"after,omitempty"`
 }
 
@@ -1343,7 +1384,7 @@ type ListFavoriteTracksParams struct {
 
 	// After The `next` of the page before, to read the page after it. Opaque: do
 	// not build or change one. `400 invalid_cursor` when it is not a cursor
-	// of this list with these parameters.
+	// of this list, or was read with another `sort` or `order`.
 	After *After `form:"after,omitempty" json:"after,omitempty"`
 }
 
@@ -1374,7 +1415,7 @@ type ListPlaylistItemsParams struct {
 
 	// After The `next` of the page before, to read the page after it. Opaque: do
 	// not build or change one. `400 invalid_cursor` when it is not a cursor
-	// of this list with these parameters.
+	// of this list, or was read with another `sort` or `order`.
 	After *After `form:"after,omitempty" json:"after,omitempty"`
 }
 

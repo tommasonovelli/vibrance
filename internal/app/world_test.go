@@ -215,7 +215,10 @@ func decode[T any](t *testing.T, rec *httptest.ResponseRecorder) T {
 // publishMedia gives s, which is not started, the files of the library in
 // musiclib on the index of st, as the startup would publish them, and
 // returns the albums the operations ask the scanner to look at again. The
-// cache of the thumbnails is a folder of the test.
+// cache of the thumbnails is a folder of the test. It also publishes a
+// scanner of that library which nobody runs: its state is the one of a
+// scanner before its first cycle, and a cycle asked of it waits. The tests
+// of the state of the library start a server, with a scanner that runs.
 func publishMedia(t *testing.T, s *server, st *store.Store, musiclib string) *rechecks {
 	t.Helper()
 	root, err := library.OpenRoot(musiclib)
@@ -230,6 +233,8 @@ func publishMedia(t *testing.T, s *server, st *store.Store, musiclib string) *re
 	rescans := &rechecks{}
 	s.media.Store(&api.Media{Files: catalog.NewFiles(root, st, s.log), Covers: covers.New(root, st, t.TempDir(), s.log),
 		Recheck: rescans.add})
+	s.scanner.Store(library.NewScanner(library.NewIndexer(root, st, nil, library.NoCoverWarmer{}, time.Now), testWorkers,
+		testScanInterval, s.log))
 	return rescans
 }
 

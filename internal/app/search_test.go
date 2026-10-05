@@ -243,7 +243,7 @@ func TestSearchOnAnIndexThatDisagrees(t *testing.T) {
 func rescan(t *testing.T, r *running) {
 	t.Helper()
 	before := len(eventsOf(t, r.logs, "scan finished"))
-	r.s.scanner.Trigger(library.ReasonRequest)
+	r.s.scanner.Load().Trigger(library.ReasonRequest)
 	deadline := time.Now().Add(60 * time.Second)
 	for len(eventsOf(t, r.logs, "scan finished")) == before {
 		if time.Now().After(deadline) {

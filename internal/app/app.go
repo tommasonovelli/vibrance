@@ -192,8 +192,9 @@ type server struct {
 	// startup on.
 	tools *media.Tools
 	// scanner keeps the index aligned with the library, from step 7 of the
-	// startup on; stopScanner stops it and waits for it.
-	scanner     *library.Scanner
+	// startup on, when it is published, before sessions, for the operations
+	// of the state of the library; stopScanner stops it and waits for it.
+	scanner     atomic.Pointer[library.Scanner]
 	stopScanner func() error
 	// getenv reads the environment, for the two variables of the first
 	// admin, which only the code that creates it reads (§7.4).
@@ -422,14 +423,15 @@ func (s *server) startScanner() error {
 	// long as the scanner, which is the one that asks.
 	thumbs := covers.New(root, s.store, filepath.Join(s.stateDir, thumbsDir), s.log)
 	indexer := library.NewIndexer(root, s.store, s.tools, thumbs, time.Now)
-	s.scanner = library.NewScanner(indexer, s.workers, s.scanInterval, s.log)
+	scanner := library.NewScanner(indexer, s.workers, s.scanInterval, s.log)
+	s.scanner.Store(scanner)
 	// The files are served from the same Root, which the stop closes only
 	// once the HTTP server has stopped. A file that is not the one of the
 	// index asks the scanner to index its album again (§9.1).
-	s.media.Store(&api.Media{Files: catalog.NewFiles(root, s.store, s.log), Covers: thumbs, Recheck: s.scanner.Recheck})
+	s.media.Store(&api.Media{Files: catalog.NewFiles(root, s.store, s.log), Covers: thumbs, Recheck: scanner.Recheck})
 	ctx, cancel := context.WithCancel(context.Background())
 	var running sync.WaitGroup
-	running.Go(func() { s.scanner.Run(ctx) })
+	running.Go(func() { scanner.Run(ctx) })
 	running.Go(func() { thumbs.Run(ctx) })
 	s.stopScanner = func() error {
 		cancel()

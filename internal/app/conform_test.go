@@ -37,18 +37,11 @@ func init() {
 // checked: it has none.
 //
 // It is the helper of every test of the API: a test that looks at a
-// response passes it here.
-//
-// 501 not_implemented is not in the specification, on purpose: no released
-// server answers it, and DESIGN.md S20 removes the last one. Until then it
-// is checked here by hand, and is the only status that is.
+// response passes it here. No status is checked by hand: one the
+// specification does not declare for the operation, 501 included, fails.
 func assertConforms(t *testing.T, where string, req *http.Request, rec *httptest.ResponseRecorder) {
 	t.Helper()
 	wantHeaders(t, where, rec.Header())
-	if rec.Code == http.StatusNotImplemented {
-		wantCode(t, where, rec, http.StatusNotImplemented, "not_implemented")
-		return
-	}
 	doc, err := spec()
 	if err != nil {
 		t.Fatal(err)

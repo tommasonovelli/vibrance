@@ -100,8 +100,18 @@ info:
 
     ## Outside this document
 
-    `GET /health/live`, `GET /health/ready`, `GET /api/openapi.yaml`,
-    `GET /api/docs` and `GET /` are not under `/api/v1` and need no session.
+    These paths are not under `/api/v1` and need no session:
+
+    - `GET /api/openapi.yaml`: this document, as the server carries it.
+    - `GET /api/docs`: a page that shows this document and can send requests
+      to this server. It is made of files the server carries and asks no
+      other host for anything. Its request client does not add
+      `X-Vibrance-Request` by itself: to try a request other than GET, add
+      the header `X-Vibrance-Request: 1` to it.
+    - `GET /`: a redirect to `/api/docs`.
+    - `GET /health/live` and `GET /health/ready`: whether the process
+      answers, and whether its startup is complete (`503 not_ready` until
+      then). They are also outside the check of `Host`.
 servers:
   - url: /api/v1
 tags:
@@ -677,7 +687,11 @@ paths:
         scanner and answers at once with the state as it is, without waiting
         for the cycle. Requests coalesce: it answers `202` also when a cycle
         is running or waiting, and at most one cycle waits. A scan is always
-        safe to ask for: it deletes nothing.
+        safe to ask for: it deletes nothing. The state in the answer may still
+        be `idle`, with the last scan before this request: read
+        `GET /admin/library` again to follow the cycle. While MusicLib is in
+        maintenance, or its library is not there, the cycle looks at nothing
+        and the state says why.
       responses:
         "202":
           description: Queued. The state as it is now.
@@ -809,7 +823,7 @@ paths:
             default: asc
         - name: artist
           in: query
-          description: The id of an artist, to list only its albums.
+          description: The id of an artist, to list only its albums. An id that no artist has gives an empty list, not an error.
           schema:
             type: string
             format: uuid
@@ -1879,7 +1893,7 @@ components:
       description: |
         The `next` of the page before, to read the page after it. Opaque: do
         not build or change one. `400 invalid_cursor` when it is not a cursor
-        of this list with these parameters.
+        of this list, or was read with another `sort` or `order`.
       schema:
         type: string
     IfMatch:
@@ -2128,8 +2142,8 @@ components:
       description: |
         `library_changing`, with `Retry-After`: the file is not the one the
         index describes, because MusicLib has just replaced it; the scanner
-        has been asked to look at its album again. `not_ready`: the server is starting. `shutting_down`: the
-        server is stopping.
+        has been asked to look at its album again. `not_ready`: the server is
+        starting. `shutting_down`: the server is stopping.
       headers:
         X-Request-Id:
           $ref: "#/components/headers/X-Request-Id"
@@ -2244,6 +2258,7 @@ components:
         details: {}
     ServerInfo:
       type: object
+      description: "What the server is."
       required: [name, version, api_version]
       properties:
         name:
@@ -2263,7 +2278,7 @@ components:
         api_version: 1
     User:
       type: object
-      description: An account.
+      description: "An account."
       required: [id, username, role, disabled, created_at]
       properties:
         id:
@@ -2325,6 +2340,7 @@ components:
         current: true
     SessionList:
       type: object
+      description: "The live sessions of the user."
       required: [sessions]
       properties:
         sessions:
@@ -2333,6 +2349,7 @@ components:
             $ref: "#/components/schemas/Session"
     UserList:
       type: object
+      description: "Every account."
       required: [users]
       properties:
         users:
@@ -2341,6 +2358,7 @@ components:
             $ref: "#/components/schemas/User"
     LoginRequest:
       type: object
+      description: "The credentials of an account, to sign in with a cookie."
       additionalProperties: false
       required: [username, password]
       properties:
@@ -2360,6 +2378,7 @@ components:
         device_name: Firefox on the laptop
     CreateTokenRequest:
       type: object
+      description: "The credentials of an account and a name for the device, to sign in with a token."
       additionalProperties: false
       required: [username, password, device_name]
       properties:
@@ -2379,6 +2398,7 @@ components:
         device_name: Anna's phone
     LoginResult:
       type: object
+      description: "The account that signed in and its new session. The session itself is in the cookie."
       required: [user, session]
       properties:
         user:
@@ -2387,6 +2407,7 @@ components:
           $ref: "#/components/schemas/Session"
     TokenResult:
       type: object
+      description: "The token of a new session, the account and the session. The token is shown only here."
       required: [token, user, session]
       properties:
         token:
@@ -2400,6 +2421,7 @@ components:
           $ref: "#/components/schemas/Session"
     ChangePasswordRequest:
       type: object
+      description: "The password the user has and the one that replaces it."
       additionalProperties: false
       required: [current_password, new_password]
       properties:
@@ -2413,6 +2435,7 @@ components:
         new_password: a much longer and better passphrase
     CreateUserRequest:
       type: object
+      description: "A new account."
       additionalProperties: false
       required: [username, password, role]
       properties:
@@ -2430,6 +2453,7 @@ components:
         role: user
     UpdateUserRequest:
       type: object
+      description: "The role of an account and whether it is disabled: both are sent at every change."
       additionalProperties: false
       required: [role, disabled]
       properties:
@@ -2442,6 +2466,7 @@ components:
         disabled: true
     ResetUserPasswordRequest:
       type: object
+      description: "The new password of an account."
       additionalProperties: false
       required: [password]
       properties:
@@ -2452,7 +2477,7 @@ components:
         password: correct horse battery staple
     Cover:
       type: object
-      description: The cover of an album. `url` is ready to use, for example as the `src` of an image; add `&size=256` for a thumbnail.
+      description: "The cover of an album. `url` is ready to use, for example as the `src` of an image; add `&size=256` for a thumbnail."
       required: [hash, url]
       properties:
         hash:
@@ -2467,6 +2492,7 @@ components:
         url: /api/v1/albums/7d4c2f0a-3b1e-4c5d-8e9f-0a1b2c3d4e5f/cover?v=9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
     ArtistRef:
       type: object
+      description: "The artist of an album, by id and name."
       required: [id, name]
       properties:
         id:
@@ -2478,6 +2504,7 @@ components:
         name: Miles Davis
     ArtistSummary:
       type: object
+      description: "An artist as the lists give it."
       required: [id, name, album_count]
       properties:
         id:
@@ -2494,6 +2521,7 @@ components:
         album_count: 3
     ArtistDetail:
       type: object
+      description: "An artist with its available albums."
       required: [id, name, albums]
       properties:
         id:
@@ -2507,6 +2535,7 @@ components:
             $ref: "#/components/schemas/AlbumSummary"
     ArtistList:
       type: object
+      description: "One page of the artists."
       required: [artists, next]
       properties:
         artists:
@@ -2522,7 +2551,7 @@ components:
       example: eyJzIjoidGl0bGUiLCJvIjoiYXNjIn0
     AlbumRef:
       type: object
-      description: The album a track belongs to.
+      description: "The album a track belongs to."
       required: [id, title, artist, year, cover]
       properties:
         id:
@@ -2552,6 +2581,7 @@ components:
           url: /api/v1/albums/7d4c2f0a-3b1e-4c5d-8e9f-0a1b2c3d4e5f/cover?v=9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
     AlbumSummary:
       type: object
+      description: "An album as the lists give it, without its tracks."
       required: [id, title, artist, year, genre, compilation, track_count, duration_ms, cover, added_at]
       properties:
         id:
@@ -2659,6 +2689,7 @@ components:
             favorite: false
     AlbumList:
       type: object
+      description: "One page of the albums."
       required: [albums, next]
       properties:
         albums:
@@ -2669,7 +2700,7 @@ components:
           $ref: "#/components/schemas/Cursor"
     AudioFormat:
       type: object
-      description: The audio file of a track, as MusicLib wrote it.
+      description: "The audio file of a track, as MusicLib wrote it."
       required: [codec, sample_rate, channels, bit_depth, bitrate, size]
       properties:
         codec:
@@ -2707,7 +2738,7 @@ components:
         size: 31415926
     ReplayGain:
       type: object
-      description: The ReplayGain values in the tags of the file. Each is `null` when the file does not have it.
+      description: "The ReplayGain values in the tags of the file. Each is `null` when the file does not have it."
       required: [track_gain_db, track_peak, album_gain_db, album_peak]
       properties:
         track_gain_db:
@@ -2823,6 +2854,7 @@ components:
         favorite: false
     SearchResult:
       type: object
+      description: "What a search found, the best first in each list. The three lists are always present; a kind that was not asked for is empty."
       required: [artists, albums, tracks]
       properties:
         artists:
@@ -2865,6 +2897,7 @@ components:
             text: Second line of the song
     LyricsLine:
       type: object
+      description: "One line of the lyrics."
       required: [time_ms, text]
       properties:
         time_ms:
@@ -2895,6 +2928,7 @@ components:
           $ref: "#/components/schemas/Track"
     FavoriteList:
       type: object
+      description: "One page of the favorite tracks, the most recent first."
       required: [favorites, next]
       properties:
         favorites:
@@ -2905,7 +2939,7 @@ components:
           $ref: "#/components/schemas/Cursor"
     Playlist:
       type: object
-      description: A playlist of the user, without its items.
+      description: "A playlist of the user, without its items."
       required: [id, name, description, item_count, duration_ms, revision, etag, created_at, updated_at]
       properties:
         id:
@@ -2949,6 +2983,7 @@ components:
         updated_at: "2026-10-02T08:15:00.000Z"
     PlaylistList:
       type: object
+      description: "The playlists of the user, the oldest first."
       required: [playlists]
       properties:
         playlists:
@@ -2957,6 +2992,7 @@ components:
             $ref: "#/components/schemas/Playlist"
     PlaylistInput:
       type: object
+      description: "The name and the description of a playlist: both are sent, at creation and at every change."
       additionalProperties: false
       required: [name, description]
       properties:
@@ -3025,6 +3061,7 @@ components:
           favorite: true
     PlaylistItemList:
       type: object
+      description: "One page of the items of a playlist, by position."
       required: [items, next]
       properties:
         items:
@@ -3035,6 +3072,7 @@ components:
           $ref: "#/components/schemas/Cursor"
     AddPlaylistItemsRequest:
       type: object
+      description: "The tracks to add to a playlist, and where."
       additionalProperties: false
       required: [track_ids, position]
       properties:
@@ -3057,6 +3095,7 @@ components:
         position: null
     AddPlaylistItemsResult:
       type: object
+      description: "The playlist after the addition, and the items that were made, in the order of the request."
       required: [playlist, added]
       properties:
         playlist:
@@ -3068,6 +3107,7 @@ components:
             $ref: "#/components/schemas/AddedPlaylistItem"
     AddedPlaylistItem:
       type: object
+      description: "One item an addition made."
       required: [item_id, track_id, position]
       properties:
         item_id:
@@ -3083,6 +3123,7 @@ components:
         position: 12
     MovePlaylistItemRequest:
       type: object
+      description: "Where an item of a playlist goes."
       additionalProperties: false
       required: [position]
       properties:
@@ -3093,7 +3134,7 @@ components:
         position: 0
     LibraryStatus:
       type: object
-      description: The state of the library as the scanner knows it.
+      description: "The state of the library as the scanner knows it."
       required: [state, last_scan, albums, tracks, progress, musiclib_maintenance, problems]
       properties:
         state:
@@ -3126,7 +3167,11 @@ components:
         problems:
           type: array
           maxItems: 200
-          description: The album folders the last finished cycle could not index, and its warnings; at most 200. The list is made again at every cycle and is empty after a restart until the first one ends.
+          description: |
+            The album folders the last finished cycle could not index, and its
+            warnings, ordered by path; at most 200. The list is made again by
+            every cycle that goes through the library, and is empty after a
+            restart until the first one ends.
           items:
             $ref: "#/components/schemas/LibraryProblem"
       example:
@@ -3150,7 +3195,7 @@ components:
             message: A file the receipt lists is not in the folder.
     LibraryScan:
       type: object
-      description: One cycle of the scanner that went through the library.
+      description: "One cycle of the scanner that went through the library."
       required: [started_at, finished_at, ok, error]
       properties:
         started_at:
@@ -3174,7 +3219,7 @@ components:
         error: null
     LibraryProgress:
       type: object
-      description: How far a running cycle has come.
+      description: "How far a running cycle has come."
       required: [discovered, pending, indexed]
       properties:
         discovered:
@@ -3195,7 +3240,7 @@ components:
         indexed: 295
     LibraryCounts:
       type: object
-      description: The rows of the index, as they were when the last cycle began or ended.
+      description: "The rows of the index, as they were when the last cycle began or ended."
       required: [available, unavailable]
       properties:
         available:
@@ -3211,6 +3256,7 @@ components:
         unavailable: 3
     LibraryProblem:
       type: object
+      description: "One album folder the scanner could not index, or a warning about one it did."
       required: [rel_path, code, message]
       properties:
         rel_path:

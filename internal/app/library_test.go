@@ -43,7 +43,7 @@ func waitScanned(t *testing.T, r *running) library.Status {
 	for {
 		// The server has its scanner once it has logged that it started it.
 		if len(eventsOf(t, r.logs, "scanner started")) == 1 {
-			if st := r.s.scanner.Status(); st.LastScan != nil && st.LastScan.FinishedAt != nil {
+			if st := r.s.scanner.Load().Status(); st.LastScan != nil && st.LastScan.FinishedAt != nil {
 				return st
 			}
 		}
@@ -135,7 +135,7 @@ func TestStartupWithoutALibrary(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	st := r.s.scanner.Status()
+	st := r.s.scanner.Load().Status()
 	if st.State != library.StateUnavailable || st.LastScan != nil || st.Albums != (library.Counts{}) {
 		t.Fatalf("the state of a library that is not there: %+v", st)
 	}
@@ -167,7 +167,7 @@ func TestStartupRefusesAMissingMusicLibFolder(t *testing.T) {
 	if msgs := logs.messages(t); !slices.Equal(msgs, want) {
 		t.Fatalf("log events %q, want %q", msgs, want)
 	}
-	if s.scanner != nil {
+	if s.scanner.Load() != nil {
 		t.Fatal("the server has a scanner it could not start")
 	}
 }
@@ -296,7 +296,7 @@ esac`)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	if st := r.s.scanner.Status(); st.State != library.StateScanning || st.Progress == nil || st.Progress.Discovered != 6 {
+	if st := r.s.scanner.Load().Status(); st.State != library.StateScanning || st.Progress == nil || st.Progress.Discovered != 6 {
 		t.Fatalf("the state during the scan: %+v", st)
 	}
 

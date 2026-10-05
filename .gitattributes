@@ -9,3 +9,7 @@
 # (.musiclib.json) records the SHA-256 of every file, so Git must never
 # convert a line ending in it (testdata/FIXTURE.md).
 /testdata/library-v1/** -text
+
+# The vendored script of the API documentation is the file of its release,
+# byte for byte: web/docs/VENDOR.md records its SHA-256, and a test compares.
+/web/docs/scalar.js -text
