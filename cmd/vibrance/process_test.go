@@ -763,9 +763,8 @@ func TestProcessUserWhileTheServerRuns(t *testing.T) {
 		}
 		return resp.StatusCode
 	}
-	// The operation is not implemented yet (S14): reaching it is 501.
-	if got := me(); got != http.StatusNotImplemented {
-		t.Fatalf("GET /me with the session of anna: %d, want 501", got)
+	if got := me(); got != http.StatusOK {
+		t.Fatalf("GET /me with the session of anna: %d, want 200", got)
 	}
 	if code, out := runUserProcess(t, "the password of anna, second", "reset-password", "--username", "anna", "--password-stdin"); code != exitOK {
 		t.Fatalf("user reset-password: exit %d\n%s", code, out)

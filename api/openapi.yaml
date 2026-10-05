@@ -160,7 +160,9 @@ paths:
         Public. Checks the name and the password and starts a session of kind
         `cookie`, which lasts 30 days and is renewed while it is used. The
         cookie `vibrance_session` is `HttpOnly`, `SameSite=Strict`, `Path=/`,
-        and `Secure` when the public origin is `https`.
+        and `Secure` when the public origin is `https`. Its `Max-Age` is 30
+        days from the sign-in and is not sent again when the session is
+        renewed: a browser signs in again 30 days after it signed in.
 
         Passwords are checked one at a time, and a refused attempt takes about
         one second. A wrong name, a wrong password and a disabled account all
@@ -515,7 +517,8 @@ paths:
 
         `404 user_not_found`: there is no such account.
         `409 last_admin`: the change would leave no enabled admin.
-        `409 cannot_modify_self`: an admin cannot disable their own account.
+        `409 cannot_modify_self`: an admin cannot disable their own account;
+        demoting it is allowed while another enabled admin is left.
       parameters:
         - $ref: "#/components/parameters/PathId"
       requestBody:

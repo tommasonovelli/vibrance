@@ -21,7 +21,7 @@ import (
 // public ones too: the service of the sessions needs the database. Once the
 // stop has begun, a server that never published it answers shutting_down.
 func TestOperationsWaitForTheStartup(t *testing.T) {
-	doc, ops := specOperations(t)
+	_, ops := specOperations(t)
 	logs := &syncBuffer{}
 	s := mustServer(t, newLogger(logs), apiOrigin, t.TempDir(), t.TempDir())
 	for _, state := range []struct {
@@ -35,7 +35,7 @@ func TestOperationsWaitForTheStartup(t *testing.T) {
 			rec := send(s.http.Handler, req)
 			where := o.op.OperationID + " (" + state.code + ")"
 			wantCode(t, where, rec, http.StatusServiceUnavailable, state.code)
-			assertConforms(t, where, doc, o, req, rec)
+			assertConforms(t, where, req, rec)
 		}
 	}
 	// A request the boundary refuses is refused before: the 503 is not a
@@ -59,19 +59,36 @@ func TestAuthenticationOverTheNetwork(t *testing.T) {
 	if sessions == nil {
 		t.Fatal("the server is ready and has no service of the sessions")
 	}
-	admin, err := sessions.CreateToken(t.Context(), adminName, adminPassword, "tests", "192.0.2.1:1")
+	first, err := sessions.CreateToken(t.Context(), adminName, adminPassword, "tests", "192.0.2.1:1")
 	if err != nil {
 		t.Fatalf("the first admin of the startup cannot sign in: %v", err)
 	}
-	if admin.User.Role != auth.RoleAdmin {
-		t.Fatalf("the first admin is a %s", admin.User.Role)
+	if first.User.Role != auth.RoleAdmin {
+		t.Fatalf("the first admin is a %s", first.User.Role)
 	}
-	if _, err := sessions.CreateUser(t.Context(), "anna", "the password of anna", auth.RoleUser); err != nil {
-		t.Fatal(err)
-	}
-	user, err := sessions.Login(t.Context(), "anna", "the password of anna", "", "")
+	const annaPassword = "the password of anna"
+	anna, err := sessions.CreateUser(t.Context(), "anna", annaPassword, auth.RoleUser)
 	if err != nil {
 		t.Fatal(err)
+	}
+	// Each request has a session of its own: an operation may end the one
+	// it is asked with (a sign-out).
+	var tokens []string
+	adminSession := func() string {
+		in, err := sessions.CreateToken(t.Context(), adminName, adminPassword, "tests", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		tokens = append(tokens, in.Token)
+		return in.Token
+	}
+	userSession := func() string {
+		in, err := sessions.Login(t.Context(), "anna", annaPassword, "", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		tokens = append(tokens, in.Token)
+		return in.Token
 	}
 
 	client := &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{DisableKeepAlives: true}}
@@ -100,8 +117,7 @@ func TestAuthenticationOverTheNetwork(t *testing.T) {
 		if err := errors.Join(rerr, resp.Body.Close()); err != nil {
 			t.Fatal(err)
 		}
-		// The example has the Host of apiOrigin: validate as that request.
-		assertConforms(t, o.op.OperationID, doc, o, example, rec)
+		assertConforms(t, o.op.OperationID, example, rec)
 		return rec
 	}
 
@@ -111,21 +127,21 @@ func TestAuthenticationOverTheNetwork(t *testing.T) {
 		where := o.op.OperationID
 		// Nobody.
 		if rec := ask(o, nil); needs == auth.Public {
-			wantCode(t, where+" without a session", rec, http.StatusNotImplemented, "not_implemented")
+			wantReached(t, where+" without a session", rec)
 		} else {
 			wantCode(t, where+" without a session", rec, http.StatusUnauthorized, auth.CodeLoginRequired)
 		}
 		// A user, with a cookie.
-		rec := ask(o, map[string]string{"Cookie": auth.CookieName + "=" + user.Token})
+		rec := ask(o, map[string]string{"Cookie": auth.CookieName + "=" + userSession()})
 		if needs == auth.AdminOnly {
 			wantCode(t, where+" as a user", rec, http.StatusForbidden, auth.CodeForbidden)
 		} else {
-			wantCode(t, where+" as a user", rec, http.StatusNotImplemented, "not_implemented")
+			wantReached(t, where+" as a user", rec)
 		}
 		// The admin, with a bearer token, and with a cookie of the user
 		// that the bearer token wins over.
-		rec = ask(o, map[string]string{"Authorization": "Bearer " + admin.Token, "Cookie": auth.CookieName + "=" + user.Token})
-		wantCode(t, where+" as the admin", rec, http.StatusNotImplemented, "not_implemented")
+		rec = ask(o, map[string]string{"Authorization": "Bearer " + adminSession(), "Cookie": auth.CookieName + "=" + userSession()})
+		wantReached(t, where+" as the admin", rec)
 	}
 
 	if err := r.stop(t); err != nil {
@@ -144,13 +160,13 @@ func TestAuthenticationOverTheNetwork(t *testing.T) {
 			users[id]++
 		}
 	}
-	if authenticated != len(ops)-3 || users[admin.User.ID] != authenticated || users[user.User.ID] != authenticated || len(users) != 2 {
+	if authenticated != len(ops)-3 || users[first.User.ID] != authenticated || users[anna.ID] != authenticated || len(users) != 2 {
 		t.Fatalf("the access log names the users %v, want each of the two on %d requests", users, authenticated)
 	}
 	text := r.logs.String()
-	for _, secret := range []string{admin.Token, user.Token, adminPassword, "the password of anna"} {
+	for i, secret := range append(tokens, first.Token, adminPassword, annaPassword) {
 		if strings.Contains(text, secret) {
-			t.Fatal("the log holds a token or a password")
+			t.Fatalf("the log holds the token or password #%d", i)
 		}
 	}
 }
@@ -265,7 +281,7 @@ func startServerIn(t *testing.T, stateDir string) *running {
 func TestAuthenticatedConcurrently(t *testing.T) {
 	logs := &syncBuffer{}
 	s := mustServer(t, newLogger(logs), apiOrigin, t.TempDir(), t.TempDir())
-	token := publishSessions(t, s)
+	token := adminToken(t, publishSessions(t, s))
 	_, ops := specOperations(t)
 	done := make(chan struct{})
 	for i := range 40 {
@@ -277,7 +293,7 @@ func TestAuthenticatedConcurrently(t *testing.T) {
 			}
 			rec := send(s.http.Handler, req)
 			if rec.Code >= 500 && rec.Code != http.StatusNotImplemented {
-				t.Errorf("a concurrent request answered %d: %s", rec.Code, rec.Body.String())
+				t.Errorf("a concurrent request answered %d: %s", rec.Code, redacted(rec))
 			}
 		}()
 	}

@@ -9,26 +9,38 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 	"unicode"
 
 	"github.com/getkin/kin-openapi/openapi3"
 
+	"vibrance/internal/auth"
 	"vibrance/internal/httpx"
+	"vibrance/internal/store"
 )
 
 // A UUID in the canonical form, for the ids of the paths.
 const someID = "0199a5c0-7b1e-7c3a-9d2f-4b6a8c0e1f23"
 
+// testCost is argon2id with little memory and one pass: the tests make a
+// session for every request.
+var testCost = auth.Cost{MemoryKiB: 64, Time: 1, Threads: 1}
+
 // testHandler is a router with the operations of the specification the
-// binary carries, on srv, and its log. Every other path is a 404, as in the
-// server. The checks of Host, Origin and X-Vibrance-Request are not here:
-// they are in front of the router (internal/app). Nor is the authentication:
-// every request reaches its operation, as one with a session would.
-func testHandler(t *testing.T, srv StrictServerInterface) (http.Handler, *bytes.Buffer) {
+// binary carries, and its log. The operations are those of a Server on a
+// database of its own with one admin, as wrap returns them (nil: as they
+// are). Every other path is a 404, as in the server. The checks of Host,
+// Origin and X-Vibrance-Request are not here: they are in front of the
+// router (internal/app). The authentication is: a request without
+// credentials of its own is sent with a new session of the admin, so that
+// it reaches its operation.
+func testHandler(t *testing.T, wrap func(Server) StrictServerInterface) (http.Handler, *bytes.Buffer) {
 	t.Helper()
 	logs := &bytes.Buffer{}
 	log := slog.New(slog.NewJSONHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
@@ -36,10 +48,50 @@ func testHandler(t *testing.T, srv StrictServerInterface) (http.Handler, *bytes.
 	if err != nil {
 		t.Fatal(err)
 	}
+	st, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "vibrance.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := st.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	accounts, err := auth.NewService(st, testCost, time.Now, slog.New(slog.DiscardHandler))
+	if err != nil {
+		t.Fatal(err)
+	}
+	const adminPassword = "the password of the admin of the tests"
+	if _, err := accounts.CreateUser(t.Context(), "admin", adminPassword, auth.RoleAdmin); err != nil {
+		t.Fatal(err)
+	}
+	published := &atomic.Pointer[auth.Service]{}
+	published.Store(accounts)
+	var srv StrictServerInterface = NewServer(published, "https://vibrance.example.net")
+	if wrap != nil {
+		srv = wrap(srv.(Server))
+	}
 	mux := http.NewServeMux()
-	Register(mux, doc, srv, func(next http.Handler) http.Handler { return next }, log)
+	Register(mux, doc, srv, accounts.Middleware(Access(doc), log), log)
 	mux.Handle("/", httpx.NotFound(log))
-	return mux, logs
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") == "" && r.Header.Get("Cookie") == "" {
+			in, err := accounts.CreateToken(r.Context(), "admin", adminPassword, "tests", "")
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			r.Header.Set("Authorization", "Bearer "+in.Token)
+		}
+		mux.ServeHTTP(w, r)
+	}), logs
+}
+
+// implemented are the operations a step has implemented. Every other one
+// answers 501 not_implemented until its step moves it here.
+var implemented = []string{
+	"getServerInfo", "login", "createToken", "logout", "getMe", "changePassword", "listSessions", "revokeSession",
+	"listUsers", "createUser", "getUser", "updateUser", "deleteUser", "resetUserPassword",
 }
 
 // exampleRequest builds a request for one operation of the specification
@@ -113,41 +165,54 @@ func wantError(t *testing.T, where string, rec *httptest.ResponseRecorder, statu
 	return *body.Message
 }
 
-// Until its step implements it, every operation of the specification is
-// routed and answers 501 not_implemented. A path of the specification the
-// generated router did not know would answer 404 here.
-func TestEveryOperationAnswersNotImplemented(t *testing.T) {
+// Every operation of the specification is routed. Until its step implements
+// it, it answers 501 not_implemented; once implemented, never. A path of the
+// specification the generated router did not know would answer 404 here.
+func TestEveryOperationIsRouted(t *testing.T) {
 	doc := loadSpec(t)
-	handler, _ := testHandler(t, Server{})
+	handler, _ := testHandler(t, nil)
 
 	ops := operations(doc)
 	if len(ops) != len(designOperations) {
 		t.Fatalf("the specification has %d operations, the design %d", len(ops), len(designOperations))
 	}
+	done := 0
 	for _, o := range ops {
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, exampleRequest(t, o))
-		wantError(t, o.op.OperationID, rec, http.StatusNotImplemented, "not_implemented")
+		if !slices.Contains(implemented, o.op.OperationID) {
+			wantError(t, o.op.OperationID, rec, http.StatusNotImplemented, "not_implemented")
+			continue
+		}
+		done++
+		if rec.Code == http.StatusNotImplemented || rec.Code == http.StatusNotFound && strings.Contains(rec.Body.String(), `"not_found"`) {
+			t.Errorf("%s is implemented and answers %d", o.op.OperationID, rec.Code)
+		}
+	}
+	if done != len(implemented) {
+		t.Fatalf("%d implemented operations found in the specification, want %d", done, len(implemented))
 	}
 }
 
 // §8.1: HEAD is answered wherever GET is. The router of net/http sends the
-// HEAD of a GET pattern to the same operation.
+// HEAD of a GET pattern to the same operation, which answers as to the GET.
 func TestHeadReachesTheOperation(t *testing.T) {
 	doc := loadSpec(t)
-	handler, _ := testHandler(t, Server{})
+	handler, _ := testHandler(t, nil)
 
 	heads := 0
 	for _, o := range operations(doc) {
 		if o.method != http.MethodGet {
 			continue
 		}
+		get := httptest.NewRecorder()
+		handler.ServeHTTP(get, exampleRequest(t, o))
 		req := exampleRequest(t, o)
 		req.Method = http.MethodHead
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
-		if rec.Code != http.StatusNotImplemented {
-			t.Errorf("HEAD %s: status %d, want 501 from the operation", o.path, rec.Code)
+		if rec.Code != get.Code || rec.Code == http.StatusMethodNotAllowed {
+			t.Errorf("HEAD %s: status %d, want the %d of the GET", o.path, rec.Code, get.Code)
 		}
 		heads++
 	}
@@ -160,7 +225,7 @@ func TestHeadReachesTheOperation(t *testing.T) {
 // the error model, and never reaches the operation.
 func TestMalformedRequests(t *testing.T) {
 	doc := loadSpec(t)
-	handler, _ := testHandler(t, Server{})
+	handler, _ := testHandler(t, nil)
 	errorSchema := doc.Components.Schemas["Error"].Value
 
 	check := func(where string, req *http.Request) {
@@ -241,7 +306,7 @@ func (f failing) GetServerInfo(context.Context, GetServerInfoRequestObject) (Get
 // in the log and never in the response (§8.1).
 func TestUnexpectedErrorHidesItsCause(t *testing.T) {
 	const cause = "open /var/lib/vibrance/vibrance.db: disk on fire"
-	handler, logs := testHandler(t, failing{err: errors.New(cause)})
+	handler, logs := testHandler(t, func(s Server) StrictServerInterface { return failing{Server: s, err: errors.New(cause)} })
 
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, BasePath+"/server", nil))
@@ -259,8 +324,8 @@ func TestUnexpectedErrorHidesItsCause(t *testing.T) {
 	// The other operations are untouched, and a 501 is not logged.
 	logs.Reset()
 	rec = httptest.NewRecorder()
-	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, BasePath+"/me", nil))
-	wantError(t, "getMe", rec, http.StatusNotImplemented, "not_implemented")
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, BasePath+"/tracks/"+someID, nil))
+	wantError(t, "getTrack", rec, http.StatusNotImplemented, "not_implemented")
 	if logs.Len() != 0 {
 		t.Errorf("a 501 was logged: %q", logs.String())
 	}
@@ -268,7 +333,7 @@ func TestUnexpectedErrorHidesItsCause(t *testing.T) {
 
 // The operations are served under /api/v1 and nowhere else.
 func TestOperationsLiveUnderTheBasePath(t *testing.T) {
-	handler, _ := testHandler(t, Server{})
+	handler, _ := testHandler(t, nil)
 	for _, target := range []string{"/server", "/api/server", "/api/v2/server", "/api/v1", "/api/v1/", "/api/v1/nothing"} {
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, target, nil))

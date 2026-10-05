@@ -9,14 +9,13 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/getkin/kin-openapi/openapi3"
-	"github.com/getkin/kin-openapi/openapi3filter"
-	"github.com/getkin/kin-openapi/routers"
 	"github.com/google/uuid"
 
 	"vibrance/internal/api"
@@ -37,28 +36,38 @@ const someID = "0199a5c0-7b1e-7c3a-9d2f-4b6a8c0e1f23"
 // apiHandler is the handler of a server for apiOrigin, as net/http would call
 // it, and its log. The server is not started: it has only its service of
 // the sessions, on a database of its own, with one admin. A request that
-// carries no credentials of its own is sent with the bearer token of that
-// admin, so that it reaches its operation; one that carries some is sent
-// as it is.
+// carries no credentials of its own is sent with a new bearer token of that
+// admin, so that it reaches its operation whatever the requests before it
+// did (a sign-out revokes its session); one that carries some is sent as it
+// is.
 func apiHandler(t *testing.T) (http.Handler, *syncBuffer) {
 	t.Helper()
 	logs := &syncBuffer{}
 	s := mustServer(t, newLogger(logs), apiOrigin, t.TempDir(), t.TempDir())
-	token := publishSessions(t, s)
+	sessions := publishSessions(t, s)
 	h := s.http.Handler
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") == "" && r.Header.Get("Cookie") == "" {
-			r.Header.Set("Authorization", "Bearer "+token)
+			r.Header.Set("Authorization", "Bearer "+adminToken(t, sessions))
 		}
 		h.ServeHTTP(w, r)
 	}), logs
 }
 
+// adminToken signs the first admin in with a new token.
+func adminToken(t *testing.T, sessions *auth.Service) string {
+	t.Helper()
+	in, err := sessions.CreateToken(t.Context(), adminName, adminPassword, "tests", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return in.Token
+}
+
 // publishSessions gives s, which is not started, the service of the
 // sessions that its startup would publish, on a new database with one
-// admin, and returns a token of that admin. What the service logs is not
-// in the log of s.
-func publishSessions(t *testing.T, s *server) string {
+// admin, and returns it. What the service logs is not in the log of s.
+func publishSessions(t *testing.T, s *server) *auth.Service {
 	t.Helper()
 	st, err := store.Open(t.Context(), filepath.Join(t.TempDir(), databaseFile))
 	if err != nil {
@@ -76,12 +85,8 @@ func publishSessions(t *testing.T, s *server) string {
 	if err := sessions.Bootstrap(t.Context(), env(adminEnv)); err != nil {
 		t.Fatal(err)
 	}
-	in, err := sessions.CreateToken(t.Context(), adminName, adminPassword, "tests", "")
-	if err != nil {
-		t.Fatal(err)
-	}
 	s.sessions.Store(sessions)
-	return in.Token
+	return sessions
 }
 
 // operation is one operation of the specification.
@@ -198,7 +203,7 @@ func errorBody(t *testing.T, where string, rec *httptest.ResponseRecorder) (code
 		Details *map[string]any `json:"details"`
 	}
 	if err := dec.Decode(&body); err != nil || body.Code == nil || body.Message == nil || body.Details == nil {
-		t.Errorf("%s: the body is not {code, message, details}: %v (%q)", where, err, rec.Body.String())
+		t.Errorf("%s: the body is not {code, message, details}: %v (%q)", where, err, redacted(rec))
 		return "", ""
 	}
 	return *body.Code, *body.Message
@@ -208,7 +213,7 @@ func errorBody(t *testing.T, where string, rec *httptest.ResponseRecorder) (code
 func wantCode(t *testing.T, where string, rec *httptest.ResponseRecorder, status int, code string) {
 	t.Helper()
 	if rec.Code != status {
-		t.Errorf("%s: status %d, want %d (%s)", where, rec.Code, status, rec.Body.String())
+		t.Errorf("%s: status %d, want %d (%s)", where, rec.Code, status, redacted(rec))
 		return
 	}
 	if got, _ := errorBody(t, where, rec); got != code {
@@ -216,34 +221,24 @@ func wantCode(t *testing.T, where string, rec *httptest.ResponseRecorder, status
 	}
 }
 
-// assertConforms checks a response of an operation against the
-// specification (I10), with kin-openapi: the status is one the operation
-// declares, the headers it declares as required are there, and the body
-// matches the schema of that status. req is the request that was answered.
-//
-// 501 not_implemented is not in the specification, on purpose: no released
-// server answers it, and DESIGN.md S20 removes the last one. Until then it
-// is checked here by hand, and is the only status that is.
-func assertConforms(t *testing.T, where string, doc *openapi3.T, o operation, req *http.Request, rec *httptest.ResponseRecorder) {
+// refusals are the codes with which the boundary, the validation and the
+// authentication refuse a request before its operation runs.
+var refusals = []string{"host_not_allowed", "origin_not_allowed", "request_header_required", "body_too_large",
+	"invalid_request", "login_required", "forbidden", "not_found", "method_not_allowed", "not_ready", "shutting_down"}
+
+// wantReached checks that a request reached its operation: whatever the
+// operation answered, it is not a refusal of what is in front of it, nor
+// a failure.
+func wantReached(t *testing.T, where string, rec *httptest.ResponseRecorder) {
 	t.Helper()
-	wantHeaders(t, where, rec.Header())
-	if rec.Code == http.StatusNotImplemented {
-		wantCode(t, where, rec, http.StatusNotImplemented, "not_implemented")
+	if rec.Code >= 500 && rec.Code != http.StatusNotImplemented {
+		t.Errorf("%s: status %d (%s)", where, rec.Code, redacted(rec))
 		return
 	}
-	input := &openapi3filter.ResponseValidationInput{
-		RequestValidationInput: &openapi3filter.RequestValidationInput{
-			Request: req,
-			Route:   &routers.Route{Spec: doc, Path: o.path, PathItem: o.item, Method: o.method, Operation: o.op},
-		},
-		Status: rec.Code,
-		Header: rec.Header(),
-		// A status the operation does not declare does not conform.
-		Options: &openapi3filter.Options{IncludeResponseStatus: true},
-	}
-	input.SetBodyBytes(rec.Body.Bytes())
-	if err := openapi3filter.ValidateResponse(t.Context(), input); err != nil {
-		t.Errorf("%s: the response %d does not conform to the specification: %v\n%s", where, rec.Code, err, rec.Body.String())
+	if rec.Code >= 400 {
+		if code, _ := errorBody(t, where, rec); slices.Contains(refusals, code) {
+			t.Errorf("%s: refused with %d %s before the operation", where, rec.Code, code)
+		}
 	}
 }
 
@@ -252,21 +247,24 @@ func assertConforms(t *testing.T, where string, doc *openapi3.T, o operation, re
 // operation (I10): the refusals of Host, Origin and X-Vibrance-Request, the
 // body limit, strict JSON and the validation.
 func TestEveryOperationBehindTheBoundary(t *testing.T) {
-	doc, ops := specOperations(t)
+	_, ops := specOperations(t)
 	handler, logs := apiHandler(t)
 
 	check := func(o operation, what string, req *http.Request, status int, code string) {
 		t.Helper()
 		where := o.op.OperationID + ": " + what
 		rec := send(handler, req)
-		wantCode(t, where, rec, status, code)
-		assertConforms(t, where, doc, o, req, rec)
+		if status == 0 {
+			wantReached(t, where, rec)
+		} else {
+			wantCode(t, where, rec, status, code)
+		}
+		assertConforms(t, where, req, rec)
 	}
 	ids, bodies, writes := 0, 0, 0
 	for _, o := range ops {
-		// As it should be asked: it reaches the operation, which no step
-		// has implemented yet.
-		check(o, "a valid request", o.example(t), http.StatusNotImplemented, "not_implemented")
+		// As it should be asked: it reaches the operation.
+		check(o, "a valid request", o.example(t), 0, "")
 
 		req := o.example(t)
 		req.Host = "evil.example"
@@ -286,7 +284,7 @@ func TestEveryOperationBehindTheBoundary(t *testing.T) {
 
 		req = o.example(t)
 		req.Header.Set("Origin", apiOrigin)
-		check(o, "the right Origin", req, http.StatusNotImplemented, "not_implemented")
+		check(o, "the right Origin", req, 0, "")
 
 		if o.method != http.MethodGet {
 			writes++
@@ -343,8 +341,8 @@ func TestEveryOperationBehindTheBoundary(t *testing.T) {
 	}
 }
 
-// HEAD is answered wherever GET is, behind the same boundary; its answers
-// have the headers of a GET and nothing a HEAD must not have.
+// HEAD is answered wherever GET is, behind the same boundary, as the GET is;
+// its answers have the headers of a GET and nothing a HEAD must not have.
 func TestHeadBehindTheBoundary(t *testing.T) {
 	_, ops := specOperations(t)
 	handler, _ := apiHandler(t)
@@ -352,13 +350,16 @@ func TestHeadBehindTheBoundary(t *testing.T) {
 		if o.method != http.MethodGet {
 			continue
 		}
+		get := send(handler, o.example(t))
 		req := o.example(t)
 		req.Method = http.MethodHead
 		rec := send(handler, req)
-		if rec.Code != http.StatusNotImplemented {
-			t.Errorf("HEAD %s: status %d, want the 501 of the operation", o.path, rec.Code)
+		// The recorder keeps what the handler wrote; net/http sends no body
+		// with the answer to a HEAD (TestRoutes asks one over the network).
+		if rec.Code != get.Code {
+			t.Errorf("HEAD %s: status %d, want the %d of the GET", o.path, rec.Code, get.Code)
 		}
-		wantHeaders(t, "HEAD "+o.path, rec.Header())
+		assertConforms(t, "HEAD "+o.path, req, rec)
 
 		req = o.example(t)
 		req.Method = http.MethodHead
@@ -639,13 +640,13 @@ func TestBoundaryOverTheNetwork(t *testing.T) {
 		status       int
 		code         string
 	}{
-		{"an operation", "GET", "/api/v1/server", r.addr, nil, "", 501, "not_implemented"},
+		{"an operation", "GET", "/api/v1/server", r.addr, nil, "", 200, ""},
 		{"an operation for another host", "GET", "/api/v1/server", "evil.example", nil, "", 421, "host_not_allowed"},
 		{"an operation for the host without its port", "GET", "/api/v1/server", "127.0.0.1", nil, "", 421, "host_not_allowed"},
 		{"an operation from Origin: null", "GET", "/api/v1/server", r.addr, map[string]string{"Origin": "null"}, "", 403, "origin_not_allowed"},
-		{"an operation from its own origin", "GET", "/api/v1/server", r.addr, map[string]string{"Origin": base}, "", 501, "not_implemented"},
+		{"an operation from its own origin", "GET", "/api/v1/server", r.addr, map[string]string{"Origin": base}, "", 200, ""},
 		{"a sign-in without the header", "POST", "/api/v1/auth/login", r.addr, map[string]string{"Content-Type": "application/json"}, `{"username":"anna","password":"correct horse battery"}`, 403, "request_header_required"},
-		{"a sign-in", "POST", "/api/v1/auth/login", r.addr, write, `{"username":"anna","password":"correct horse battery"}`, 501, "not_implemented"},
+		{"a sign-in of nobody", "POST", "/api/v1/auth/login", r.addr, write, `{"username":"anna","password":"correct horse battery"}`, 401, "invalid_credentials"},
 		{"a sign-in with the password twice", "POST", "/api/v1/auth/login", r.addr, write, `{"username":"anna","password":"a","password":"b"}`, 400, "invalid_request"},
 		{"a sign-in with an unknown key", "POST", "/api/v1/auth/login", r.addr, write, `{"username":"anna","password":"a","admin":true}`, 400, "invalid_request"},
 		{"a sign-in of 1 MiB + 1 byte", "POST", "/api/v1/auth/login", r.addr, write, strings.Repeat(" ", httpx.MaxBodyBytes) + "1", 413, "body_too_large"},
@@ -664,9 +665,18 @@ func TestBoundaryOverTheNetwork(t *testing.T) {
 	if err := r.stop(t); err != nil {
 		t.Fatal(err)
 	}
+	refused := 0
 	for _, ev := range r.logs.events(t) {
+		if ev["msg"] == "sign-in refused" && ev["level"] == "WARN" {
+			// The refused sign-in of anna, who has no account.
+			refused++
+			continue
+		}
 		if ev["level"] == "ERROR" || ev["level"] == "WARN" {
 			t.Errorf("the run logged %v", ev)
 		}
+	}
+	if refused != 1 {
+		t.Errorf("%d refused sign-ins logged, want 1", refused)
 	}
 }

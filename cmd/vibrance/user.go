@@ -47,10 +47,16 @@ func user(args []string, euid int, stdin io.Reader, stdout io.Writer, stateDir s
 		log.Error("vibrance must not run as root: run it as the user of the server", "code", app.CodeRunAsRoot)
 		return exitUsage
 	}
-	if c.name == "create" {
-		// A name that cannot be one is refused before the database is
-		// opened, or created (§11.4).
+	// A name that cannot be one is refused before the database is opened,
+	// or created (§11.4). reset-password finds the account as a sign-in
+	// does, in lower case; create takes the name as it is.
+	switch c.name {
+	case "create":
 		if err := auth.CheckUsername(c.username); err != nil {
+			return userFailed(log, err)
+		}
+	case "reset-password":
+		if err := auth.CheckUsername(auth.FoldUsername(c.username)); err != nil {
 			return userFailed(log, err)
 		}
 	}

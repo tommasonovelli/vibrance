@@ -1030,7 +1030,17 @@ func TestResetPasswordRevokesEverySession(t *testing.T) {
 	f.login(t, "alice", otherPassword)
 
 	wantRefusal(t, cli.ResetPassword(t.Context(), "nobody", otherPassword), http.StatusNotFound, CodeUserNotFound)
-	wantRefusal(t, cli.ResetPassword(t.Context(), "ALICE", otherPassword), http.StatusNotFound, CodeUserNotFound)
+	// The name is compared in lower case, as a sign-in compares it; a name
+	// that cannot be one is refused as such, before anything is hashed.
+	again := f.login(t, "alice", otherPassword)
+	if err := cli.ResetPassword(t.Context(), "ALICE", otherPassword); err != nil {
+		t.Fatalf("a reset of ALICE: %v", err)
+	}
+	_, err = f.Authenticate(t.Context(), again.Session.Kind, again.Token)
+	wantRefusal(t, err, http.StatusUnauthorized, CodeLoginRequired)
+	for _, name := range []string{"-alice", "Klice", "al", "alice smith", ""} {
+		wantRefusal(t, cli.ResetPassword(t.Context(), name, otherPassword), http.StatusUnprocessableEntity, CodeUsernameInvalid)
+	}
 	wantRefusal(t, cli.ResetPassword(t.Context(), "alice", "short"), http.StatusUnprocessableEntity, CodePasswordInvalid)
 	wantRefusal(t, cli.ResetPassword(t.Context(), "alice", "a password with\na line break"), http.StatusUnprocessableEntity, CodePasswordInvalid)
 	f.login(t, "alice", otherPassword)
@@ -1213,10 +1223,10 @@ func TestCheckPassword(t *testing.T) {
 	}
 }
 
-func TestLowerASCII(t *testing.T) {
+func TestFoldUsername(t *testing.T) {
 	for in, want := range map[string]string{"": "", "alice": "alice", "ALICE": "alice", "A.b-C_9": "a.b-c_9", "K": "K", "À": "À", "Z[": "z["} {
-		if got := lowerASCII(in); got != want {
-			t.Errorf("lowerASCII(%q) = %q, want %q", in, got, want)
+		if got := FoldUsername(in); got != want {
+			t.Errorf("FoldUsername(%q) = %q, want %q", in, got, want)
 		}
 	}
 }

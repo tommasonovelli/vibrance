@@ -26,6 +26,8 @@ const (
 	CodeUsernameInvalid        = "username_invalid"
 	CodePasswordInvalid        = "password_invalid"
 	CodeCurrentPasswordInvalid = "current_password_invalid"
+	CodeLastAdmin              = "last_admin"
+	CodeCannotModifySelf       = "cannot_modify_self"
 )
 
 // The limits of a password (§7.1): 12 to 1024 bytes.
@@ -88,10 +90,11 @@ func CheckPassword(password string) error {
 	return &httpx.Error{Status: http.StatusUnprocessableEntity, Code: CodePasswordInvalid, Message: rule}
 }
 
-// lowerASCII lowers the ASCII letters of a name and nothing else: the names
-// of the accounts are ASCII, and the lower case of Unicode would make
-// U+212A, the Kelvin sign, the k of an account.
-func lowerASCII(s string) string {
+// FoldUsername is a user name as a sign-in compares it (§7.1): it lowers the
+// ASCII letters of the name and nothing else. The names of the accounts are
+// ASCII, and the lower case of Unicode would make U+212A, the Kelvin sign,
+// the k of an account.
+func FoldUsername(s string) string {
 	b := []byte(s)
 	for i, c := range b {
 		if 'A' <= c && c <= 'Z' {

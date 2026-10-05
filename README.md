@@ -100,6 +100,8 @@ Passwords are stored as argon2id hashes in the PHC format (64 MiB, 3 passes), an
 
 Every operation of the API but `GET /server`, `POST /auth/login` and `POST /auth/tokens` needs a session: `401 login_required` without one, and `403 forbidden` for an account that is not an admin on the operations under `/admin/`. When a request carries both a bearer token and the cookie, the bearer token counts. A session is used the way it was made: the token of `POST /auth/tokens` as a bearer token, the cookie of `POST /auth/login` as the cookie. Until the server is ready the operations answer `503 not_ready`. The access log has the `user_id` of a request that carried a session.
 
+`POST /auth/login` sets the cookie with `HttpOnly`, `SameSite=Strict`, `Path=/` and `Max-Age` of 30 days from the sign-in, and `Secure` only when `VIBRANCE_PUBLIC_ORIGIN` is `https` (a browser drops a `Secure` cookie over plain http). `POST /auth/logout` revokes the session of the request and expires the cookie. An admin manages the accounts under `/admin/users`: the last enabled admin cannot be demoted, disabled or deleted (`409 last_admin`), and an admin cannot disable or delete their own account (`409 cannot_modify_self`); disabling an account, or setting its password, signs it out at once, and deleting it deletes its sessions, favorites and playlists. An admin sees no favorites or playlists but their own.
+
 The accounts can also be managed from the machine of the server, while it runs:
 
 ```sh
@@ -108,7 +110,7 @@ printf '%s' "$PASSWORD" | docker exec -i <container> vibrance user reset-passwor
 docker exec <container> vibrance user list
 ```
 
-The password is read from standard input only, never from the command line; a final line break is dropped. A reset signs the user out at once. The exit code is 0 when done, 2 for arguments, a name or a password that are not valid, and 1 otherwise (`username_taken`, `user_not_found`).
+The password is read from standard input only, never from the command line; a final line break is dropped. `reset-password` finds the account as a sign-in does, without regard to the case of the name. A reset signs the user out at once. The exit code is 0 when done, 2 for arguments, a name or a password that are not valid, and 1 otherwise (`username_taken`, `user_not_found`).
 
 ## The media tools
 

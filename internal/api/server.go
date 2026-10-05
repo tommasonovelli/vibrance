@@ -1,12 +1,14 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"slices"
 	"strings"
+	"sync/atomic"
 
 	"github.com/getkin/kin-openapi/openapi3"
 
@@ -26,7 +28,22 @@ var errNotImplemented = &httpx.Error{Status: http.StatusNotImplemented, Code: "n
 	Message: "This operation is not implemented yet."}
 
 // Server implements every operation of the specification.
-type Server struct{}
+type Server struct {
+	// accounts is the service of the accounts and of their sessions. The
+	// server publishes it once its startup is complete; until then the
+	// authentication answers 503 and no operation runs.
+	accounts *atomic.Pointer[auth.Service]
+	// secureCookie says that the public origin is https: the session cookie
+	// is Secure then, and only then (DESIGN.md §7.3, T14).
+	secureCookie bool
+}
+
+// NewServer returns the operations of a server whose public origin is
+// publicOrigin (VIBRANCE_PUBLIC_ORIGIN), on the service of the accounts
+// that accounts holds once the startup has published it.
+func NewServer(accounts *atomic.Pointer[auth.Service], publicOrigin string) Server {
+	return Server{accounts: accounts, secureCookie: strings.HasPrefix(publicOrigin, "https://")}
+}
 
 // The compiler checks that no operation of the specification is missing.
 var _ StrictServerInterface = Server{}
@@ -85,7 +102,7 @@ func Access(doc *openapi3.T) map[string]auth.Access {
 // mux.
 func Register(mux *http.ServeMux, doc *openapi3.T, srv StrictServerInterface, authenticate MiddlewareFunc, log *slog.Logger) {
 	e := errorWriter{log: log}
-	strict := NewStrictHandlerWithOptions(srv, nil, StrictHTTPServerOptions{
+	strict := NewStrictHandlerWithOptions(srv, []StrictMiddlewareFunc{withRemoteAddr}, StrictHTTPServerOptions{
 		RequestErrorHandlerFunc:  e.badBody,
 		ResponseErrorHandlerFunc: e.failed,
 	})
@@ -100,6 +117,24 @@ func Register(mux *http.ServeMux, doc *openapi3.T, srv StrictServerInterface, au
 	for path, item := range doc.Paths.Map() {
 		mux.Handle(BasePath+path, httpx.MethodNotAllowed(log, allowed(item)))
 	}
+}
+
+type remoteAddrKey struct{}
+
+// withRemoteAddr gives an operation the address its request came from, for
+// the log of a refused sign-in: the strict operations see only their
+// context. It is the address of the connection; X-Forwarded-For is never
+// read (§7.6).
+func withRemoteAddr(f StrictHandlerFunc, _ string) StrictHandlerFunc {
+	return func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
+		return f(context.WithValue(ctx, remoteAddrKey{}, r.RemoteAddr), w, r, request)
+	}
+}
+
+// remoteAddr is the address withRemoteAddr put in ctx, or "".
+func remoteAddr(ctx context.Context) string {
+	addr, _ := ctx.Value(remoteAddrKey{}).(string)
+	return addr
 }
 
 // allowed is the Allow header of a path: its methods, in a fixed order. The

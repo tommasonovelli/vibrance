@@ -9,6 +9,19 @@ import (
 	"context"
 )
 
+const countEnabledAdmins = `-- name: CountEnabledAdmins :one
+SELECT count(*) FROM users WHERE role = 'admin' AND disabled = 0
+`
+
+// CountEnabledAdmins counts the admins that can sign in: the last one cannot
+// be deleted, demoted or disabled (DESIGN.md 7.5).
+func (q *Queries) CountEnabledAdmins(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countEnabledAdmins)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countUsers = `-- name: CountUsers :one
 SELECT count(*) FROM users
 `
@@ -46,6 +59,17 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) error {
 		arg.Role,
 		arg.CreatedAt,
 	)
+	return err
+}
+
+const deleteUser = `-- name: DeleteUser :exec
+DELETE FROM users WHERE id = ?
+`
+
+// DeleteUser deletes an account. Its sessions, favorites and playlists, with
+// their items, go with it: the foreign keys cascade (DESIGN.md 7.5).
+func (q *Queries) DeleteUser(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, deleteUser, id)
 	return err
 }
 
@@ -145,4 +169,22 @@ func (q *Queries) SetUserPassword(ctx context.Context, arg SetUserPasswordParams
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const updateUser = `-- name: UpdateUser :exec
+UPDATE users SET role = ?1, disabled = ?2 WHERE id = ?3
+`
+
+type UpdateUserParams struct {
+	Role     string
+	Disabled int64
+	ID       string
+}
+
+// UpdateUser sets the role of an account and whether it is disabled. The
+// caller revokes the sessions of an account it disables, in the same
+// transaction.
+func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) error {
+	_, err := q.db.ExecContext(ctx, updateUser, arg.Role, arg.Disabled, arg.ID)
+	return err
 }

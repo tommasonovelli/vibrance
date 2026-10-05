@@ -1,0 +1,195 @@
+package app
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"vibrance/internal/api"
+	"vibrance/internal/auth"
+	"vibrance/internal/httpx"
+	"vibrance/internal/store"
+)
+
+// account is an account of a world, with its password.
+type account struct {
+	name, password, id string
+}
+
+// world is a server that is not started, as net/http would call it, with
+// its service of the sessions published on a database of its own and three
+// accounts: the first admin and two users, anna and bob. Its log and that
+// of the service are in logs. It is ready: the health says so.
+type world struct {
+	t        *testing.T
+	s        *server
+	host     string
+	sessions *auth.Service
+	logs     *syncBuffer
+	admin    *account
+	anna     *account
+	bob      *account
+	// accounts counts the accounts newAccount made.
+	accounts int
+}
+
+// newWorld makes a world whose public origin is origin.
+func newWorld(t *testing.T, origin string) *world {
+	t.Helper()
+	logs := &syncBuffer{}
+	s := mustServer(t, newLogger(logs), origin, t.TempDir(), t.TempDir())
+	u, err := url.Parse(origin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, err := store.Open(t.Context(), filepath.Join(t.TempDir(), databaseFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := st.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	sessions, err := auth.NewService(st, testCost, time.Now, newLogger(logs))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := sessions.Bootstrap(t.Context(), env(adminEnv)); err != nil {
+		t.Fatal(err)
+	}
+	w := &world{t: t, s: s, host: u.Host, sessions: sessions, logs: logs}
+	users, err := sessions.ListUsers(t.Context())
+	if err != nil || len(users) != 1 {
+		t.Fatalf("the first admin: %v, %v", users, err)
+	}
+	w.admin = &account{name: adminName, password: adminPassword, id: users[0].ID}
+	w.anna = w.newNamedAccount("anna", "the password of anna", auth.RoleUser)
+	w.bob = w.newNamedAccount("bob", "the password of bob", auth.RoleUser)
+	s.sessions.Store(sessions)
+	s.state.Store(stateReady)
+	return w
+}
+
+func (w *world) newNamedAccount(name, password, role string) *account {
+	w.t.Helper()
+	u, err := w.sessions.CreateUser(w.t.Context(), name, password, role)
+	if err != nil {
+		w.t.Fatal(err)
+	}
+	return &account{name: name, password: password, id: u.ID}
+}
+
+// newAccount makes another account of the role, with a name of its own.
+func (w *world) newAccount(role string) *account {
+	w.t.Helper()
+	w.accounts++
+	return w.newNamedAccount(fmt.Sprintf("user%d", w.accounts), fmt.Sprintf("the password of user %d", w.accounts), role)
+}
+
+// token signs a in with a new session of kind token.
+func (w *world) token(a *account) auth.SignIn {
+	w.t.Helper()
+	in, err := w.sessions.CreateToken(w.t.Context(), a.name, a.password, "tests", "")
+	if err != nil {
+		w.t.Fatalf("signing in as %s: %v", a.name, err)
+	}
+	return in
+}
+
+// cookie signs a in with a new session of kind cookie.
+func (w *world) cookie(a *account) auth.SignIn {
+	w.t.Helper()
+	in, err := w.sessions.Login(w.t.Context(), a.name, a.password, "", "")
+	if err != nil {
+		w.t.Fatalf("signing in as %s: %v", a.name, err)
+	}
+	return in
+}
+
+// credential is how a request presents a session; nobody presents none.
+type credential func(*http.Request)
+
+func nobody(*http.Request) {}
+
+// bearer presents a session of kind token.
+func bearer(token string) credential {
+	return func(r *http.Request) { r.Header.Set("Authorization", "Bearer "+token) }
+}
+
+// sessionCookie presents a session of kind cookie.
+func sessionCookie(token string) credential {
+	return func(r *http.Request) { r.AddCookie(&http.Cookie{Name: auth.CookieName, Value: token}) }
+}
+
+// as presents a new session of kind token of a; nobody when a is nil.
+func (w *world) as(a *account) credential {
+	if a == nil {
+		return nobody
+	}
+	return bearer(w.token(a).Token)
+}
+
+// request is a request to an operation under /api/v1, as a client of the
+// server sends it: the right Host, X-Vibrance-Request with a method that
+// is not GET or HEAD, and body, when not nil, as JSON.
+func (w *world) request(method, path string, body any) *http.Request {
+	w.t.Helper()
+	var reader io.Reader
+	if body != nil {
+		b, err := json.Marshal(body)
+		if err != nil {
+			w.t.Fatal(err)
+		}
+		reader = bytes.NewReader(b)
+	}
+	req := httptest.NewRequest(method, api.BasePath+path, reader)
+	req.Host = w.host
+	req.RemoteAddr = "192.0.2.7:4321"
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if method != http.MethodGet && method != http.MethodHead {
+		req.Header.Set(httpx.RequestHeader, "1")
+	}
+	return req
+}
+
+// do sends a request with a credential and checks that the answer conforms
+// to the specification.
+func (w *world) do(method, path string, body any, c credential) *httptest.ResponseRecorder {
+	w.t.Helper()
+	req := w.request(method, path, body)
+	c(req)
+	rec := send(w.s.http.Handler, req)
+	assertConforms(w.t, method+" "+path, req, rec)
+	return rec
+}
+
+// wantStatus checks the status of a response that is not an error.
+func wantStatus(t *testing.T, where string, rec *httptest.ResponseRecorder, status int) {
+	t.Helper()
+	if rec.Code != status {
+		t.Fatalf("%s: status %d, want %d (%s)", where, rec.Code, status, redacted(rec))
+	}
+}
+
+// decode reads the JSON body of a response as T, strictly: a key T does not
+// know fails the test.
+func decode[T any](t *testing.T, rec *httptest.ResponseRecorder) T {
+	t.Helper()
+	dec := json.NewDecoder(bytes.NewReader(rec.Body.Bytes()))
+	dec.DisallowUnknownFields()
+	var v T
+	if err := dec.Decode(&v); err != nil {
+		t.Fatalf("the body is not a %T: %s (%s)", v, redact(err.Error()), redacted(rec))
+	}
+	return v
+}

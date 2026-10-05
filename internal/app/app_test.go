@@ -332,9 +332,8 @@ func TestRoutes(t *testing.T) {
 		}
 		wantJSON(t, got, 404, `{"code":"not_found","message":"There is no such path.","details":{}}`)
 	}
-	// The operations are routed, and answer 501 until their step.
-	wantJSON(t, do(t, "GET", base+"/api/v1/server"), 501,
-		`{"code":"not_implemented","message":"This operation is not implemented yet.","details":{}}`)
+	// The operations are routed.
+	wantJSON(t, do(t, "GET", base+"/api/v1/server"), 200, `{"api_version":1,"name":"Vibrance","version":"devel"}`)
 
 	if err := r.stop(t); err != nil {
 		t.Fatal(err)

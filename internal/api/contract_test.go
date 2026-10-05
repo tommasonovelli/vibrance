@@ -40,7 +40,7 @@ func TestEmbeddedSpecIsTheFile(t *testing.T) {
 // has in Allow; with one it has, the operation answers.
 func TestMethodNotAllowed(t *testing.T) {
 	doc := loadSpec(t)
-	handler, _ := testHandler(t, Server{})
+	handler, _ := testHandler(t, nil)
 
 	paths, refused := 0, 0
 	for path, item := range doc.Paths.Map() {
@@ -59,7 +59,9 @@ func TestMethodNotAllowed(t *testing.T) {
 			handler.ServeHTTP(rec, httptest.NewRequest(method, target, nil))
 			where := method + " " + path
 			if slices.Contains(has, method) {
-				if rec.Code == http.StatusMethodNotAllowed || rec.Code == http.StatusNotFound {
+				// A 404 of the operation (a user that does not exist) is an
+				// answer of the operation; the 404 of the router says not_found.
+				if rec.Code == http.StatusMethodNotAllowed || strings.Contains(rec.Body.String(), `"code":"not_found"`) {
 					t.Errorf("%s: status %d for a method the path has", where, rec.Code)
 				}
 				continue
@@ -79,7 +81,7 @@ func TestMethodNotAllowed(t *testing.T) {
 // §8.1: a path that is not in the specification answers 404 not_found in
 // the error model, whatever the method.
 func TestUnknownPaths(t *testing.T) {
-	handler, _ := testHandler(t, Server{})
+	handler, _ := testHandler(t, nil)
 	for _, target := range []string{"/server", "/api/server", "/api/v2/server", "/api/v1", "/api/v1/", "/api/v1/nothing",
 		"/api/v1/server/", "/api/v1/tracks", "/api/v1/tracks/" + someID + "/audio/x", "/api/v1/Server"} {
 		for _, method := range []string{"GET", "POST", "DELETE"} {
@@ -95,7 +97,7 @@ func TestUnknownPaths(t *testing.T) {
 // answer 400 invalid_request, in a path, in the query and in a body.
 func TestIdsHaveOneSpelling(t *testing.T) {
 	doc := loadSpec(t)
-	handler, _ := testHandler(t, Server{})
+	handler, _ := testHandler(t, nil)
 
 	spellings := map[string]string{
 		"upper case":        strings.ToUpper(someID),
@@ -184,7 +186,7 @@ func mustParse(t *testing.T, target string) *url.URL {
 // The requests of the real operations that the validator refuses: enums,
 // limits, lengths. Each answers 400 invalid_request and names the parameter.
 func TestParametersOutOfTheSpecification(t *testing.T) {
-	handler, _ := testHandler(t, Server{})
+	handler, _ := testHandler(t, nil)
 	long := strings.Repeat("a", 101)
 	for target, parameter := range map[string]string{
 		"/albums?sort=wrong":                    "sort",
@@ -254,7 +256,7 @@ func TestHostileBodies(t *testing.T) {
 		{"a move with a string for the position", "POST", "/playlists/" + someID + "/items/" + someID + "/move", `{"position":"1"}`},
 		{"a playlist with a number for the name", "POST", "/playlists", `{"name":1,"description":""}`},
 	} {
-		handler, logs := testHandler(t, Server{})
+		handler, logs := testHandler(t, nil)
 		req := httptest.NewRequest(tc.method, BasePath+tc.target, strings.NewReader(tc.body))
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
@@ -272,7 +274,7 @@ func TestHostileBodies(t *testing.T) {
 // §8.1: a body is at most 1 MiB, on every operation that takes one.
 func TestBodyLimitOnEveryOperationWithABody(t *testing.T) {
 	doc := loadSpec(t)
-	handler, _ := testHandler(t, Server{})
+	handler, _ := testHandler(t, nil)
 	bodies := 0
 	for _, o := range operations(doc) {
 		if o.op.RequestBody == nil {
@@ -310,7 +312,7 @@ func TestQuietRoutes(t *testing.T) {
 	}
 
 	// They are the patterns the router gives a request.
-	handler, _ := testHandler(t, Server{})
+	handler, _ := testHandler(t, nil)
 	for target, pattern := range map[string]string{
 		BasePath + "/tracks/" + someID + "/audio": got[1],
 		BasePath + "/albums/" + someID + "/cover": got[0],

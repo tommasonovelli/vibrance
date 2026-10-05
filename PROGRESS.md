@@ -19,8 +19,8 @@ Design: DESIGN.md (versione 0.1). Orchestratore: aggiorna questo file a ogni pas
 | S10 | Testi LRC | done | 1 | c3cc104 | 2026-10-04 · fuzz 60 s rieseguito dal revisore, 3 file LRC sporchi provati · fine fase A |
 | S11 | OpenAPI completa e pipeline di generazione | done | 1 | 8de3cbd | 2026-10-04 · specifica confrontata con il §8 riga per riga dal revisore |
 | S12 | Confine HTTP e modello degli errori | done | 1 | 1e7043a | 2026-10-04 · 33 richieste ostili provate dal revisore sul server vero |
-| S13 | Autenticazione: nucleo | done | 2 | HASH_S13 | 2026-10-04 · round 1: CHANGES REQUIRED (errore d'uso che registra gli argomenti, I5) · round 2 approvato |
-| S14 | Endpoint di autenticazione, account e amministrazione utenti | todo | | | |
+| S13 | Autenticazione: nucleo | done | 2 | 24632cb | 2026-10-04 · round 1: CHANGES REQUIRED (errore d'uso che registra gli argomenti, I5) · round 2 approvato |
+| S14 | Endpoint di autenticazione, account e amministrazione utenti | done | 1 | HASH | 2026-10-05 |
 | S15 | Catalogo: artisti, album, tracce | todo | | | |
 | S16 | Endpoint media: audio, cover, testi | todo | | | |
 | S17 | Ricerca | todo | | | |
@@ -97,11 +97,14 @@ Stati: `todo`, `in-progress`, `done`, `blocked`.
 - (S11) Più robusto dichiarare l'header `ETag` su ogni risposta che restituisce una `Playlist` (`updatePlaylist`, `removePlaylistItem`, `movePlaylistItem`, `addPlaylistItems`): oggi il client lo trova solo nel corpo. `getArtist` non dice l'ordine degli album; `listAlbums?artist=` non dice cosa risponde con un artista inesistente. Il README parla del 501 quando l'API non è ancora servita. L'incoerenza §6.5/§8.2 sui contatori «ignorati» merita una riga in NOTES.md.
 - (S12) `httpx/contract.go:110`: `http.MaxBytesReader` riceve un wrapper, quindi net/http non marca la connessione da chiudere dopo un 413; con un corpo chunked che si ferma oltre il limite il 413 arriva solo allo scadere di `ReadTimeout` (30 s). Miglioria: `Connection: close` sul 413 o il writer più interno.
 - (S12) `OPTIONS *` è servito da net/http fuori dall'handler (200 senza `X-Request-Id` né header di sicurezza): `http.Server.DisableGeneralOptionsHandler = true` lo porterebbe dentro il confine. Le risposte che net/http scrive prima di ogni handler (431, 400 per `Host` malformato) sono testo semplice senza `X-Request-Id`: inevitabili, da dire nel README.
-- (S12, per S14) Nulla fa rispondere `503 not_ready` o `shutting_down` alle rotte API durante avvio e arresto: il primo handler che usa un servizio creato all'avvio deve aggiungere il controllo. `assertConforms` vive in `internal/app/boundary_test.go`: S14 può spostarlo come helper riusabile.
+- (S12, per S14) ~~Nulla fa rispondere `503 not_ready` o `shutting_down` alle rotte API durante avvio e arresto: il primo handler che usa un servizio creato all'avvio deve aggiungere il controllo. `assertConforms` vive in `internal/app/boundary_test.go`: S14 può spostarlo come helper riusabile.~~ — chiuso in S14 (N-103/N-108; `assertConforms` in `internal/app/conform_test.go`).
 - (S12, per S16/S24) I wrapper di `ResponseWriter` nascondono `io.ReaderFrom`: niente sendfile per l'audio. Da misurare.
-- (S13, per S14) `cmd/vibrance/user.go:49-56`: `reset-password` con un nome non valido apre (e se manca crea) il database, calcola un hash di produzione e poi esce 1 con `user_not_found`, invece di uscire 2 come `create` (§11.4). `ResetPassword` (`service.go:550`) non porta il nome in minuscolo come fa il login: `--username Anna` dà `user_not_found`.
+- (S13, per S14) ~~`cmd/vibrance/user.go:49-56`: `reset-password` con un nome non valido apre (e se manca crea) il database, calcola un hash di produzione e poi esce 1 con `user_not_found`, invece di uscire 2 come `create` (§11.4). `ResetPassword` (`service.go:550`) non porta il nome in minuscolo come fa il login: `--username Anna` dà `user_not_found`.~~ — chiuso in S14 (N-108).
 - (S13) `cmd/vibrance/user_test.go:179` stampa l'intero log in caso di fallimento; `internal/auth/phc_test.go:45,51,54,58` stampa `v.encoded` (vettori pubblici). Contro la lettera di I5 sui messaggi dei test.
 - (S13) Un client che si disconnette mentre `Authenticate` legge il database produce un 500 con ERROR nel log (solo rumore). Il caso peggiore di un hash PHC ammesso (256 MiB, 16 passate) costa circa 20 volte uno di produzione e tiene lo slot globale per quel tempo.
+- (S14) `internal/api/server_test.go:135` (`wantError`) e messaggi simili di `internal/api` stampano il corpo senza oscurare i token, ora che `testHandler` monta un servizio vero che li emette: passarli da una funzione come `redact` di `internal/app` (I5 nei messaggi dei test).
+- (S14) `internal/auth/admin.go` (`UpdateUser`, `DeleteUser`): il ruolo di chi agisce è letto all'autenticazione e non riletto nella transazione; una richiesta già autorizzata di un admin appena retrocesso o eliminato può ancora completarsi (finestra di millisecondi, N-106(4)). Rileggerlo nella transazione la chiude a costo minimo. `last_admin` resta sicuro.
+- (S14) `internal/auth/admin_test.go` (`TestDeleteUserCascades`) costruisce SQL per concatenazione con gli id (solo test, UUID): meglio i parametri `?`. `adminTarget(ctx, q, actor, id, self, demotes)`: due booleani posizionali consecutivi poco leggibili.
 
 ## TO CONFIRM aperti (da riportare all'utente a fine fase)
 - N-014 (S1) Dopo un `rebuild` offline di MusicLib `.maintenance` sparisce ma `library/` resta vuota finché l'app non riparte: in quell'intervallo Vibrance vede tutti gli album non disponibili (poi tornano con gli stessi ID). Riportato all'utente a fine fase 0 (2026-10-01).
@@ -125,6 +128,8 @@ Stati: `todo`, `in-progress`, `done`, `blocked`.
 - N-099 (S13) Come una richiesta presenta la sessione: vince il bearer; un bearer non valido non è salvato dal cookie; una sessione si usa solo nel modo in cui è nata (un token di `/auth/tokens` inviato come cookie dà 401, e viceversa).
 - N-100 (S13) Uno slot di capacità 1 per ogni calcolo argon2id (non solo il login); ritardo di 1 s sui rifiuti; `current_password_invalid` arriva dopo 1 s; i rifiuti di login registrano nome (solo se ha la forma di un nome) e indirizzo.
 - N-102 (S13) Codice d'errore nuovo `admin_username_invalid`, che il design non elenca; uscita 2 per i tre codici `admin_*` del primo admin.
+- N-106 (S14) Regole di §7.5 dove il design è breve: `last_admin` prima di `cannot_modify_self`; un admin può retrocedere sé stesso se resta un altro admin abilitato; il perdente di una corsa fra due admin riceve `409 last_admin` o `401`; un admin può reimpostare la propria password via `/admin` (revoca anche la sessione corrente); `createUser` non porta il nome in minuscolo (maiuscola → `422 username_invalid`). Il revisore le accetta tutte.
+- N-107 (S14) Il cookie ha `Max-Age` 30 giorni dal login e non è rinviato al rinnovo: un browser rientra 30 giorni dopo l'accesso per quanto lo usi (come MusicLib); il rinnovo vale per i token. Alternativa più fedele all'intento del §7.3: rimandare `Set-Cookie` quando una richiesta rinnova la sessione.
 
 ## Errata al design
 Vedi la sezione «Errata» in fondo a DESIGN.md.

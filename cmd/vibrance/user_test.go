@@ -74,7 +74,8 @@ func TestUserCommands(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if code, _, _ := runUser(t, dir, secondPassword+"\r\n", "reset-password", "--username", "anna", "--password-stdin"); code != exitOK {
+	// The account is found as a sign-in finds it: case does not count.
+	if code, _, _ := runUser(t, dir, secondPassword+"\r\n", "reset-password", "--username", "Anna", "--password-stdin"); code != exitOK {
 		t.Fatalf("reset-password: exit %d", code)
 	}
 	if _, err := s.Authenticate(t.Context(), in.Session.Kind, in.Token); err == nil {
@@ -123,6 +124,8 @@ func TestUserRefusals(t *testing.T) {
 		{"a name that is taken", secondPassword, []string{"create", "--username", "anna", "--role", "admin", "--password-stdin"}, exitFailure, auth.CodeUsernameTaken},
 		{"reset of nobody", secondPassword, []string{"reset-password", "--username", "nobody", "--password-stdin"}, exitFailure, auth.CodeUserNotFound},
 		{"reset with a short password", "short", []string{"reset-password", "--username", "anna", "--password-stdin"}, exitUsage, auth.CodePasswordInvalid},
+		{"reset with a name that cannot be one", secondPassword, []string{"reset-password", "--username", "-anna", "--password-stdin"}, exitUsage, auth.CodeUsernameInvalid},
+		{"reset with a name in Unicode case", secondPassword, []string{"reset-password", "--username", "Karl", "--password-stdin"}, exitUsage, auth.CodeUsernameInvalid},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			code, out, logs := runUser(t, dir, tc.stdin, tc.args...)
@@ -168,6 +171,15 @@ func TestUserRootAndBrokenInput(t *testing.T) {
 	code = user([]string{"create", "--username", "Not A Name", "--role", "user", "--password-stdin"}, nonRoot, unread, &stdout, dir, newLogger(&logs))
 	if code != exitUsage {
 		t.Fatalf("an invalid name: exit %d", code)
+	}
+	wantLog(t, logs.Bytes(), auth.CodeUsernameInvalid)
+	wantEmpty(t, dir)
+
+	// The same for reset-password, which compares the name in lower case.
+	logs.Reset()
+	code = user([]string{"reset-password", "--username", "Not A Name", "--password-stdin"}, nonRoot, unread, &stdout, dir, newLogger(&logs))
+	if code != exitUsage {
+		t.Fatalf("an invalid name to reset: exit %d", code)
 	}
 	wantLog(t, logs.Bytes(), auth.CodeUsernameInvalid)
 	wantEmpty(t, dir)

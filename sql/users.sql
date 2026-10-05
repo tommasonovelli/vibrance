@@ -23,6 +23,22 @@ SELECT * FROM users WHERE username = ?;
 -- ListUsers returns every account, by name.
 SELECT * FROM users ORDER BY username;
 
+-- name: CountEnabledAdmins :one
+-- CountEnabledAdmins counts the admins that can sign in: the last one cannot
+-- be deleted, demoted or disabled (DESIGN.md 7.5).
+SELECT count(*) FROM users WHERE role = 'admin' AND disabled = 0;
+
+-- name: UpdateUser :exec
+-- UpdateUser sets the role of an account and whether it is disabled. The
+-- caller revokes the sessions of an account it disables, in the same
+-- transaction.
+UPDATE users SET role = sqlc.arg(role), disabled = sqlc.arg(disabled) WHERE id = sqlc.arg(id);
+
+-- name: DeleteUser :exec
+-- DeleteUser deletes an account. Its sessions, favorites and playlists, with
+-- their items, go with it: the foreign keys cascade (DESIGN.md 7.5).
+DELETE FROM users WHERE id = ?;
+
 -- name: SetUserPassword :execrows
 -- SetUserPassword replaces the password hash of an account. The caller
 -- revokes the sessions the change must end, in the same transaction.

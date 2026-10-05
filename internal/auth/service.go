@@ -176,7 +176,7 @@ func (s *Service) signIn(ctx context.Context, kind, username, password, deviceNa
 		return SignIn{}, err
 	}
 	defer s.leave()
-	name := lowerASCII(username)
+	name := FoldUsername(username)
 	in, err := s.attempt(ctx, kind, name, password, deviceName)
 	switch {
 	case errors.Is(err, errRefused):
@@ -533,12 +533,34 @@ func (s *Service) addUser(ctx context.Context, username, password, role string, 
 }
 
 // ResetPassword gives the account called username a new password and
-// revokes every session of that account (§7.3, §7.4). The refusals are
+// revokes every session of that account (§7.3, §7.4). The name is compared
+// in lower case, as a sign-in does. The refusals are 422 username_invalid,
 // 422 password_invalid and 404 user_not_found.
 func (s *Service) ResetPassword(ctx context.Context, username, password string) error {
+	name := FoldUsername(username)
+	if err := CheckUsername(name); err != nil {
+		return err
+	}
+	return s.resetPassword(ctx, password, func(q *store.Queries) (store.User, error) {
+		return q.GetUserByUsername(ctx, name)
+	})
+}
+
+// ResetUserPassword is ResetPassword for the account id, the reset an admin
+// makes through the API.
+func (s *Service) ResetUserPassword(ctx context.Context, id, password string) error {
+	return s.resetPassword(ctx, password, func(q *store.Queries) (store.User, error) {
+		return q.GetUser(ctx, id)
+	})
+}
+
+// resetPassword gives the account that find reads a new password and
+// revokes all its sessions, in one transaction.
+func (s *Service) resetPassword(ctx context.Context, password string, find func(q *store.Queries) (store.User, error)) error {
 	if err := CheckPassword(password); err != nil {
 		return err
 	}
+	// Outside the transaction: a write transaction is short (I11).
 	hash, err := s.hash(ctx, password)
 	if err != nil {
 		return err
@@ -547,7 +569,7 @@ func (s *Service) ResetPassword(ctx context.Context, username, password string) 
 	found := true
 	err = s.store.WithWriteTx(ctx, func(q *store.Queries) error {
 		var err error
-		user, err = q.GetUserByUsername(ctx, username)
+		user, err = find(q)
 		switch {
 		case noRows(ctx, err):
 			found = false
@@ -566,7 +588,7 @@ func (s *Service) ResetPassword(ctx context.Context, username, password string) 
 	case err != nil:
 		return fmt.Errorf("auth: resetting a password: %w", err)
 	case !found:
-		return &httpx.Error{Status: http.StatusNotFound, Code: CodeUserNotFound, Message: "There is no such user."}
+		return userNotFound()
 	}
 	s.log.Info("password reset", "username", user.Username, "user_id", user.ID)
 	return nil
