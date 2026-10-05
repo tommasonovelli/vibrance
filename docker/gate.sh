@@ -44,8 +44,10 @@ step "toolchain: $(go version), CGO_ENABLED=$(go env CGO_ENABLED), TMPDIR=${TMPD
 step "go build -o /dev/null ${pkgs[*]}"
 go build -o /dev/null "${pkgs[@]}"
 
-step "go vet ${pkgs[*]}"
-go vet "${pkgs[@]}"
+# The tag `contract` adds the contract suite of internal/contract, which only
+# scripts/contract.sh runs: vetted here, so that it always builds.
+step "go vet -tags contract ${pkgs[*]}"
+go vet -tags contract "${pkgs[@]}"
 
 step "gofmt -l ${fmt_dirs[*]}"
 unformatted="$(gofmt -l "${fmt_dirs[@]}")"
