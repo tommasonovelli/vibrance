@@ -32,7 +32,7 @@ Design: DESIGN.md (versione 0.1). Orchestratore: aggiorna questo file a ogni pas
 | S22 | Immagine e stack Compose | done | 1 | 85cdeee | 2026-10-05 · `scripts/stack-smoke.sh` rieseguito dal revisore, quattro procedure della guida provate a mano · solo Docker Desktop, Linux nativo da provare |
 | S23 | Contratto end-to-end con MusicLib reale | done | 1 | 7e2aaa8 | 2026-10-05 · A1–A20 verdi 5 volte su 5 nelle esecuzioni del revisore (MusicLib 1.2.0 vero) · fine fase C |
 | S24 | Prestazioni | done | 2 | 867d7d6 | 2026-10-05 · round 1: CHANGES REQUIRED (memoria a riposo 163,5 MB con 20.000 album scansionati, non misurata né dichiarata; misure «aperte» senza tetto; debiti «per S24» non tutti misurati) · errata §5.2 (indice per la durata delle playlist) · round 2 approvato: memoria a riposo 64 MB dopo la correzione, `scripts/perf.sh` rieseguito dal revisore |
-| S25 | Rilascio 0.1.0 | done | 1 | HASH | 2026-10-05 · gate, contratto, smoke, prestazioni e govulncheck rieseguiti dal revisore sull'albero finale; checklist di sicurezza I1–I16 compilata · nessun tag, nessuna pubblicazione · fine fase D |
+| S25 | Rilascio 0.1.0 | done | 1 | 2c3d3bf | 2026-10-05 · gate, contratto, smoke, prestazioni e govulncheck rieseguiti dal revisore sull'albero finale; checklist di sicurezza I1–I16 compilata · nessun tag, nessuna pubblicazione · fine fase D |
 
 Stati: `todo`, `in-progress`, `done`, `blocked`.
 
