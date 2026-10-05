@@ -913,11 +913,18 @@ paths:
       summary: Search artists, albums and tracks
       description: |
         Full-text search of what is available. `q` is split into words at
-        every character that is not a letter or a digit; at most 8 words of at
-        most 64 characters count. A result has **every** word, each as the
-        beginning of one of its words, so the search works while the user
-        types (`mil dav` finds Miles Davis). Case and accents do not count.
-        Nothing in `q` is an operator. A `q` without letters or digits finds
+        the ASCII characters that are not letters or digits, at the Unicode
+        spaces and at the control characters, and nowhere else. At most 8
+        words of at most 64 characters count. A result has **every** word,
+        each as the beginning of one of its words, so the search works while
+        the user types (`mil dav` finds Miles Davis). Case and accents do
+        not count. Nothing in `q` is an operator.
+
+        Inside a word, other punctuation separates as it does in the names
+        (`don’t` is `don` and `t`), and the parts must be found one after the
+        other, the last as a beginning: `Sigur—Rós` finds Sigur Rós and
+        `Rós—Sigur` does not, while `rós sigur` does. A word of such
+        punctuation alone is left out. A `q` with nothing to look for finds
         nothing, and is not an error.
 
         Artists match by name; albums by title and artist; tracks by title,
@@ -926,13 +933,19 @@ paths:
         are always in the answer; a kind that `types` leaves out is an empty
         list.
 
-        Known limits: no tolerance for typing mistakes; a run of Chinese or
-        Japanese characters is one word, found only from its beginning.
+        Known limits: no tolerance for typing mistakes. A run of Chinese or
+        Japanese characters is one word, found only from its beginning. The
+        emoji and symbols that the tokenizer of SQLite does not know as such
+        (most recent emoji) are part of the word they touch, in the names
+        and in `q`: Disco🪩Ball is found by `disco🪩` and not by `disco ball`.
+        An accent sent as a separate character is found like the letter
+        that carries it for Latin letters, not for every script (a kana with
+        a separate voicing mark does not find the composed name).
       parameters:
         - name: q
           in: query
           required: true
-          description: What to search for, 1 to 100 characters; anything else answers `400 invalid_request`.
+          description: What to search for, 1 to 100 characters as sent (an accent sent as a separate character counts); anything else answers `400 invalid_request`.
           schema:
             type: string
             minLength: 1

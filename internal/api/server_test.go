@@ -109,7 +109,8 @@ func testHandler(t *testing.T, wrap func(Server) StrictServerInterface) (http.Ha
 var implemented = []string{
 	"getServerInfo", "login", "createToken", "logout", "getMe", "changePassword", "listSessions", "revokeSession",
 	"listUsers", "createUser", "getUser", "updateUser", "deleteUser", "resetUserPassword",
-	"listArtists", "getArtist", "listAlbums", "getAlbum", "getTrack", "getTrackAudio", "getAlbumCover", "getTrackLyrics",
+	"listArtists", "getArtist", "listAlbums", "getAlbum", "getTrack", "search",
+	"getTrackAudio", "getAlbumCover", "getTrackLyrics",
 }
 
 // exampleRequest builds a request for one operation of the specification

@@ -231,6 +231,7 @@ func TestReadsAfterTheContextEnds(t *testing.T) {
 		"GetArtist": func() error { _, err := svc.GetArtist(ctx, uuid.NewString()); return err },
 		"GetAlbum":  func() error { _, err := svc.GetAlbum(ctx, userA, uuid.NewString()); return err },
 		"GetTrack":  func() error { _, err := svc.GetTrack(ctx, userA, uuid.NewString()); return err },
+		"Search":    func() error { _, err := svc.Search(ctx, userA, "a", allKinds, 1); return err },
 		"ListArtists": func() error {
 			_, err := svc.ListArtists(ctx, 1, nil)
 			return err

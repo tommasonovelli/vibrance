@@ -26,7 +26,7 @@ const (
 	track3  = "0192a5f0-0000-7000-8000-0000000000c3"
 )
 
-func newStore(t *testing.T) *store.Store {
+func newStore(t testing.TB) *store.Store {
 	t.Helper()
 	s, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "vibrance.db"))
 	if err != nil {

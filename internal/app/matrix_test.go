@@ -86,7 +86,7 @@ var authorizationMatrix = map[string]access{
 // matrixRequests. Until then the matrix checks their refusals (401, 403)
 // exactly, and expects 501 where it says success or 404.
 var pendingOperations = []string{
-	"getLibraryStatus", "scanLibrary", "search",
+	"getLibraryStatus", "scanLibrary",
 	"listFavoriteTracks", "addFavoriteTrack", "removeFavoriteTrack",
 	"listPlaylists", "createPlaylist", "getPlaylist", "updatePlaylist", "deletePlaylist", "listPlaylistItems",
 	"addPlaylistItems", "removePlaylistItem", "movePlaylistItem",
@@ -152,6 +152,7 @@ var matrixRequests = map[string]matrixRequest{
 		w.catalogEntry()
 		return "GET", "/tracks/" + entryTrack, nil
 	},
+	"search": func(*world, *account, *account) (string, string, any) { return "GET", "/search?q=track", nil },
 	"getTrackAudio": func(w *world, _, _ *account) (string, string, any) {
 		return "GET", "/tracks/" + w.fixtureTrack(albumA, 1) + "/audio", nil
 	},

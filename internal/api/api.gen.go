@@ -1410,7 +1410,7 @@ type MovePlaylistItemParams struct {
 
 // SearchParams defines parameters for Search.
 type SearchParams struct {
-	// Q What to search for, 1 to 100 characters; anything else answers `400 invalid_request`.
+	// Q What to search for, 1 to 100 characters as sent (an accent sent as a separate character counts); anything else answers `400 invalid_request`.
 	Q string `form:"q" json:"q"`
 
 	// Types The kinds to search, separated by commas.
