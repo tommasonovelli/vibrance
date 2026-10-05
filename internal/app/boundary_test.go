@@ -87,6 +87,7 @@ func publishSessions(t *testing.T, s *server) *auth.Service {
 	if err := sessions.Bootstrap(t.Context(), env(adminEnv)); err != nil {
 		t.Fatal(err)
 	}
+	publishMedia(t, s, st, t.TempDir())
 	s.catalog.Store(catalog.New(st))
 	s.sessions.Store(sessions)
 	return sessions

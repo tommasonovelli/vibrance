@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"vibrance/internal/api"
 	"vibrance/internal/auth"
 	"vibrance/internal/buildinfo"
 	"vibrance/internal/catalog"
@@ -209,6 +210,10 @@ type server struct {
 	// published before sessions: an operation runs only once sessions is,
 	// and then finds it.
 	catalog atomic.Pointer[catalog.Service]
+	// media serves the files of the library for the operations of the
+	// audio, the covers and the lyrics. It is published with the scanner,
+	// before sessions.
+	media atomic.Pointer[api.Media]
 	// stopSessions stops the hourly cleanup of the sessions and waits for
 	// it.
 	stopSessions func()
@@ -418,6 +423,12 @@ func (s *server) startScanner() error {
 	thumbs := covers.New(root, s.store, filepath.Join(s.stateDir, thumbsDir), s.log)
 	indexer := library.NewIndexer(root, s.store, s.tools, thumbs, time.Now)
 	s.scanner = library.NewScanner(indexer, s.workers, s.scanInterval, s.log)
+	// The files are served from the same Root, which the stop closes only
+	// once the HTTP server has stopped. A file that is not the one of the
+	// index asks the scanner for a cycle (§9.1).
+	scanner := s.scanner
+	s.media.Store(&api.Media{Files: catalog.NewFiles(root, s.store, s.log), Covers: thumbs,
+		Rescan: func() { scanner.Trigger(library.ReasonFileReplaced) }})
 	ctx, cancel := context.WithCancel(context.Background())
 	var running sync.WaitGroup
 	running.Go(func() { s.scanner.Run(ctx) })

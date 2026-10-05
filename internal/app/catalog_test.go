@@ -36,11 +36,14 @@ const (
 )
 
 // indexFixture indexes a copy of the fixture library into the database of
-// w, with the indexer and the tools the scanner uses.
+// w, with the indexer and the tools the scanner uses, and serves its files.
 func (w *world) indexFixture() {
 	w.t.Helper()
 	ctx := w.t.Context()
-	root, err := library.OpenRoot(fixtureLibrary(w.t))
+	w.indexed = true
+	w.musiclib = fixtureLibrary(w.t)
+	w.rescans = publishMedia(w.t, w.s, w.store, w.musiclib)
+	root, err := library.OpenRoot(w.musiclib)
 	if err != nil {
 		w.t.Fatal(err)
 	}

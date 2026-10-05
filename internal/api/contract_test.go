@@ -232,11 +232,15 @@ func TestParametersOutOfTheSpecification(t *testing.T) {
 			t.Errorf("GET %s: status %d (%q)", target, rec.Code, rec.Body.String())
 		}
 	}
-	for _, target := range []string{"/search?q=" + long[:100] + "&limit=50&types=artist,album,track",
-		"/albums/" + someID + "/cover?size=640&v=x"} {
+	target := "/search?q=" + long[:100] + "&limit=50&types=artist,album,track"
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, BasePath+target, nil))
+	wantError(t, "GET "+target, rec, http.StatusNotImplemented, "not_implemented")
+	for _, size := range []string{"256", "640", "original"} {
+		target := "/albums/" + someID + "/cover?size=" + size + "&v=x"
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, BasePath+target, nil))
-		wantError(t, "GET "+target, rec, http.StatusNotImplemented, "not_implemented")
+		wantError(t, "GET "+target, rec, http.StatusNotFound, "album_not_found")
 	}
 }
 

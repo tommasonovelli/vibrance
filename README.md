@@ -157,7 +157,13 @@ A cover belongs to an album: it is the `cover.jpg` or `cover.png` MusicLib wrote
 
 Thumbnails are kept in `/var/lib/vibrance/thumbs/<first two characters of the hash>/<hash>_<size>.jpg`, where the hash is the SHA-256 of the cover file. The folder is only a cache: it can be removed at any time, also while the server runs, and nothing removes old thumbnails from it (about 120 KB for each album). A thumbnail is made when the scanner indexes an album with a new cover, in the background and one cover at a time, or at the first request for it. At most two covers are decoded at once, and a thumbnail asked for by several requests at the same moment is made once. A file of the cache that is not a whole thumbnail is made again.
 
-The original is served in place of the thumbnail when the cover file is larger than 20 MiB or has more than 40 megapixels, and when the thumbnail cannot be made or written (the log says why, at `WARN`). A cover file that is no longer the one the scanner saw (another size or time for the original, other bytes for a thumbnail) is never served: MusicLib replaced the album, and the next scan brings the index up to date.
+The original is served in place of the thumbnail when the cover file is larger than 20 MiB or has more than 40 megapixels, and when the thumbnail cannot be made or written (the log says why, at `WARN`). A cover file that is no longer the one the scanner saw (another size or time for the original, other bytes for a thumbnail) is never served: MusicLib replaced the album. The request answers `503 library_changing` with `Retry-After: 5` and starts a scan, which brings the index up to date.
+
+## The audio and the lyrics
+
+`GET /api/v1/tracks/{id}/audio` sends the file MusicLib wrote, as it is, with `http.ServeContent`: ranges, `If-Range`, `If-None-Match` and `HEAD` work as in any static file server, the `ETag` is the SHA-256 of the file and the response is `Cache-Control: private, no-cache`. A stream has no write deadline: the `WriteTimeout` of the server does not cut a long track. The file is read only from the path the scanner recorded, through the same confined folder as the scanner, and must still have the size and the time the scanner saw: otherwise MusicLib replaced it, and the request answers `503 library_changing` with `Retry-After: 5` and starts a scan. When `library/` is not there at all, or a file cannot be opened, the track answers `404 track_unavailable` and nothing is scanned.
+
+`GET /api/v1/tracks/{id}/lyrics` reads the `.lrc` file of the track (at most 2 MiB), checks its SHA-256 against the index and answers its lines as JSON (`internal/lyrics`).
 
 ## Pinned versions
 

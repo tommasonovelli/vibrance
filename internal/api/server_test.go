@@ -22,7 +22,9 @@ import (
 
 	"vibrance/internal/auth"
 	"vibrance/internal/catalog"
+	"vibrance/internal/covers"
 	"vibrance/internal/httpx"
+	"vibrance/internal/library"
 	"vibrance/internal/store"
 )
 
@@ -70,7 +72,19 @@ func testHandler(t *testing.T, wrap func(Server) StrictServerInterface) (http.Ha
 	published.Store(accounts)
 	index := &atomic.Pointer[catalog.Service]{}
 	index.Store(catalog.New(st))
-	var srv StrictServerInterface = NewServer(published, index, "https://vibrance.example.net")
+	// The files are in a folder without library/: every track is unknown.
+	root, err := library.OpenRoot(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := root.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	files := &atomic.Pointer[Media]{}
+	files.Store(&Media{Files: catalog.NewFiles(root, st, log), Covers: covers.New(root, st, t.TempDir(), log), Rescan: func() {}})
+	var srv StrictServerInterface = NewServer(published, index, files, "https://vibrance.example.net")
 	if wrap != nil {
 		srv = wrap(srv.(Server))
 	}
@@ -95,7 +109,7 @@ func testHandler(t *testing.T, wrap func(Server) StrictServerInterface) (http.Ha
 var implemented = []string{
 	"getServerInfo", "login", "createToken", "logout", "getMe", "changePassword", "listSessions", "revokeSession",
 	"listUsers", "createUser", "getUser", "updateUser", "deleteUser", "resetUserPassword",
-	"listArtists", "getArtist", "listAlbums", "getAlbum", "getTrack",
+	"listArtists", "getArtist", "listAlbums", "getAlbum", "getTrack", "getTrackAudio", "getAlbumCover", "getTrackLyrics",
 }
 
 // exampleRequest builds a request for one operation of the specification
@@ -328,8 +342,8 @@ func TestUnexpectedErrorHidesItsCause(t *testing.T) {
 	// The other operations are untouched, and a 501 is not logged.
 	logs.Reset()
 	rec = httptest.NewRecorder()
-	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, BasePath+"/tracks/"+someID+"/lyrics", nil))
-	wantError(t, "getTrackLyrics", rec, http.StatusNotImplemented, "not_implemented")
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, BasePath+"/playlists", nil))
+	wantError(t, "listPlaylists", rec, http.StatusNotImplemented, "not_implemented")
 	if logs.Len() != 0 {
 		t.Errorf("a 501 was logged: %q", logs.String())
 	}

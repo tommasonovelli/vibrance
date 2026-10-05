@@ -990,16 +990,21 @@ paths:
         `audio/mpeg` (mp3), `audio/mp4` (aac, alac). HEAD is answered too. The
         session cookie is enough, so `<audio src>` works without code.
 
-        `Range` is honored (`206`), so a player can seek. The `ETag` is the
+        `Range` is honored (`206`), so a player can seek; a request for
+        several ranges gets them as `multipart/byteranges`. The `ETag` is the
         SHA-256 of the file. When MusicLib writes the album again the file
         and its `ETag` change: a request with `Range` and an `If-Range` that
         names the old `ETag` gets the **whole** new file (`200`), never bytes
         of two versions. The response is `Cache-Control: private, no-cache`:
         a client may keep the file and must revalidate it with
-        `If-None-Match` (`304`).
+        `If-None-Match` (`304`). An `If-Match` that does not name the
+        current file answers `412`.
 
         `404 track_not_found`: there is no such track.
-        `404 track_unavailable`: the track is not available.
+        `404 track_unavailable`: the track is not available, or its file
+        cannot be read now: `library/` is not there (MusicLib's volume is
+        not mounted, or is being rebuilt) or the file cannot be opened. The
+        track keeps its data and comes back with its file.
         `400 unsupported_profile`: `profile` is something other than
         `original`.
         `503 library_changing`, with `Retry-After`: the file on disk is not
@@ -1058,8 +1063,7 @@ paths:
             ETag:
               $ref: "#/components/headers/ETag"
             Content-Range:
-              description: The bytes sent and the size of the file.
-              required: true
+              description: The bytes sent and the size of the file. Absent when several ranges are sent, each in its part.
               schema:
                 type: string
                 example: bytes 0-65535/31415926
@@ -1076,6 +1080,10 @@ paths:
               schema:
                 type: string
                 format: binary
+            multipart/byteranges:
+              schema:
+                type: string
+                format: binary
         "304":
           $ref: "#/components/responses/NotModified"
         "400":
@@ -1086,6 +1094,11 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "412":
+          description: "`If-Match` was sent and does not name the current file. The body is not an error of this API."
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
         "416":
           description: The range is outside the file. The body is not an error of this API.
           headers:
@@ -1126,9 +1139,11 @@ paths:
         response is `Cache-Control: private, max-age=31536000, immutable`.
         Without `v`, or with the hash of an older cover, the **current** cover
         is sent with `Cache-Control: private, no-cache`. The `ETag` is
-        `"<hash>-<size>"`; `If-None-Match` answers `304`.
+        `"<hash>-<size>"`; `If-None-Match` answers `304`. `Range`,
+        `If-Range` and `If-Match` are honored as for the audio of a track.
 
-        `404 album_not_found`: there is no such album or it is not available.
+        `404 album_not_found`: there is no such album or it is not available
+        (a track that is not available may still name it in `album.cover`).
         `404 cover_not_found`: the album has no cover.
         `503 library_changing`, with `Retry-After`: the cover on disk is not
         the one the index describes, because MusicLib has just replaced the
@@ -1167,6 +1182,31 @@ paths:
               schema:
                 type: string
                 format: binary
+        "206":
+          description: The range asked for.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+            ETag:
+              $ref: "#/components/headers/ETag"
+            Content-Range:
+              description: The bytes sent and the size of the image. Absent when several ranges are sent, each in its part.
+              schema:
+                type: string
+                example: bytes 0-1023/52130
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            multipart/byteranges:
+              schema:
+                type: string
+                format: binary
         "304":
           $ref: "#/components/responses/NotModified"
         "400":
@@ -1177,6 +1217,21 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "412":
+          description: "`If-Match` was sent and does not name the current file. The body is not an error of this API."
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+        "416":
+          description: The range is outside the file. The body is not an error of this API.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+            Content-Range:
+              description: The size of the file.
+              schema:
+                type: string
+                example: bytes */31415926
         "421":
           $ref: "#/components/responses/MisdirectedRequest"
         "500":
@@ -1195,7 +1250,7 @@ paths:
 
         `404 track_not_found`: there is no such track.
         `404 lyrics_not_found`: the track has no lyrics, or is not available,
-        or its lyrics file is gone or is over 2 MiB.
+        or its lyrics file is gone, cannot be read or is over 2 MiB.
         `503 library_changing`, with `Retry-After`: the lyrics on disk are
         not the ones the index describes, because MusicLib has just replaced
         the album. A scan starts by itself: ask again after the delay.

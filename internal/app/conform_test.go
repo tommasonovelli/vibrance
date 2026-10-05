@@ -19,6 +19,14 @@ import (
 // helpers of the tests. It is only read.
 var spec = sync.OnceValues(api.LoadSpec)
 
+// The files the API serves are binary strings of the specification:
+// kin-openapi checks them as such once it knows their types.
+func init() {
+	for _, mime := range []string{"audio/flac", "audio/mpeg", "audio/mp4", "image/jpeg", "image/png", "multipart/byteranges"} {
+		openapi3filter.RegisterBodyDecoder(mime, openapi3filter.FileBodyDecoder)
+	}
+}
+
 // assertConforms checks a response of the API against the specification
 // (I10), with kin-openapi: the status is one the operation declares, the
 // headers it declares as required are there, and the body matches the

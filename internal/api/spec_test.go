@@ -280,7 +280,7 @@ func TestSpecMatchesDesign(t *testing.T) {
 		case "getTrackAudio":
 			wantSuccesses = []int{200, 206, 304}
 		case "getAlbumCover":
-			wantSuccesses = []int{200, 304}
+			wantSuccesses = []int{200, 206, 304}
 		}
 		if !slices.Equal(successes, wantSuccesses) {
 			t.Errorf("%s: success statuses %v, want %v", d.id, successes, wantSuccesses)
@@ -458,11 +458,12 @@ func checkResponse(t *testing.T, id, key string, ref *openapi3.ResponseRef) {
 		}
 		return
 	}
-	// 416 is written by net/http for a range outside the file: its body is
-	// not the error model.
-	if status == 416 {
+	// 416, and the 412 of a file, are written by http.ServeContent for a
+	// range outside the file and for an If-Match of another file: their body
+	// is not the error model.
+	if status == 416 || (status == 412 && servesFiles(id)) {
 		if len(resp.Content) != 0 {
-			t.Errorf("%s 416 must not declare a body", id)
+			t.Errorf("%s %d must not declare a body", id, status)
 		}
 		return
 	}
@@ -744,8 +745,8 @@ func TestSpecPlaylistPreconditions(t *testing.T) {
 		if takes != r.ifMatch {
 			t.Errorf("%s: takes If-Match = %t, want %t", id, takes, r.ifMatch)
 		}
-		if o.has(412) != r.ifMatch {
-			t.Errorf("%s: declares 412 = %t, want %t", id, o.has(412), r.ifMatch)
+		if want := r.ifMatch || servesFiles(id); o.has(412) != want {
+			t.Errorf("%s: declares 412 = %t, want %t", id, o.has(412), want)
 		}
 		if o.has(428) != r.required {
 			t.Errorf("%s: declares 428 = %t, want %t", id, o.has(428), r.required)
@@ -945,3 +946,8 @@ func TestDesignTableIsWellFormed(t *testing.T) {
 		}
 	}
 }
+
+// servesFiles tells whether the operation serves a file with
+// http.ServeContent (§9.1, §9.2), which answers ranges and conditions
+// itself.
+func servesFiles(id string) bool { return id == "getTrackAudio" || id == "getAlbumCover" }

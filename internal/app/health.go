@@ -47,7 +47,7 @@ func (s *server) routes(publicOrigin string) (http.Handler, error) {
 
 	mux := http.NewServeMux()
 	s.access = api.Access(doc)
-	api.Register(mux, doc, api.NewServer(&s.sessions, &s.catalog, publicOrigin), s.authenticated, s.log)
+	api.Register(mux, doc, api.NewServer(&s.sessions, &s.catalog, &s.media, publicOrigin), s.authenticated, s.log)
 	// 302, not 301: browsers cache a permanent redirect, and `/` is where
 	// the web interface will be.
 	mux.Handle("GET /{$}", http.RedirectHandler("/api/docs", http.StatusFound))

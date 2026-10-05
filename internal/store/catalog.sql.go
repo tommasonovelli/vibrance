@@ -57,6 +57,49 @@ func (q *Queries) GetAvailableAlbum(ctx context.Context, id string) (GetAvailabl
 	return i, err
 }
 
+const getTrackFile = `-- name: GetTrackFile :one
+SELECT tracks.available, albums.rel_path AS album_rel_path, tracks.rel_path,
+    tracks.file_size, tracks.file_mtime_ns, tracks.file_sha256, tracks.codec,
+    tracks.lyrics_rel, tracks.lyrics_sha256
+FROM tracks
+JOIN albums ON albums.id = tracks.album_id
+WHERE tracks.id = ?
+`
+
+type GetTrackFileRow struct {
+	Available    int64
+	AlbumRelPath string
+	RelPath      string
+	FileSize     int64
+	FileMtimeNs  int64
+	FileSha256   string
+	Codec        string
+	LyricsRel    sql.NullString
+	LyricsSha256 sql.NullString
+}
+
+// GetTrackFile returns what the index says of the files of a track,
+// available or not: the folder of its album and its own path, both
+// relative to library/ and written only by the scanner (I2), the size, the
+// time and the SHA-256 the scanner saw, its codec, and its lyrics file
+// (DESIGN.md 9.1, 9.3).
+func (q *Queries) GetTrackFile(ctx context.Context, id string) (GetTrackFileRow, error) {
+	row := q.db.QueryRowContext(ctx, getTrackFile, id)
+	var i GetTrackFileRow
+	err := row.Scan(
+		&i.Available,
+		&i.AlbumRelPath,
+		&i.RelPath,
+		&i.FileSize,
+		&i.FileMtimeNs,
+		&i.FileSha256,
+		&i.Codec,
+		&i.LyricsRel,
+		&i.LyricsSha256,
+	)
+	return i, err
+}
+
 const getTrackWithAlbum = `-- name: GetTrackWithAlbum :one
 SELECT tracks.seq, tracks.id, tracks.album_id, tracks.fingerprint, tracks.fp_version, tracks.occurrence, tracks.disc, tracks."no", tracks.title, tracks.artist, tracks.genre, tracks.rel_path, tracks.file_size, tracks.file_mtime_ns, tracks.file_sha256, tracks.codec, tracks.sample_rate, tracks.channels, tracks.bit_depth, tracks.bitrate, tracks.duration_ms, tracks.lyrics_rel, tracks.lyrics_sha256, tracks.rg_track_gain, tracks.rg_track_peak, tracks.rg_album_gain, tracks.rg_album_peak, tracks.available, tracks.updated_at,
     albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,

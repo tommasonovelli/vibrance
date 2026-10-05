@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 )
 
 // The stable codes the boundary itself answers (DESIGN.md §8.4). The codes
@@ -33,6 +34,9 @@ type Error struct {
 	Message string
 	// Details is the object of details; nil is the empty object.
 	Details map[string]any
+	// RetryAfter, when not 0, is the Retry-After header of the answer: the
+	// seconds a client waits before it asks again.
+	RetryAfter int
 }
 
 func (e *Error) Error() string { return fmt.Sprintf("%d %s: %s", e.Status, e.Code, e.Message) }
@@ -99,6 +103,9 @@ func WriteError(w http.ResponseWriter, r *http.Request, log *slog.Logger, err er
 	}
 	for _, name := range staleHeaders {
 		w.Header().Del(name)
+	}
+	if e.RetryAfter != 0 {
+		w.Header().Set("Retry-After", strconv.Itoa(e.RetryAfter))
 	}
 	details := e.Details
 	if details == nil {

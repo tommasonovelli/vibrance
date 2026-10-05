@@ -12,6 +12,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
+	"mime/multipart"
 	"net/http"
 
 	"github.com/oapi-codegen/runtime"
@@ -4511,6 +4513,84 @@ func (response GetAlbumCover200ImagepngResponse) VisitGetAlbumCoverResponse(w ht
 	return err
 }
 
+type GetAlbumCover206ResponseHeaders struct {
+	ContentRange *string
+	ETag         string
+	XRequestId   openapi_types.UUID
+}
+
+type GetAlbumCover206ImagejpegResponse struct {
+	Body          io.Reader
+	Headers       GetAlbumCover206ResponseHeaders
+	ContentLength int64
+}
+
+func (response GetAlbumCover206ImagejpegResponse) VisitGetAlbumCoverResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", "image/jpeg")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	if response.Headers.ContentRange != nil {
+		w.Header().Set("Content-Range", fmt.Sprint(*response.Headers.ContentRange))
+	}
+	w.Header().Set("ETag", fmt.Sprint(response.Headers.ETag))
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(206)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
+	return err
+}
+
+type GetAlbumCover206ImagepngResponse struct {
+	Body          io.Reader
+	Headers       GetAlbumCover206ResponseHeaders
+	ContentLength int64
+}
+
+func (response GetAlbumCover206ImagepngResponse) VisitGetAlbumCoverResponse(w http.ResponseWriter) error {
+
+	w.Header().Set("Content-Type", "image/png")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	if response.Headers.ContentRange != nil {
+		w.Header().Set("Content-Range", fmt.Sprint(*response.Headers.ContentRange))
+	}
+	w.Header().Set("ETag", fmt.Sprint(response.Headers.ETag))
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(206)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
+	return err
+}
+
+type GetAlbumCover206MultipartResponse struct {
+	Body    func(writer *multipart.Writer) error
+	Headers GetAlbumCover206ResponseHeaders
+}
+
+func (response GetAlbumCover206MultipartResponse) VisitGetAlbumCoverResponse(w http.ResponseWriter) error {
+	writer := multipart.NewWriter(w)
+
+	w.Header().Set("Content-Type", mime.FormatMediaType("multipart/byteranges", map[string]string{"boundary": writer.Boundary()}))
+	if response.Headers.ContentRange != nil {
+		w.Header().Set("Content-Range", fmt.Sprint(*response.Headers.ContentRange))
+	}
+	w.Header().Set("ETag", fmt.Sprint(response.Headers.ETag))
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(206)
+
+	defer writer.Close()
+	return response.Body(writer)
+}
+
 type GetAlbumCover304Response = NotModifiedResponse
 
 func (response GetAlbumCover304Response) VisitGetAlbumCoverResponse(w http.ResponseWriter) error {
@@ -4578,6 +4658,38 @@ func (response GetAlbumCover404JSONResponse) VisitGetAlbumCoverResponse(w http.R
 	w.WriteHeader(404)
 	_, err := buf.WriteTo(w)
 	return err
+}
+
+type GetAlbumCover412ResponseHeaders struct {
+	XRequestId openapi_types.UUID
+}
+
+type GetAlbumCover412Response struct {
+	Headers GetAlbumCover412ResponseHeaders
+}
+
+func (response GetAlbumCover412Response) VisitGetAlbumCoverResponse(w http.ResponseWriter) error {
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(412)
+	return nil
+}
+
+type GetAlbumCover416ResponseHeaders struct {
+	ContentRange *string
+	XRequestId   openapi_types.UUID
+}
+
+type GetAlbumCover416Response struct {
+	Headers GetAlbumCover416ResponseHeaders
+}
+
+func (response GetAlbumCover416Response) VisitGetAlbumCoverResponse(w http.ResponseWriter) error {
+	if response.Headers.ContentRange != nil {
+		w.Header().Set("Content-Range", fmt.Sprint(*response.Headers.ContentRange))
+	}
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(416)
+	return nil
 }
 
 type GetAlbumCover421JSONResponse struct{ MisdirectedRequestJSONResponse }
@@ -7943,7 +8055,7 @@ func (response GetTrackAudio200AudiompegResponse) VisitGetTrackAudioResponse(w h
 }
 
 type GetTrackAudio206ResponseHeaders struct {
-	ContentRange string
+	ContentRange *string
 	ETag         string
 	XRequestId   openapi_types.UUID
 }
@@ -7960,7 +8072,9 @@ func (response GetTrackAudio206AudioflacResponse) VisitGetTrackAudioResponse(w h
 	if response.ContentLength != 0 {
 		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
 	}
-	w.Header().Set("Content-Range", fmt.Sprint(response.Headers.ContentRange))
+	if response.Headers.ContentRange != nil {
+		w.Header().Set("Content-Range", fmt.Sprint(*response.Headers.ContentRange))
+	}
 	w.Header().Set("ETag", fmt.Sprint(response.Headers.ETag))
 	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
 	w.WriteHeader(206)
@@ -7984,7 +8098,9 @@ func (response GetTrackAudio206Audiomp4Response) VisitGetTrackAudioResponse(w ht
 	if response.ContentLength != 0 {
 		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
 	}
-	w.Header().Set("Content-Range", fmt.Sprint(response.Headers.ContentRange))
+	if response.Headers.ContentRange != nil {
+		w.Header().Set("Content-Range", fmt.Sprint(*response.Headers.ContentRange))
+	}
 	w.Header().Set("ETag", fmt.Sprint(response.Headers.ETag))
 	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
 	w.WriteHeader(206)
@@ -8008,7 +8124,9 @@ func (response GetTrackAudio206AudiompegResponse) VisitGetTrackAudioResponse(w h
 	if response.ContentLength != 0 {
 		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
 	}
-	w.Header().Set("Content-Range", fmt.Sprint(response.Headers.ContentRange))
+	if response.Headers.ContentRange != nil {
+		w.Header().Set("Content-Range", fmt.Sprint(*response.Headers.ContentRange))
+	}
 	w.Header().Set("ETag", fmt.Sprint(response.Headers.ETag))
 	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
 	w.WriteHeader(206)
@@ -8018,6 +8136,26 @@ func (response GetTrackAudio206AudiompegResponse) VisitGetTrackAudioResponse(w h
 	}
 	_, err := io.Copy(w, response.Body)
 	return err
+}
+
+type GetTrackAudio206MultipartResponse struct {
+	Body    func(writer *multipart.Writer) error
+	Headers GetTrackAudio206ResponseHeaders
+}
+
+func (response GetTrackAudio206MultipartResponse) VisitGetTrackAudioResponse(w http.ResponseWriter) error {
+	writer := multipart.NewWriter(w)
+
+	w.Header().Set("Content-Type", mime.FormatMediaType("multipart/byteranges", map[string]string{"boundary": writer.Boundary()}))
+	if response.Headers.ContentRange != nil {
+		w.Header().Set("Content-Range", fmt.Sprint(*response.Headers.ContentRange))
+	}
+	w.Header().Set("ETag", fmt.Sprint(response.Headers.ETag))
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(206)
+
+	defer writer.Close()
+	return response.Body(writer)
 }
 
 type GetTrackAudio304Response = NotModifiedResponse
@@ -8087,6 +8225,20 @@ func (response GetTrackAudio404JSONResponse) VisitGetTrackAudioResponse(w http.R
 	w.WriteHeader(404)
 	_, err := buf.WriteTo(w)
 	return err
+}
+
+type GetTrackAudio412ResponseHeaders struct {
+	XRequestId openapi_types.UUID
+}
+
+type GetTrackAudio412Response struct {
+	Headers GetTrackAudio412ResponseHeaders
+}
+
+func (response GetTrackAudio412Response) VisitGetTrackAudioResponse(w http.ResponseWriter) error {
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(412)
+	return nil
 }
 
 type GetTrackAudio416ResponseHeaders struct {

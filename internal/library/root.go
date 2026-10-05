@@ -76,6 +76,13 @@ func (r *Root) StorePresent() (bool, error) {
 	return r.exists(storeMarker)
 }
 
+// LibraryPresent reports whether library/ exists. Without it nothing of the
+// library can be read, and the index is kept as it is (I14): a file that is
+// not there says nothing of its album then.
+func (r *Root) LibraryPresent() (bool, error) {
+	return r.exists(libraryDir)
+}
+
 // exists reports whether the root of the folder has an entry called name,
 // of any kind. The entry is not opened.
 func (r *Root) exists(name string) (bool, error) {

@@ -21,21 +21,6 @@ func (Server) Search(context.Context, SearchRequestObject) (SearchResponseObject
 	return nil, errNotImplemented
 }
 
-// GetTrackAudio waits for step S16.
-func (Server) GetTrackAudio(context.Context, GetTrackAudioRequestObject) (GetTrackAudioResponseObject, error) {
-	return nil, errNotImplemented
-}
-
-// GetAlbumCover waits for step S16.
-func (Server) GetAlbumCover(context.Context, GetAlbumCoverRequestObject) (GetAlbumCoverResponseObject, error) {
-	return nil, errNotImplemented
-}
-
-// GetTrackLyrics waits for step S16.
-func (Server) GetTrackLyrics(context.Context, GetTrackLyricsRequestObject) (GetTrackLyricsResponseObject, error) {
-	return nil, errNotImplemented
-}
-
 // ListFavoriteTracks waits for step S18.
 func (Server) ListFavoriteTracks(context.Context, ListFavoriteTracksRequestObject) (ListFavoriteTracksResponseObject, error) {
 	return nil, errNotImplemented

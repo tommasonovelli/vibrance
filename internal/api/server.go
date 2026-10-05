@@ -37,16 +37,20 @@ type Server struct {
 	// catalog reads the artists, albums and tracks of the index. The server
 	// publishes it before accounts, so an operation that runs finds it.
 	catalog *atomic.Pointer[catalog.Service]
+	// media serves the files of the library: audio, covers and lyrics. The
+	// server publishes it before accounts, like catalog.
+	media *atomic.Pointer[Media]
 	// secureCookie says that the public origin is https: the session cookie
 	// is Secure then, and only then (DESIGN.md §7.3, T14).
 	secureCookie bool
 }
 
 // NewServer returns the operations of a server whose public origin is
-// publicOrigin (VIBRANCE_PUBLIC_ORIGIN), on the services that accounts and
-// catalog hold once the startup has published them.
-func NewServer(accounts *atomic.Pointer[auth.Service], catalog *atomic.Pointer[catalog.Service], publicOrigin string) Server {
-	return Server{accounts: accounts, catalog: catalog, secureCookie: strings.HasPrefix(publicOrigin, "https://")}
+// publicOrigin (VIBRANCE_PUBLIC_ORIGIN), on the services that accounts,
+// catalog and media hold once the startup has published them.
+func NewServer(accounts *atomic.Pointer[auth.Service], catalog *atomic.Pointer[catalog.Service], media *atomic.Pointer[Media],
+	publicOrigin string) Server {
+	return Server{accounts: accounts, catalog: catalog, media: media, secureCookie: strings.HasPrefix(publicOrigin, "https://")}
 }
 
 // The compiler checks that no operation of the specification is missing.
@@ -106,7 +110,7 @@ func Access(doc *openapi3.T) map[string]auth.Access {
 // mux.
 func Register(mux *http.ServeMux, doc *openapi3.T, srv StrictServerInterface, authenticate MiddlewareFunc, log *slog.Logger) {
 	e := errorWriter{log: log}
-	strict := NewStrictHandlerWithOptions(srv, []StrictMiddlewareFunc{withRemoteAddr}, StrictHTTPServerOptions{
+	strict := NewStrictHandlerWithOptions(srv, []StrictMiddlewareFunc{withRequest}, StrictHTTPServerOptions{
 		RequestErrorHandlerFunc:  e.badBody,
 		ResponseErrorHandlerFunc: e.failed,
 	})
@@ -123,22 +127,30 @@ func Register(mux *http.ServeMux, doc *openapi3.T, srv StrictServerInterface, au
 	}
 }
 
-type remoteAddrKey struct{}
+type requestKey struct{}
 
-// withRemoteAddr gives an operation the address its request came from, for
-// the log of a refused sign-in: the strict operations see only their
-// context. It is the address of the connection; X-Forwarded-For is never
-// read (§7.6).
-func withRemoteAddr(f StrictHandlerFunc, _ string) StrictHandlerFunc {
+// withRequest gives an operation its request, which the strict operations
+// do not see: the address it came from, for the log of a refused sign-in,
+// and the conditions and ranges that http.ServeContent reads (§9.1).
+func withRequest(f StrictHandlerFunc, _ string) StrictHandlerFunc {
 	return func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
-		return f(context.WithValue(ctx, remoteAddrKey{}, r.RemoteAddr), w, r, request)
+		return f(context.WithValue(ctx, requestKey{}, r), w, r, request)
 	}
 }
 
-// remoteAddr is the address withRemoteAddr put in ctx, or "".
+// requestOf is the request withRequest put in ctx, or nil.
+func requestOf(ctx context.Context) *http.Request {
+	r, _ := ctx.Value(requestKey{}).(*http.Request)
+	return r
+}
+
+// remoteAddr is the address the request of ctx came from, or "". It is the
+// address of the connection; X-Forwarded-For is never read (§7.6).
 func remoteAddr(ctx context.Context) string {
-	addr, _ := ctx.Value(remoteAddrKey{}).(string)
-	return addr
+	if r := requestOf(ctx); r != nil {
+		return r.RemoteAddr
+	}
+	return ""
 }
 
 // allowed is the Allow header of a path: its methods, in a fixed order. The

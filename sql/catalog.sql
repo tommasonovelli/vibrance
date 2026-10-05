@@ -257,3 +257,16 @@ FROM tracks
 JOIN albums ON albums.id = tracks.album_id
 JOIN artists ON artists.id = albums.artist_id
 WHERE tracks.id = sqlc.arg(id);
+
+-- name: GetTrackFile :one
+-- GetTrackFile returns what the index says of the files of a track,
+-- available or not: the folder of its album and its own path, both
+-- relative to library/ and written only by the scanner (I2), the size, the
+-- time and the SHA-256 the scanner saw, its codec, and its lyrics file
+-- (DESIGN.md 9.1, 9.3).
+SELECT tracks.available, albums.rel_path AS album_rel_path, tracks.rel_path,
+    tracks.file_size, tracks.file_mtime_ns, tracks.file_sha256, tracks.codec,
+    tracks.lyrics_rel, tracks.lyrics_sha256
+FROM tracks
+JOIN albums ON albums.id = tracks.album_id
+WHERE tracks.id = ?;
