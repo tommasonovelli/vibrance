@@ -14,6 +14,7 @@ import (
 
 	apispec "vibrance/api"
 	"vibrance/internal/auth"
+	"vibrance/internal/catalog"
 	"vibrance/internal/httpx"
 )
 
@@ -33,16 +34,19 @@ type Server struct {
 	// server publishes it once its startup is complete; until then the
 	// authentication answers 503 and no operation runs.
 	accounts *atomic.Pointer[auth.Service]
+	// catalog reads the artists, albums and tracks of the index. The server
+	// publishes it before accounts, so an operation that runs finds it.
+	catalog *atomic.Pointer[catalog.Service]
 	// secureCookie says that the public origin is https: the session cookie
 	// is Secure then, and only then (DESIGN.md §7.3, T14).
 	secureCookie bool
 }
 
 // NewServer returns the operations of a server whose public origin is
-// publicOrigin (VIBRANCE_PUBLIC_ORIGIN), on the service of the accounts
-// that accounts holds once the startup has published it.
-func NewServer(accounts *atomic.Pointer[auth.Service], publicOrigin string) Server {
-	return Server{accounts: accounts, secureCookie: strings.HasPrefix(publicOrigin, "https://")}
+// publicOrigin (VIBRANCE_PUBLIC_ORIGIN), on the services that accounts and
+// catalog hold once the startup has published them.
+func NewServer(accounts *atomic.Pointer[auth.Service], catalog *atomic.Pointer[catalog.Service], publicOrigin string) Server {
+	return Server{accounts: accounts, catalog: catalog, secureCookie: strings.HasPrefix(publicOrigin, "https://")}
 }
 
 // The compiler checks that no operation of the specification is missing.

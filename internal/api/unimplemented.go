@@ -16,31 +16,6 @@ func (Server) ScanLibrary(context.Context, ScanLibraryRequestObject) (ScanLibrar
 	return nil, errNotImplemented
 }
 
-// ListArtists waits for step S15.
-func (Server) ListArtists(context.Context, ListArtistsRequestObject) (ListArtistsResponseObject, error) {
-	return nil, errNotImplemented
-}
-
-// GetArtist waits for step S15.
-func (Server) GetArtist(context.Context, GetArtistRequestObject) (GetArtistResponseObject, error) {
-	return nil, errNotImplemented
-}
-
-// ListAlbums waits for step S15.
-func (Server) ListAlbums(context.Context, ListAlbumsRequestObject) (ListAlbumsResponseObject, error) {
-	return nil, errNotImplemented
-}
-
-// GetAlbum waits for step S15.
-func (Server) GetAlbum(context.Context, GetAlbumRequestObject) (GetAlbumResponseObject, error) {
-	return nil, errNotImplemented
-}
-
-// GetTrack waits for step S15.
-func (Server) GetTrack(context.Context, GetTrackRequestObject) (GetTrackResponseObject, error) {
-	return nil, errNotImplemented
-}
-
 // Search waits for step S17.
 func (Server) Search(context.Context, SearchRequestObject) (SearchResponseObject, error) {
 	return nil, errNotImplemented

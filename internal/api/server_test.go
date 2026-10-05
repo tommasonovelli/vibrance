@@ -21,6 +21,7 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 
 	"vibrance/internal/auth"
+	"vibrance/internal/catalog"
 	"vibrance/internal/httpx"
 	"vibrance/internal/store"
 )
@@ -67,7 +68,9 @@ func testHandler(t *testing.T, wrap func(Server) StrictServerInterface) (http.Ha
 	}
 	published := &atomic.Pointer[auth.Service]{}
 	published.Store(accounts)
-	var srv StrictServerInterface = NewServer(published, "https://vibrance.example.net")
+	index := &atomic.Pointer[catalog.Service]{}
+	index.Store(catalog.New(st))
+	var srv StrictServerInterface = NewServer(published, index, "https://vibrance.example.net")
 	if wrap != nil {
 		srv = wrap(srv.(Server))
 	}
@@ -92,6 +95,7 @@ func testHandler(t *testing.T, wrap func(Server) StrictServerInterface) (http.Ha
 var implemented = []string{
 	"getServerInfo", "login", "createToken", "logout", "getMe", "changePassword", "listSessions", "revokeSession",
 	"listUsers", "createUser", "getUser", "updateUser", "deleteUser", "resetUserPassword",
+	"listArtists", "getArtist", "listAlbums", "getAlbum", "getTrack",
 }
 
 // exampleRequest builds a request for one operation of the specification
@@ -324,8 +328,8 @@ func TestUnexpectedErrorHidesItsCause(t *testing.T) {
 	// The other operations are untouched, and a 501 is not logged.
 	logs.Reset()
 	rec = httptest.NewRecorder()
-	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, BasePath+"/tracks/"+someID, nil))
-	wantError(t, "getTrack", rec, http.StatusNotImplemented, "not_implemented")
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, BasePath+"/tracks/"+someID+"/lyrics", nil))
+	wantError(t, "getTrackLyrics", rec, http.StatusNotImplemented, "not_implemented")
 	if logs.Len() != 0 {
 		t.Errorf("a 501 was logged: %q", logs.String())
 	}

@@ -63,6 +63,10 @@ CREATE TABLE artists (
     sort_key blob    NOT NULL
 );
 
+-- The list of the artists (DESIGN.md 8.5), by name. Not among the indexes
+-- of 5.2: without it every page of that list sorts every artist.
+CREATE INDEX artists_sort_idx ON artists (sort_key, id);
+
 CREATE TABLE albums (
     seq            integer PRIMARY KEY,
     id             text    NOT NULL UNIQUE,

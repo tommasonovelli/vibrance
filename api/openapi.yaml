@@ -702,8 +702,10 @@ paths:
       summary: The artists, in alphabetical order
       description: |
         The artists that have at least one available album, ordered by name
-        (case, accents and leading articles do not count; numbers in a name
-        are ordered as numbers). Paginated.
+        as the Unicode collation orders text: letters first, then accents,
+        then case; numbers in a name are ordered as numbers ("2" before
+        "10"); a leading article such as "The" counts like any other word.
+        Paginated.
       parameters:
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/After"
@@ -735,8 +737,10 @@ paths:
       tags: [Catalog]
       summary: One artist, with its albums
       description: |
-        The artist and its available albums. `404 artist_not_found` when there
-        is no such artist. An artist id is derived from the name: when
+        The artist and its available albums, by year (albums without a year
+        last), then title. `404 artist_not_found` when there is no such
+        artist, or it has no available album (it is then in no list and in
+        no search either). An artist id is derived from the name: when
         MusicLib renames an artist, its albums pass to an artist with another
         id.
       parameters:
@@ -779,9 +783,12 @@ paths:
           ascending order;
         - `added`: by the moment Vibrance first saw the album.
 
-        `order=desc` reverses the whole order. `artist` keeps only the albums
-        of one artist. A cursor belongs to the `sort` and the `order` it was
-        read with: with others it answers `400 invalid_cursor`.
+        Titles and names are ordered as for `GET /artists`, and albums that
+        tie on every key by id, so the order is total. `order=desc` reverses
+        the whole order. `artist` keeps only the albums of one artist; an id
+        that is no artist's gives an empty list. A cursor belongs to the
+        `sort` and the `order` it was read with: with others it answers
+        `400 invalid_cursor`.
       parameters:
         - name: sort
           in: query

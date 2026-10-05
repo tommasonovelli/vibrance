@@ -20,6 +20,7 @@ import (
 
 	"vibrance/internal/api"
 	"vibrance/internal/auth"
+	"vibrance/internal/catalog"
 	"vibrance/internal/httpx"
 	"vibrance/internal/store"
 )
@@ -65,8 +66,9 @@ func adminToken(t *testing.T, sessions *auth.Service) string {
 }
 
 // publishSessions gives s, which is not started, the service of the
-// sessions that its startup would publish, on a new database with one
-// admin, and returns it. What the service logs is not in the log of s.
+// sessions and the catalog that its startup would publish, on a new
+// database with one admin and an empty index, and returns the first. What
+// the service logs is not in the log of s.
 func publishSessions(t *testing.T, s *server) *auth.Service {
 	t.Helper()
 	st, err := store.Open(t.Context(), filepath.Join(t.TempDir(), databaseFile))
@@ -85,6 +87,7 @@ func publishSessions(t *testing.T, s *server) *auth.Service {
 	if err := sessions.Bootstrap(t.Context(), env(adminEnv)); err != nil {
 		t.Fatal(err)
 	}
+	s.catalog.Store(catalog.New(st))
 	s.sessions.Store(sessions)
 	return sessions
 }

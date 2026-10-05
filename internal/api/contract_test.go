@@ -157,7 +157,8 @@ func TestIdsHaveOneSpelling(t *testing.T) {
 		check("addPlaylistItems with a track id "+spelling, items, "")
 	}
 
-	// The canonical spelling passes all three.
+	// The canonical spelling passes all three, and the operation answers:
+	// no such track, no album of that artist, and a step to come.
 	for where, req := range map[string]*http.Request{
 		"path":  httptest.NewRequest(http.MethodGet, BasePath+"/tracks/"+someID, nil),
 		"query": httptest.NewRequest(http.MethodGet, BasePath+"/albums?artist="+someID, nil),
@@ -170,7 +171,16 @@ func TestIdsHaveOneSpelling(t *testing.T) {
 	} {
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
-		wantError(t, "a canonical id in the "+where, rec, http.StatusNotImplemented, "not_implemented")
+		switch where {
+		case "path":
+			wantError(t, "a canonical id in the "+where, rec, http.StatusNotFound, "track_not_found")
+		case "query":
+			if rec.Code != http.StatusOK || rec.Body.String() != `{"albums":[],"next":null}`+"\n" {
+				t.Errorf("a canonical id in the query: %d %q", rec.Code, rec.Body.String())
+			}
+		default:
+			wantError(t, "a canonical id in the "+where, rec, http.StatusNotImplemented, "not_implemented")
+		}
 	}
 }
 
@@ -215,7 +225,14 @@ func TestParametersOutOfTheSpecification(t *testing.T) {
 		}
 	}
 	// At their limits the same requests reach the operation.
-	for _, target := range []string{"/albums?sort=year&order=desc&limit=200", "/albums?limit=1", "/search?q=" + long[:100] + "&limit=50&types=artist,album,track",
+	for _, target := range []string{"/albums?sort=year&order=desc&limit=200", "/albums?limit=1", "/artists?limit=200"} {
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, BasePath+target, nil))
+		if rec.Code != http.StatusOK {
+			t.Errorf("GET %s: status %d (%q)", target, rec.Code, rec.Body.String())
+		}
+	}
+	for _, target := range []string{"/search?q=" + long[:100] + "&limit=50&types=artist,album,track",
 		"/albums/" + someID + "/cover?size=640&v=x"} {
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, BasePath+target, nil))

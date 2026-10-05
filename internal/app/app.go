@@ -15,6 +15,7 @@ import (
 
 	"vibrance/internal/auth"
 	"vibrance/internal/buildinfo"
+	"vibrance/internal/catalog"
 	"vibrance/internal/config"
 	"vibrance/internal/covers"
 	"vibrance/internal/library"
@@ -204,6 +205,10 @@ type server struct {
 	// startup is complete: until then the operations answer 503. A startup
 	// that fails never publishes it.
 	sessions atomic.Pointer[auth.Service]
+	// catalog reads the index for the operations of the catalog. It is
+	// published before sessions: an operation runs only once sessions is,
+	// and then finds it.
+	catalog atomic.Pointer[catalog.Service]
 	// stopSessions stops the hourly cleanup of the sessions and waits for
 	// it.
 	stopSessions func()
@@ -316,6 +321,7 @@ func (s *server) startup(ctx context.Context) error {
 		return err
 	}
 	s.startCleanup(sessions)
+	s.catalog.Store(catalog.New(s.store))
 	s.sessions.Store(sessions)
 	s.state.Store(stateReady)
 	s.log.Info("ready")

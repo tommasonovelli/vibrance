@@ -182,7 +182,8 @@ func TestSchemaColumns(t *testing.T) {
 }
 
 // The indexes are those §5.2 makes mandatory and tracks(fingerprint), which
-// the erratum "the references follow the audio" adds, and no others.
+// the erratum "the references follow the audio" adds, and artists(sort_key,
+// id), which the list of the artists needs (DESIGN.md S15), and no others.
 func TestSchemaIndexes(t *testing.T) {
 	s := newStore(t)
 	want := []string{
@@ -191,6 +192,7 @@ func TestSchemaIndexes(t *testing.T) {
 		"albums_first_seen_idx ON albums (available, first_seen_at, id)",
 		"albums_title_idx ON albums (available, title_key, id)",
 		"albums_year_idx ON albums (available, year_key, title_key, id)",
+		"artists_sort_idx ON artists (sort_key, id)",
 		"favorites_user_created_idx ON favorites (user_id, created_at, track_id)",
 		"playlist_items_position_idx ON playlist_items (playlist_id, position, id)",
 		"sessions_expires_at_idx ON sessions (expires_at)",

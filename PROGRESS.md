@@ -20,8 +20,8 @@ Design: DESIGN.md (versione 0.1). Orchestratore: aggiorna questo file a ogni pas
 | S11 | OpenAPI completa e pipeline di generazione | done | 1 | 8de3cbd | 2026-10-04 · specifica confrontata con il §8 riga per riga dal revisore |
 | S12 | Confine HTTP e modello degli errori | done | 1 | 1e7043a | 2026-10-04 · 33 richieste ostili provate dal revisore sul server vero |
 | S13 | Autenticazione: nucleo | done | 2 | 24632cb | 2026-10-04 · round 1: CHANGES REQUIRED (errore d'uso che registra gli argomenti, I5) · round 2 approvato |
-| S14 | Endpoint di autenticazione, account e amministrazione utenti | done | 1 | HASH | 2026-10-05 |
-| S15 | Catalogo: artisti, album, tracce | todo | | | |
+| S14 | Endpoint di autenticazione, account e amministrazione utenti | done | 1 | 55c3d77 | 2026-10-05 |
+| S15 | Catalogo: artisti, album, tracce | done | 1 | HASH | 2026-10-05 · errata §5.2 (indice degli artisti) |
 | S16 | Endpoint media: audio, cover, testi | todo | | | |
 | S17 | Ricerca | todo | | | |
 | S18 | Preferiti | todo | | | |
@@ -105,6 +105,9 @@ Stati: `todo`, `in-progress`, `done`, `blocked`.
 - (S14) `internal/api/server_test.go:135` (`wantError`) e messaggi simili di `internal/api` stampano il corpo senza oscurare i token, ora che `testHandler` monta un servizio vero che li emette: passarli da una funzione come `redact` di `internal/app` (I5 nei messaggi dei test).
 - (S14) `internal/auth/admin.go` (`UpdateUser`, `DeleteUser`): il ruolo di chi agisce è letto all'autenticazione e non riletto nella transazione; una richiesta già autorizzata di un admin appena retrocesso o eliminato può ancora completarsi (finestra di millisecondi, N-106(4)). Rileggerlo nella transazione la chiude a costo minimo. `last_admin` resta sicuro.
 - (S14) `internal/auth/admin_test.go` (`TestDeleteUserCascades`) costruisce SQL per concatenazione con gli id (solo test, UUID): meglio i parametri `?`. `adminTarget(ctx, q, actor, id, self, demotes)`: due booleani posizionali consecutivi poco leggibili.
+- (S15) `api/openapi.yaml`, parametro `After`: «when it is not a cursor of this list with these parameters», ma con N-112(4) il filtro `artist` non conta: meglio «with this `sort` and `order`».
+- (S15, per S16) `GetTrack` di una traccia di un album non disponibile restituisce `album.cover` con l'URL della cover, che dopo S16 risponderà probabilmente 404 `cover_not_found`: dirlo in NOTES.md o dare `cover: null` quando l'album non è disponibile.
+- (S15, per S24) Il filtro `?artist=` percorre l'indice dell'ordinamento scartando gli album di altri artisti (caso peggiore: la lista intera, più una lettura in tabella per riga); il test `EXPLAIN QUERY PLAN` gira su tabelle vuote senza statistiche. Da misurare.
 
 ## TO CONFIRM aperti (da riportare all'utente a fine fase)
 - N-014 (S1) Dopo un `rebuild` offline di MusicLib `.maintenance` sparisce ma `library/` resta vuota finché l'app non riparte: in quell'intervallo Vibrance vede tutti gli album non disponibili (poi tornano con gli stessi ID). Riportato all'utente a fine fase 0 (2026-10-01).
@@ -130,6 +133,7 @@ Stati: `todo`, `in-progress`, `done`, `blocked`.
 - N-102 (S13) Codice d'errore nuovo `admin_username_invalid`, che il design non elenca; uscita 2 per i tre codici `admin_*` del primo admin.
 - N-106 (S14) Regole di §7.5 dove il design è breve: `last_admin` prima di `cannot_modify_self`; un admin può retrocedere sé stesso se resta un altro admin abilitato; il perdente di una corsa fra due admin riceve `409 last_admin` o `401`; un admin può reimpostare la propria password via `/admin` (revoca anche la sessione corrente); `createUser` non porta il nome in minuscolo (maiuscola → `422 username_invalid`). Il revisore le accetta tutte.
 - N-107 (S14) Il cookie ha `Max-Age` 30 giorni dal login e non è rinviato al rinnovo: un browser rientra 30 giorni dopo l'accesso per quanto lo usi (come MusicLib); il rinnovo vale per i token. Alternativa più fedele all'intento del §7.3: rimandare `Set-Cookie` quando una richiesta rinnova la sessione.
+- N-112 (S15) Il catalogo dove il §8 è breve: artista senza album disponibili → `404 artist_not_found`; `?artist=` con id sconosciuto → 200 lista vuota; `after=` vuoto → `400 invalid_cursor`; un cursore letto con un altro filtro `artist` è accettato (il §8.5 lo lega solo a `sort` e `order`). Il revisore le ritiene le più prudenti.
 
 ## Errata al design
 Vedi la sezione «Errata» in fondo a DESIGN.md.

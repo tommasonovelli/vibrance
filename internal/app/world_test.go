@@ -14,6 +14,7 @@ import (
 
 	"vibrance/internal/api"
 	"vibrance/internal/auth"
+	"vibrance/internal/catalog"
 	"vibrance/internal/httpx"
 	"vibrance/internal/store"
 )
@@ -24,18 +25,21 @@ type account struct {
 }
 
 // world is a server that is not started, as net/http would call it, with
-// its service of the sessions published on a database of its own and three
-// accounts: the first admin and two users, anna and bob. Its log and that
+// its service of the sessions and its catalog published on a database of
+// its own and three accounts: the first admin and two users, anna and bob.
+// The index is empty until the test fills it. Its log and that
 // of the service are in logs. It is ready: the health says so.
 type world struct {
 	t        *testing.T
 	s        *server
 	host     string
 	sessions *auth.Service
-	logs     *syncBuffer
-	admin    *account
-	anna     *account
-	bob      *account
+	// store is the database of the world, with its index.
+	store *store.Store
+	logs  *syncBuffer
+	admin *account
+	anna  *account
+	bob   *account
 	// accounts counts the accounts newAccount made.
 	accounts int
 }
@@ -65,7 +69,7 @@ func newWorld(t *testing.T, origin string) *world {
 	if err := sessions.Bootstrap(t.Context(), env(adminEnv)); err != nil {
 		t.Fatal(err)
 	}
-	w := &world{t: t, s: s, host: u.Host, sessions: sessions, logs: logs}
+	w := &world{t: t, s: s, host: u.Host, sessions: sessions, store: st, logs: logs}
 	users, err := sessions.ListUsers(t.Context())
 	if err != nil || len(users) != 1 {
 		t.Fatalf("the first admin: %v, %v", users, err)
@@ -73,6 +77,7 @@ func newWorld(t *testing.T, origin string) *world {
 	w.admin = &account{name: adminName, password: adminPassword, id: users[0].ID}
 	w.anna = w.newNamedAccount("anna", "the password of anna", auth.RoleUser)
 	w.bob = w.newNamedAccount("bob", "the password of bob", auth.RoleUser)
+	s.catalog.Store(catalog.New(st))
 	s.sessions.Store(sessions)
 	s.state.Store(stateReady)
 	return w
