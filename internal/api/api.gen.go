@@ -346,7 +346,7 @@ func (e SearchParamsTypes) Valid() bool {
 
 // AddPlaylistItemsRequest Example: {"position":null,"track_ids":["0199a5c0-7b1e-7c3a-9d2f-4b6a8c0e1f23"]}
 type AddPlaylistItemsRequest struct {
-	// Position `null` to add at the end; or the position of the item the block goes before, from `0` to the number of items of the playlist (the end), which needs `If-Match`.
+	// Position `null` to add at the end; or the position of the item the block goes before, from `0` to the `item_count` of the playlist (the end), which needs `If-Match`.
 	Position *int `json:"position"`
 
 	// TrackIds The tracks to add, in order. An id may be repeated.
@@ -829,7 +829,7 @@ type LyricsLine struct {
 
 // MovePlaylistItemRequest Example: {"position":0}
 type MovePlaylistItemRequest struct {
-	// Position Where the item is after the move, from `0` to the number of items of the playlist less one.
+	// Position Where the item is after the move, from `0` to the `item_count` of the playlist less one.
 	Position int `json:"position"`
 }
 
@@ -845,7 +845,7 @@ type Playlist struct {
 	// Description At most 2000 characters; empty when there is none.
 	Description string `json:"description"`
 
-	// DurationMs The sum of the durations of the items that have an available track, in milliseconds.
+	// DurationMs The sum of the durations of the items that have an available track, in milliseconds. Unlike `item_count`, it leaves out the items whose track is not available.
 	DurationMs int64 `json:"duration_ms"`
 
 	// Etag The entity tag of this revision, `"playlist:<id>:<revision>"` with its quotes; the value to send as `If-Match`.
@@ -856,7 +856,7 @@ type Playlist struct {
 	// Example: 0199a5c0-7b1e-7c3a-9d2f-4b6a8c0e1f23
 	Id Id `json:"id"`
 
-	// ItemCount How many items have a track that is available. Positions count every item, also the ones whose track is not available.
+	// ItemCount How many items the playlist has, the ones whose track is not available included. The positions of the items go from `0` to `item_count - 1`.
 	ItemCount int `json:"item_count"`
 
 	// Name 1 to 200 characters.

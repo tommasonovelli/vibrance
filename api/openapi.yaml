@@ -90,10 +90,13 @@ info:
     right). Send it back as `If-Match` to make a change only if nobody changed
     the playlist in between: a tag of an older revision answers
     `412 precondition_failed`, and nothing is changed. A `W/` prefix is
-    ignored. `If-Match` is required where a change depends on positions
-    (inserting at a position, moving an item): without it the answer is
-    `428 precondition_required`. Elsewhere it is optional, and checked when
-    sent.
+    ignored, and the header may list several tags, separated by commas: one
+    of them must be the current one. `*` is not the tag of a revision, and
+    answers `412` like any other text. `If-Match` is required where a change
+    depends on positions (inserting at a position, moving an item): without
+    it the answer is `428 precondition_required`. Elsewhere it is optional,
+    and checked when sent. A playlist that does not exist, or is of another
+    user, answers `404 playlist_not_found` whatever the header says.
 
     ## Outside this document
 
@@ -1409,7 +1412,7 @@ paths:
       operationId: listPlaylists
       tags: [Playlists]
       summary: The playlists of the user
-      description: Every playlist of the user of the request, without its items. Not paginated; a user has at most 500.
+      description: Every playlist of the user of the request, without its items, the oldest first. Not paginated; a user has at most 500.
       responses:
         "200":
           description: The playlists.
@@ -1436,10 +1439,12 @@ paths:
       summary: Create a playlist
       description: |
         Creates an empty playlist of the user of the request. Two playlists
-        may have the same name.
+        may have the same name. The name and the description are kept as
+        they are sent; a character is a Unicode code point, and U+0000 is
+        not accepted.
 
-        `422 invalid_request`: the name is not 1 to 200 characters, or the
-        description is over 2000.
+        `422 invalid_request`: the name is not 1 to 200 characters, the
+        description is over 2000, or one of them has the character U+0000.
         `422 too_many_playlists`: the user has 500 playlists already.
       requestBody:
         required: true
@@ -1517,15 +1522,15 @@ paths:
       summary: Change the name and the description of a playlist
       description: |
         Both fields are sent, with the values the playlist must have. The
-        playlist gets a new `revision`. `If-Match` is optional, and checked
-        when sent.
+        playlist gets a new `revision`, also when both are the values it
+        has. `If-Match` is optional, and checked when sent.
 
         `404 playlist_not_found`: there is no such playlist, or it is of
         another user.
         `412 precondition_failed`: `If-Match` names an older revision; nothing
         is changed.
-        `422 invalid_request`: the name is not 1 to 200 characters, or the
-        description is over 2000.
+        `422 invalid_request`: the name is not 1 to 200 characters, the
+        description is over 2000, or one of them has the character U+0000.
       parameters:
         - $ref: "#/components/parameters/PathId"
         - $ref: "#/components/parameters/IfMatch"
@@ -1657,24 +1662,26 @@ paths:
         in a playlist more than once: each item has its own id. All of them
         are added, or none.
 
+        The answer has the playlist as it is now and the new items, with the
+        position of each.
+
         With `"position": null` the block goes at the end, and `If-Match` is
         not needed: adding a track from anywhere is one request. With a
         position the block goes **before** the item that is at that position,
         and `If-Match` is required, because a position means something only
         for a known revision. Positions count **every** item of the playlist,
-        also the ones whose track is not available: with `n` items they go
-        from `0` to `n`, and `n` is the end.
+        also the ones whose track is not available: they go from `0` to the
+        `item_count` of the playlist, which is the end.
 
         `404 playlist_not_found`: there is no such playlist, or it is of
         another user.
         `412 precondition_failed`: `If-Match` names an older revision; nothing
         is added.
         `422 unknown_track`: some ids are not tracks; `details.track_ids`
-        lists them.
-        `422 track_unavailable`: some tracks are not available;
-        `details.track_ids` lists them.
-        `422 invalid_position`: the position is not from `0` to the number of
-        items.
+        lists them, each once, in the order of the request.
+        `422 track_unavailable`: every id is a track and some are not
+        available; `details.track_ids` lists them in the same way.
+        `422 invalid_position`: the position is not from `0` to `item_count`.
         `422 too_many_items`: the playlist would have more than 10000 items.
         `428 precondition_required`: a position without `If-Match`.
       parameters:
@@ -1770,8 +1777,9 @@ paths:
       description: |
         Moves one item so that `position` is where it is **after** the move;
         the other items keep their order. Positions count every item of the
-        playlist, also the ones whose track is not available: with `n` items
-        they go from `0` to `n - 1`.
+        playlist, also the ones whose track is not available: they go from
+        `0` to the `item_count` of the playlist less one. The playlist gets
+        a new `revision`, also when the item is at that position already.
         `If-Match` is required.
 
         `404 playlist_not_found`: there is no such playlist, or it is of
@@ -1779,8 +1787,8 @@ paths:
         `404 item_not_found`: the playlist has no such item.
         `412 precondition_failed`: `If-Match` names an older revision; nothing
         is moved.
-        `422 invalid_position`: the position is not from `0` to the number of
-        items less one.
+        `422 invalid_position`: the position is not from `0` to `item_count`
+        less one.
         `428 precondition_required`: no `If-Match`.
       parameters:
         - $ref: "#/components/parameters/PathId"
@@ -2911,12 +2919,12 @@ components:
         item_count:
           type: integer
           minimum: 0
-          description: How many items have a track that is available. Positions count every item, also the ones whose track is not available.
+          description: How many items the playlist has, the ones whose track is not available included. The positions of the items go from `0` to `item_count - 1`.
         duration_ms:
           type: integer
           format: int64
           minimum: 0
-          description: The sum of the durations of the items that have an available track, in milliseconds.
+          description: The sum of the durations of the items that have an available track, in milliseconds. Unlike `item_count`, it leaves out the items whose track is not available.
         revision:
           type: integer
           format: int64
@@ -3042,7 +3050,7 @@ components:
         position:
           type: integer
           nullable: true
-          description: "`null` to add at the end; or the position of the item the block goes before, from `0` to the number of items of the playlist (the end), which needs `If-Match`."
+          description: "`null` to add at the end; or the position of the item the block goes before, from `0` to the `item_count` of the playlist (the end), which needs `If-Match`."
       example:
         track_ids:
           - 0199a5c0-7b1e-7c3a-9d2f-4b6a8c0e1f23
@@ -3080,7 +3088,7 @@ components:
       properties:
         position:
           type: integer
-          description: Where the item is after the move, from `0` to the number of items of the playlist less one.
+          description: Where the item is after the move, from `0` to the `item_count` of the playlist less one.
       example:
         position: 0
     LibraryStatus:

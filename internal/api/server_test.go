@@ -112,6 +112,8 @@ var implemented = []string{
 	"listArtists", "getArtist", "listAlbums", "getAlbum", "getTrack", "search",
 	"getTrackAudio", "getAlbumCover", "getTrackLyrics",
 	"listFavoriteTracks", "addFavoriteTrack", "removeFavoriteTrack",
+	"listPlaylists", "createPlaylist", "getPlaylist", "updatePlaylist", "deletePlaylist", "listPlaylistItems",
+	"addPlaylistItems", "removePlaylistItem", "movePlaylistItem",
 }
 
 // exampleRequest builds a request for one operation of the specification
@@ -344,8 +346,8 @@ func TestUnexpectedErrorHidesItsCause(t *testing.T) {
 	// The other operations are untouched, and a 501 is not logged.
 	logs.Reset()
 	rec = httptest.NewRecorder()
-	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, BasePath+"/playlists", nil))
-	wantError(t, "listPlaylists", rec, http.StatusNotImplemented, "not_implemented")
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, BasePath+"/admin/library", nil))
+	wantError(t, "getLibraryStatus", rec, http.StatusNotImplemented, "not_implemented")
 	if logs.Len() != 0 {
 		t.Errorf("a 501 was logged: %q", logs.String())
 	}

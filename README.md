@@ -169,6 +169,14 @@ The original is served in place of the thumbnail when the cover file is larger t
 
 `GET /api/v1/tracks/{id}/lyrics` reads the `.lrc` file of the track (at most 2 MiB), checks its SHA-256 against the index and answers its lines as JSON (`internal/lyrics`). Other bytes answer `503 library_changing` like the audio; a lyrics file that is gone or cannot be read answers `404 lyrics_not_found`.
 
+## The playlists
+
+A playlist belongs to the user who made it and to nobody else: for every other account, an admin included, it answers `404 playlist_not_found`. A user has at most 500 playlists, and a playlist at most 10,000 items; the same track can be in a playlist more than once, because each item has an id of its own.
+
+Every change of a playlist, of its name or of its items, gives it a new `revision` and a new entity tag, `"playlist:<id>:<revision>"`, which is both in the `ETag` header and in the `etag` field of the body. Adding tracks at the end, renaming, deleting and removing an item take `If-Match` when it is sent and do not need it. Inserting at a position and moving an item need it (`428 precondition_required` without it), because a position means something only for a known revision. A tag of another revision answers `412 precondition_failed` and changes nothing; the comparison and the change are one transaction, so of two clients that change a playlist with the same tag only one succeeds.
+
+The positions of the items are always `0` to `item_count - 1`, without gaps. A track that is no longer available stays where it was, with `"available": false`: it counts in `item_count` and for the positions, and not in `duration_ms`. A request that adds several tracks adds all of them or none (`422 unknown_track` and `422 track_unavailable` list the ids they refuse).
+
 ## Pinned versions
 
 Every image is pinned by exact version and by digest. The pins are copied from MusicLib 1.2.0: Go 1.25.14 on Debian trixie, the `debian:trixie-20260918-slim` runtime base, Dockerfile frontend 1.26.0, shellcheck 0.11.0 and sqlc 1.31.1. `ffmpeg` and `ffprobe` (`8.1.3-musiclib1`) are copied from the published image `ghcr.io/tommasonovelli/musiclib:1.2.0`. The digests are in the `Dockerfile`, `scripts/lint-shell.sh` and `scripts/lib/common.sh`. The Go modules are at exact versions in `go.mod`, `oapi-codegen` among them. [docs/compat.md](docs/compat.md) lists the MusicLib versions Vibrance works with.

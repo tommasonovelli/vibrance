@@ -87,9 +87,10 @@ func (w *world) fixtureTracks(a *account) []api.Track {
 
 // wantFavoriteEverywhere checks the acceptance of step S18: every answer
 // that holds a Track says the same of it for a, a favorite if and only if
-// it is one of want. The answers are those of getAlbum, getTrack, search
-// and listFavoriteTracks; every track of the library is seen in each of
-// the first three, and the list is exactly want.
+// it is one of want. The answers are those of getAlbum, getTrack, search,
+// listPlaylistItems (step S19) and listFavoriteTracks; every track of the
+// library is seen in each of the first four, and the list of the favorites
+// is exactly want.
 func (w *world) wantFavoriteEverywhere(where string, a *account, want ...string) {
 	w.t.Helper()
 	check := func(source string, tr api.Track) {
@@ -112,6 +113,31 @@ func (w *world) wantFavoriteEverywhere(where string, a *account, want ...string)
 	}
 	if len(found) != len(tracks) {
 		w.t.Fatalf("%s: the searches found %d of the %d tracks", where, len(found), len(tracks))
+	}
+	// A playlist of a with every track of the library, for the time of the
+	// check, made with a clock of its own: the tests count the readings of
+	// the clock of the server.
+	svc, ctx := catalog.New(w.store, time.Now), w.t.Context()
+	p, err := svc.CreatePlaylist(ctx, a.id, "Every track", "")
+	if err != nil {
+		w.t.Fatal(err)
+	}
+	ids := make([]string, 0, len(tracks))
+	for _, tr := range tracks {
+		ids = append(ids, tr.Id)
+	}
+	if _, _, err := svc.AddPlaylistItems(ctx, a.id, p.ID, ids, nil, nil); err != nil {
+		w.t.Fatal(err)
+	}
+	items := w.playlistItems(a, p.ID, "5")
+	if len(items) != len(tracks) {
+		w.t.Fatalf("%s: the playlist lists %d of the %d tracks", where, len(items), len(tracks))
+	}
+	for _, it := range items {
+		check("listPlaylistItems", it.Track)
+	}
+	if err := svc.DeletePlaylist(ctx, a.id, p.ID, nil); err != nil {
+		w.t.Fatal(err)
 	}
 	listed := w.favorites(a, "3")
 	for _, f := range listed {

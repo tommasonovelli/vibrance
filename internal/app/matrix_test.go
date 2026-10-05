@@ -85,94 +85,131 @@ var authorizationMatrix = map[string]access{
 // them; the step then removes them from here and gives them a request in
 // matrixRequests. Until then the matrix checks their refusals (401, 403)
 // exactly, and expects 501 where it says success or 404.
-var pendingOperations = []string{
-	"getLibraryStatus", "scanLibrary",
-	"listPlaylists", "createPlaylist", "getPlaylist", "updatePlaylist", "deletePlaylist", "listPlaylistItems",
-	"addPlaylistItems", "removePlaylistItem", "movePlaylistItem",
-}
+var pendingOperations = []string{"getLibraryStatus", "scanLibrary"}
 
 // matrixRequest builds, in w, a request of an operation that succeeds when
 // actor (nil: nobody) may make it on a resource of owner: the method, the
-// path under /api/v1 and the body (nil: none). It makes what the request
-// needs, a session or an account to change, as owner.
-type matrixRequest func(w *world, actor, owner *account) (method, path string, body any)
+// path under /api/v1, the body (nil: none) and the If-Match header ("":
+// none). It makes what the request needs, a session, an account to change
+// or a playlist, as owner.
+type matrixRequest func(w *world, actor, owner *account) (method, path string, body any, ifMatch string)
 
 var matrixRequests = map[string]matrixRequest{
-	"getServerInfo": func(*world, *account, *account) (string, string, any) { return "GET", "/server", nil },
-	"login": func(_ *world, _, owner *account) (string, string, any) {
-		return "POST", "/auth/login", map[string]any{"username": owner.name, "password": owner.password}
+	"getServerInfo": func(*world, *account, *account) (string, string, any, string) { return "GET", "/server", nil, "" },
+	"login": func(_ *world, _, owner *account) (string, string, any, string) {
+		return "POST", "/auth/login", map[string]any{"username": owner.name, "password": owner.password}, ""
 	},
-	"createToken": func(_ *world, _, owner *account) (string, string, any) {
-		return "POST", "/auth/tokens", map[string]any{"username": owner.name, "password": owner.password, "device_name": "matrix"}
+	"createToken": func(_ *world, _, owner *account) (string, string, any, string) {
+		return "POST", "/auth/tokens", map[string]any{"username": owner.name, "password": owner.password, "device_name": "matrix"}, ""
 	},
-	"logout": func(*world, *account, *account) (string, string, any) { return "POST", "/auth/logout", nil },
-	"getMe":  func(*world, *account, *account) (string, string, any) { return "GET", "/me", nil },
-	"changePassword": func(_ *world, _, owner *account) (string, string, any) {
-		return "PUT", "/me/password", map[string]any{"current_password": owner.password, "new_password": "a new password of the matrix"}
+	"logout": func(*world, *account, *account) (string, string, any, string) { return "POST", "/auth/logout", nil, "" },
+	"getMe":  func(*world, *account, *account) (string, string, any, string) { return "GET", "/me", nil, "" },
+	"changePassword": func(_ *world, _, owner *account) (string, string, any, string) {
+		return "PUT", "/me/password", map[string]any{"current_password": owner.password, "new_password": "a new password of the matrix"}, ""
 	},
-	"listSessions": func(*world, *account, *account) (string, string, any) { return "GET", "/me/sessions", nil },
-	"revokeSession": func(w *world, _, owner *account) (string, string, any) {
-		return "DELETE", "/me/sessions/" + w.token(owner).Session.ID, nil
+	"listSessions": func(*world, *account, *account) (string, string, any, string) { return "GET", "/me/sessions", nil, "" },
+	"revokeSession": func(w *world, _, owner *account) (string, string, any, string) {
+		return "DELETE", "/me/sessions/" + w.token(owner).Session.ID, nil, ""
 	},
-	"listUsers": func(*world, *account, *account) (string, string, any) { return "GET", "/admin/users", nil },
-	"createUser": func(w *world, _, _ *account) (string, string, any) {
+	"listUsers": func(*world, *account, *account) (string, string, any, string) { return "GET", "/admin/users", nil, "" },
+	"createUser": func(w *world, _, _ *account) (string, string, any, string) {
 		w.accounts++
-		return "POST", "/admin/users", map[string]any{"username": "new" + strings.Repeat("x", w.accounts), "password": "the password of the matrix", "role": "user"}
+		return "POST", "/admin/users", map[string]any{"username": "new" + strings.Repeat("x", w.accounts), "password": "the password of the matrix", "role": "user"}, ""
 	},
-	"getUser": func(w *world, _, _ *account) (string, string, any) {
-		return "GET", "/admin/users/" + w.newAccount(auth.RoleUser).id, nil
+	"getUser": func(w *world, _, _ *account) (string, string, any, string) {
+		return "GET", "/admin/users/" + w.newAccount(auth.RoleUser).id, nil, ""
 	},
-	"updateUser": func(w *world, _, _ *account) (string, string, any) {
-		return "PUT", "/admin/users/" + w.newAccount(auth.RoleUser).id, map[string]any{"role": "admin", "disabled": false}
+	"updateUser": func(w *world, _, _ *account) (string, string, any, string) {
+		return "PUT", "/admin/users/" + w.newAccount(auth.RoleUser).id, map[string]any{"role": "admin", "disabled": false}, ""
 	},
-	"deleteUser": func(w *world, _, _ *account) (string, string, any) {
-		return "DELETE", "/admin/users/" + w.newAccount(auth.RoleUser).id, nil
+	"deleteUser": func(w *world, _, _ *account) (string, string, any, string) {
+		return "DELETE", "/admin/users/" + w.newAccount(auth.RoleUser).id, nil, ""
 	},
-	"resetUserPassword": func(w *world, _, _ *account) (string, string, any) {
-		return "PUT", "/admin/users/" + w.newAccount(auth.RoleUser).id + "/password", map[string]any{"password": "the password of the matrix"}
+	"resetUserPassword": func(w *world, _, _ *account) (string, string, any, string) {
+		return "PUT", "/admin/users/" + w.newAccount(auth.RoleUser).id + "/password", map[string]any{"password": "the password of the matrix"}, ""
 	},
-	"listArtists": func(w *world, _, _ *account) (string, string, any) {
+	"listArtists": func(w *world, _, _ *account) (string, string, any, string) {
 		w.catalogEntry()
-		return "GET", "/artists", nil
+		return "GET", "/artists", nil, ""
 	},
-	"getArtist": func(w *world, _, _ *account) (string, string, any) {
+	"getArtist": func(w *world, _, _ *account) (string, string, any, string) {
 		w.catalogEntry()
-		return "GET", "/artists/" + entryArtist, nil
+		return "GET", "/artists/" + entryArtist, nil, ""
 	},
-	"listAlbums": func(w *world, _, _ *account) (string, string, any) {
+	"listAlbums": func(w *world, _, _ *account) (string, string, any, string) {
 		w.catalogEntry()
-		return "GET", "/albums", nil
+		return "GET", "/albums", nil, ""
 	},
-	"getAlbum": func(w *world, _, _ *account) (string, string, any) {
+	"getAlbum": func(w *world, _, _ *account) (string, string, any, string) {
 		w.catalogEntry()
-		return "GET", "/albums/" + entryAlbum, nil
+		return "GET", "/albums/" + entryAlbum, nil, ""
 	},
-	"getTrack": func(w *world, _, _ *account) (string, string, any) {
+	"getTrack": func(w *world, _, _ *account) (string, string, any, string) {
 		w.catalogEntry()
-		return "GET", "/tracks/" + entryTrack, nil
+		return "GET", "/tracks/" + entryTrack, nil, ""
 	},
-	"search": func(*world, *account, *account) (string, string, any) { return "GET", "/search?q=track", nil },
-	"getTrackAudio": func(w *world, _, _ *account) (string, string, any) {
-		return "GET", "/tracks/" + w.fixtureTrack(albumA, 1) + "/audio", nil
+	"search": func(*world, *account, *account) (string, string, any, string) {
+		return "GET", "/search?q=track", nil, ""
 	},
-	"getAlbumCover": func(w *world, _, _ *account) (string, string, any) {
+	"getTrackAudio": func(w *world, _, _ *account) (string, string, any, string) {
+		return "GET", "/tracks/" + w.fixtureTrack(albumA, 1) + "/audio", nil, ""
+	},
+	"getAlbumCover": func(w *world, _, _ *account) (string, string, any, string) {
 		w.fixtureTrack(albumA, 1)
-		return "GET", "/albums/" + albumA + "/cover", nil
+		return "GET", "/albums/" + albumA + "/cover", nil, ""
 	},
-	"getTrackLyrics": func(w *world, _, _ *account) (string, string, any) {
-		return "GET", "/tracks/" + w.fixtureTrack(albumA, 1) + "/lyrics", nil
+	"getTrackLyrics": func(w *world, _, _ *account) (string, string, any, string) {
+		return "GET", "/tracks/" + w.fixtureTrack(albumA, 1) + "/lyrics", nil, ""
 	},
 	// The favorites are those of the session: no request names another user,
 	// so the row has no cell for the resource of another (TestFavorites
 	// proves that each user sees and changes only their own).
-	"listFavoriteTracks": func(*world, *account, *account) (string, string, any) { return "GET", "/me/favorites/tracks", nil },
-	"addFavoriteTrack": func(w *world, _, _ *account) (string, string, any) {
-		w.catalogEntry()
-		return "PUT", "/me/favorites/tracks/" + entryTrack, nil
+	"listFavoriteTracks": func(*world, *account, *account) (string, string, any, string) {
+		return "GET", "/me/favorites/tracks", nil, ""
 	},
-	"removeFavoriteTrack": func(w *world, _, _ *account) (string, string, any) {
+	"addFavoriteTrack": func(w *world, _, _ *account) (string, string, any, string) {
 		w.catalogEntry()
-		return "DELETE", "/me/favorites/tracks/" + entryTrack, nil
+		return "PUT", "/me/favorites/tracks/" + entryTrack, nil, ""
+	},
+	"removeFavoriteTrack": func(w *world, _, _ *account) (string, string, any, string) {
+		w.catalogEntry()
+		return "DELETE", "/me/favorites/tracks/" + entryTrack, nil, ""
+	},
+	// A playlist is of owner, with one item: the row says what another user,
+	// and an admin, get on it.
+	"listPlaylists": func(*world, *account, *account) (string, string, any, string) { return "GET", "/playlists", nil, "" },
+	"createPlaylist": func(*world, *account, *account) (string, string, any, string) {
+		return "POST", "/playlists", map[string]any{"name": "A playlist of the matrix", "description": ""}, ""
+	},
+	"getPlaylist": func(w *world, _, owner *account) (string, string, any, string) {
+		p, _ := w.playlistWithItem(owner)
+		return "GET", "/playlists/" + p.ID, nil, ""
+	},
+	"updatePlaylist": func(w *world, _, owner *account) (string, string, any, string) {
+		p, _ := w.playlistWithItem(owner)
+		return "PUT", "/playlists/" + p.ID, map[string]any{"name": "Another name", "description": "of the matrix"}, ""
+	},
+	"deletePlaylist": func(w *world, _, owner *account) (string, string, any, string) {
+		p, _ := w.playlistWithItem(owner)
+		return "DELETE", "/playlists/" + p.ID, nil, ""
+	},
+	"listPlaylistItems": func(w *world, _, owner *account) (string, string, any, string) {
+		p, _ := w.playlistWithItem(owner)
+		return "GET", "/playlists/" + p.ID + "/items", nil, ""
+	},
+	"addPlaylistItems": func(w *world, _, owner *account) (string, string, any, string) {
+		p, _ := w.playlistWithItem(owner)
+		return "POST", "/playlists/" + p.ID + "/items", map[string]any{"track_ids": []string{entryTrack}, "position": nil}, ""
+	},
+	"removePlaylistItem": func(w *world, _, owner *account) (string, string, any, string) {
+		p, itemID := w.playlistWithItem(owner)
+		return "DELETE", "/playlists/" + p.ID + "/items/" + itemID, nil, ""
+	},
+	// The move needs If-Match: the tag is the right one, so that a refusal
+	// is about who asks and not about the revision.
+	"movePlaylistItem": func(w *world, _, owner *account) (string, string, any, string) {
+		p, itemID := w.playlistWithItem(owner)
+		return "POST", "/playlists/" + p.ID + "/items/" + itemID + "/move", map[string]any{"position": 0}, p.ETag()
 	},
 }
 
@@ -291,8 +328,11 @@ func TestAuthorizationMatrix(t *testing.T) {
 			where := id + " as " + c.who
 			var req = o.example(t)
 			if !pending {
-				method, path, body := matrixRequests[id](w, c.actor, c.owner)
+				method, path, body, ifMatch := matrixRequests[id](w, c.actor, c.owner)
 				req = w.request(method, path, body)
+				if ifMatch != "" {
+					req.Header.Set("If-Match", ifMatch)
+				}
 			}
 			// The example asks for its Host; the world has the same.
 			req.Host = w.host

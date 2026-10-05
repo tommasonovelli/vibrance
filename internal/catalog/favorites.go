@@ -41,7 +41,7 @@ func (s *Service) AddFavorite(ctx context.Context, userID, trackID string) error
 		}
 		return q.AddFavorite(ctx, store.AddFavoriteParams{UserID: userID, TrackID: trackID, CreatedAt: s.now().UnixMilli()})
 	})
-	return favoriteFailure("adding a favorite", err)
+	return changeFailure("adding a favorite", err)
 }
 
 // RemoveFavorite makes a track no longer a favorite of userID. It is
@@ -54,7 +54,7 @@ func (s *Service) RemoveFavorite(ctx context.Context, userID, trackID string) er
 		}
 		return q.RemoveFavorite(ctx, store.RemoveFavoriteParams{UserID: userID, TrackID: trackID})
 	})
-	return favoriteFailure("removing a favorite", err)
+	return changeFailure("removing a favorite", err)
 }
 
 // knownTrack refuses, in the transaction q, a track that does not exist.
@@ -69,9 +69,9 @@ func knownTrack(ctx context.Context, q *store.Queries, id string) error {
 	return nil
 }
 
-// favoriteFailure is the error of a change of the favorites: a refusal as
-// it is, anything else with what was being done.
-func favoriteFailure(doing string, err error) error {
+// changeFailure is the error of a change of the favorites or of a playlist:
+// a refusal as it is, anything else with what was being done.
+func changeFailure(doing string, err error) error {
 	var refusal *httpx.Error
 	switch {
 	case err == nil:

@@ -158,7 +158,7 @@ func TestIdsHaveOneSpelling(t *testing.T) {
 	}
 
 	// The canonical spelling passes all three, and the operation answers:
-	// no such track, no album of that artist, and a step to come.
+	// no such track, no album of that artist, no such playlist.
 	for where, req := range map[string]*http.Request{
 		"path":  httptest.NewRequest(http.MethodGet, BasePath+"/tracks/"+someID, nil),
 		"query": httptest.NewRequest(http.MethodGet, BasePath+"/albums?artist="+someID, nil),
@@ -179,7 +179,7 @@ func TestIdsHaveOneSpelling(t *testing.T) {
 				t.Errorf("a canonical id in the query: %d %q", rec.Code, rec.Body.String())
 			}
 		default:
-			wantError(t, "a canonical id in the "+where, rec, http.StatusNotImplemented, "not_implemented")
+			wantError(t, "a canonical id in the "+where, rec, http.StatusNotFound, "playlist_not_found")
 		}
 	}
 }

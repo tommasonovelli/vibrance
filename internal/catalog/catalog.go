@@ -22,7 +22,7 @@ const (
 // Service reads the catalog: the artists, albums and tracks the scanner
 // indexed (DESIGN.md §8.3), each operation in one read transaction, so what
 // it returns is one state of the index. It writes nothing of the index: its
-// only writes are the favorites of the users.
+// only writes are the favorites and the playlists of the users.
 type Service struct {
 	store *store.Store
 	now   func() time.Time
