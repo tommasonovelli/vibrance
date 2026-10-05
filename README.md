@@ -2,7 +2,7 @@
 
 Vibrance is the listening side of [Vibrance MusicLib](https://github.com/tommasonovelli/vibrance-musiclib). It is a read-only server over the `library/` folder that MusicLib produces, with multiple users, favorites, playlists, full-text search and an HTTP API documented with OpenAPI. The two products share only that folder.
 
-**Status:** in development toward v0.1. The server keeps an index of the MusicLib library up to date in the background and serves the whole API of `api/openapi.yaml`: accounts and sessions, the catalog, the audio, the covers and the lyrics, the search, the favorites, the playlists and the state of the library. It also serves that specification and a page that documents it. What is still to come is the operations side: backup and restore, the Compose stack next to MusicLib, and the release.
+**Status:** in development toward v0.1. The server keeps an index of the MusicLib library up to date in the background and serves the whole API of `api/openapi.yaml`: accounts and sessions, the catalog, the audio, the covers and the lyrics, the search, the favorites, the playlists and the state of the library. It also serves that specification and a page that documents it. The commands `backup`, `restore` and `doctor` save, restore and check its database, and the Compose stack runs it next to MusicLib: [docs/operations.md](docs/operations.md) is the guide to install and run it. What is still to come is the end-to-end contract suite with the real MusicLib, and the release.
 
 ## Trying it
 
@@ -17,14 +17,16 @@ scripts/lint-shell.sh            # shellcheck on every shell script
 scripts/fuzz.sh FuzzParseReceipt 60s ./internal/library   # one fuzz target, for a duration, on the live sources
 scripts/sqlc.sh                  # regenerate internal/store from sql/ and the migrations (sqlc.sh diff: only compare)
 scripts/generate.sh              # regenerate internal/api from api/openapi.yaml (generate.sh diff: only compare)
+scripts/check-compose-sync.sh    # compose.yaml and env.example are MusicLib's files plus Vibrance's blocks (network)
+scripts/stack-smoke.sh           # the Compose stack for real, in the project vibrance-contract (network, ~10 minutes)
 
 docker build --target runtime -t vibrance:local .
-docker run --rm vibrance:local   # prints: version: devel
+docker run --rm vibrance:local version   # prints: version: devel
 docker run --rm --init -p 127.0.0.1:8090:8080 -e VIBRANCE_PUBLIC_ORIGIN=http://127.0.0.1:8090 \
-  -e VIBRANCE_ADMIN_PASSWORD='choose a long password' vibrance:local serve
+  -e VIBRANCE_ADMIN_PASSWORD='choose a long password' vibrance:local
 ```
 
-The last command runs the server until Ctrl-C. It keeps its state in `/var/lib/vibrance` (the database `vibrance.db`), which lasts as long as the container unless a volume is mounted there, and it reads the library from `/musiclib`, which is empty unless the data volume of MusicLib is mounted there (read-only). `http://127.0.0.1:8090/health/live` answers `{"status":"live"}`, and `/health/ready` answers `{"status":"ready"}` once the startup is complete. In the container, `vibrance healthcheck` asks `/health/ready` and exits 0 or 1. `http://127.0.0.1:8090/` leads to the documentation of the API, and [docs/api.md](docs/api.md) is a short tour of the API with `curl`.
+The last command runs the server, the default command of the image, until Ctrl-C. It keeps its state in `/var/lib/vibrance` (the database `vibrance.db`), which lasts as long as the container unless a volume is mounted there, and it reads the library from `/musiclib`, which is empty unless the data volume of MusicLib is mounted there (read-only). `http://127.0.0.1:8090/health/live` answers `{"status":"live"}`, and `/health/ready` answers `{"status":"ready"}` once the startup is complete. In the container, `vibrance healthcheck` asks `/health/ready` and exits 0 or 1. `http://127.0.0.1:8090/` leads to the documentation of the API, and [docs/api.md](docs/api.md) is a short tour of the API with `curl`.
 
 ## Configuration
 
@@ -56,7 +58,7 @@ A server that is killed needs no repair: the next start recovers from the write-
 
 ### Backup, restore and doctor
 
-The whole database is precious: the ids of the tracks, which playlists and favorites point to, cannot be rebuilt from the library. Three commands of the image save, restore and check it. `/backup` is the backup folder (`VIBRANCE_BACKUP`); the thumbnails are a cache and are not saved.
+The whole database is precious: the ids of the tracks, which playlists and favorites point to, cannot be rebuilt from the library. Three commands of the image save, restore and check it; [docs/operations.md](docs/operations.md) shows them in the Compose stack. `/backup` is the backup folder (`VIBRANCE_BACKUP`); the thumbnails are a cache and are not saved.
 
 ```sh
 docker exec <container> vibrance backup --to "/backup/$(date +%F-%H%M)"   # while the server runs
@@ -94,6 +96,7 @@ The schema is in `migrations/` (goose, embedded in the binary), the queries in `
 - The development containers belong to the Compose project `vibrance-dev` (`compose.dev.yaml`), never to `musiclib`. Its volumes are `vibrance-dev_testdata` (the ext4 `TMPDIR` of the tests), `vibrance-dev_go-build-cache` and `vibrance-dev_go-mod-cache`.
 - The gate tests a snapshot of the tree taken when the `test` image is built. `dev.sh` works on the live sources.
 - Two scripts run the real MusicLib 1.2.0, in the Compose project `vibrance-spike` (new volumes, random passwords, no published port), and delete that project when they end; they need network access. `scripts/make-fixture-library.sh` regenerates the fixture library `testdata/library-v1/` (see `testdata/FIXTURE.md`); `scripts/spike.sh` checks what Vibrance assumes about MusicLib and writes `docs/spike-report.md`.
+- The files of an installation are `compose.yaml` and `env.example` (MusicLib's own files of the pinned release, unchanged, plus blocks between `# >>> Vibrance` and `# <<< Vibrance`), `compose.caddy.yaml` and `Caddyfile.example`; [docs/operations.md](docs/operations.md) explains them. `scripts/check-compose-sync.sh` downloads MusicLib's two files of the release the Dockerfile pins (`ARG MUSICLIB_IMAGE`, the one place that names MusicLib's version) and fails when, outside the blocks, a byte differs, or when a block changes what Compose makes of MusicLib's services. `scripts/stack-smoke.sh` runs the stack in the Compose project `vibrance-contract`, with new volumes, random passwords and no port published on the host, and deletes that project when it ends: it installs from scratch in both start orders, imports an album into MusicLib and waits for Vibrance to list it, stops MusicLib and checks that Vibrance does not change, makes a backup, checks that the sync check turns red on an altered file, and puts Caddy with `tls internal` in front of both.
 - The containers run as your uid and gid (`VIBRANCE_DEV_UID`/`VIBRANCE_DEV_GID` override them, `0` is refused). `GATE_TEST_TIMEOUT` sets the `go test -timeout` of the gate (default `15m`).
 
 ## The API specification
@@ -239,7 +242,7 @@ The positions of the items are always `0` to `item_count - 1`, without gaps. A t
 
 ## Pinned versions
 
-Every image is pinned by exact version and by digest. The pins are copied from MusicLib 1.2.0: Go 1.25.14 on Debian trixie, the `debian:trixie-20260918-slim` runtime base, Dockerfile frontend 1.26.0, shellcheck 0.11.0 and sqlc 1.31.1. `ffmpeg` and `ffprobe` (`8.1.3-musiclib1`) are copied from the published image `ghcr.io/tommasonovelli/musiclib:1.2.0`. The digests are in the `Dockerfile`, `scripts/lint-shell.sh` and `scripts/lib/common.sh`. The Go modules are at exact versions in `go.mod`, `oapi-codegen` among them. The script of the documentation page is Scalar API Reference 1.72.4, with its SHA-256 in `web/docs/VENDOR.md`. [docs/compat.md](docs/compat.md) lists the MusicLib versions Vibrance works with.
+Every image is pinned by exact version and by digest. The pins are copied from MusicLib 1.2.0: Go 1.25.14 on Debian trixie, the `debian:trixie-20260918-slim` runtime base, Dockerfile frontend 1.26.0, shellcheck 0.11.0 and sqlc 1.31.1. `ffmpeg` and `ffprobe` (`8.1.3-musiclib1`) are copied from the published image `ghcr.io/tommasonovelli/musiclib:1.2.0`. The digests are in the `Dockerfile`, `scripts/lint-shell.sh` and `scripts/lib/common.sh`. The Go modules are at exact versions in `go.mod`, `oapi-codegen` among them. The script of the documentation page is Scalar API Reference 1.72.4, with its SHA-256 in `web/docs/VENDOR.md`. `compose.caddy.yaml` pins Caddy 2.11.4 (`caddy:2.11.4-builder-alpine` and `caddy:2.11.4-alpine`, by digest) and the plugin `github.com/caddy-dns/cloudflare` v0.2.4. In `compose.yaml` the images of MusicLib's services are MusicLib's own lines (PostgreSQL by digest, MusicLib by its release version), and Vibrance's image is named by its release version, as MusicLib names its own. [docs/compat.md](docs/compat.md) lists the MusicLib versions Vibrance works with.
 
 ## License
 

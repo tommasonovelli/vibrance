@@ -28,8 +28,8 @@ Design: DESIGN.md (versione 0.1). Orchestratore: aggiorna questo file a ogni pas
 | S18 | Preferiti | done | 1 | 30548ac | 2026-10-05 · `favorite` verificato dal revisore query per query |
 | S19 | Playlist | done | 1 | bf194a0 | 2026-10-05 · dieci operazioni eseguite a mano dal revisore sul server vero · errata a T5 (forma della rinumerazione) |
 | S20 | Stato della libreria, documentazione servita, completamento dell'API | done | 1 | 66e25b4 | 2026-10-05 · `/api/docs` aperta in Chromium dal revisore, SHA-256 di Scalar verificato contro npm · fine fase B |
-| S21 | Backup, ripristino, doctor | done | 1 | HASH | 2026-10-05 · backup e restore completi fatti a mano dal revisore: 33 risposte API identiche prima e dopo |
-| S22 | Immagine e stack Compose | todo | | | |
+| S21 | Backup, ripristino, doctor | done | 1 | 5322bec | 2026-10-05 · backup e restore completi fatti a mano dal revisore: 33 risposte API identiche prima e dopo |
+| S22 | Immagine e stack Compose | done | 1 | HASH | 2026-10-05 · `scripts/stack-smoke.sh` rieseguito dal revisore, quattro procedure della guida provate a mano · solo Docker Desktop, Linux nativo da provare |
 | S23 | Contratto end-to-end con MusicLib reale | todo | | | |
 | S24 | Prestazioni | todo | | | |
 | S25 | Rilascio 0.1.0 | todo | | | |
@@ -124,6 +124,8 @@ Stati: `todo`, `in-progress`, `done`, `blocked`.
 - (S20, per S24) `scalar.js` è servito non compresso (4,4 MB al primo caricamento, poi 304): da misurare. Ogni GET delle tre rotte dei documenti è una riga INFO nel log d'accesso.
 - (S21) `internal/app/backup.go:419`: la garanzia «`link(2)` non sovrascrive mai un database comparso nel frattempo» (§11.4 «Niente sovrascritture») non ha test: la mutazione `os.Rename` al posto di `os.Link` sopravvive. Manca un test del `doctor` mentre il server scrive (scenario di N-140; la sonda del revisore passa). `internal/app/maintenance_test.go:290`: se una goroutine di scrittura fallisce, il ciclo `for writes.Load() < n+5` gira fino al timeout del pacchetto. `internal/store/maintenance.go:120`: commento «There is nothing to checkpoint» impreciso. «1 problems found» con plurale fisso. `doctor_output` e `report_output` non sono nella tabella del README. Il database ripristinato è 0644 mentre la copia nel backup è 0600.
 - (S21, per S22) `docs/operations.md` deve riprendere la tabella dei codici di backup, restore e doctor dal README. Un backup fallito o ucciso lascia `.vibrance-backup-*.tmp` (mai cancellato dal comando, come MusicLib). Il rename della cartella del backup può sostituire una cartella vuota creata nell'istante (Go non ha `RENAME_NOREPLACE` senza `x/sys`, N-142).
+- (S22, per S25) N-146: dopo la pubblicazione, mettere il digest nella riga `image:` di `vibrance` del `compose.yaml` allegato alla release (è nel blocco Vibrance, non tocca D15) e correggere «Visible effect: none» di N-146. Pubblicare fra gli asset `compose.yaml`, `env.example`, `compose.caddy.yaml` e `Caddyfile.example`, e verificare il nome del repository (N-150). I moduli transitivi di xcaddy non sono fissati da hash (N-149).
+- (S22) Stack e smoke provati solo su Docker Desktop per Windows, mai su Linux nativo (T22, §3.5): da rifare su Ubuntu con Docker Engine. `docs/operations.md:208`: il `printf 'VIBRANCE_PUBLIC_ORIGIN=…'` dell'adozione non ha un `\n` iniziale (si attacca all'ultima riga di un `.env` senza a capo finale). `scripts/check-compose-sync.sh:74` usa `--project-name vibrance-dev` per un semplice `config`.
 
 ## TO CONFIRM aperti (da riportare all'utente a fine fase)
 - N-014 (S1) Dopo un `rebuild` offline di MusicLib `.maintenance` sparisce ma `library/` resta vuota finché l'app non riparte: in quell'intervallo Vibrance vede tutti gli album non disponibili (poi tornano con gli stessi ID). Riportato all'utente a fine fase 0 (2026-10-01).
@@ -160,6 +162,9 @@ Stati: `todo`, `in-progress`, `done`, `blocked`.
 - (S20) `CLAUDE.md` e `AGENTS.md` non nominano la cartella `web/` (pagina di documentazione incorporata): una riga da aggiungere con il consenso dell'utente.
 - N-143 (S21) Il ripristino accetta solo una cartella sotto `/backup` (il §11.4 lo dice solo per il backup) e rifiuta uno stato con `-wal`/`-shm`/`-journal` rimasti.
 - N-144 (S21) Il `doctor` trova le righe di ricerca stantie ma nessun comando le ripara (il §11.4: «Non ripara nulla»): il consiglio è ripristinare l'ultimo backup che il `doctor` trova sano. Con questa scelta una riga stantia rende 500 ogni ricerca che la tocca finché non si ripristina (debito di S17). Domanda di prodotto: serve un comando di riparazione dell'indice di ricerca?
+- N-147 (S22) Nessuno `stop_grace_period` nel servizio `vibrance` (il §11.6 com'è): la tolleranza di arresto di 10 s coincide con i 10 s di `docker stop` prima del SIGKILL. Alternativa: `stop_grace_period: 15s` nel blocco Vibrance (una riga, garantisce il checkpoint finale; MusicLib usa 45 s per la sua app). Il revisore di S22 consiglia l'alternativa. È la domanda 8 della fine della fase A.
+- N-150 (S22) Indirizzo delle release di Vibrance nella guida e negli script: `github.com/tommasonovelli/vibrance`.
+- (S22) Proposta per `CLAUDE.md` e `AGENTS.md`: una riga su `scripts/check-compose-sync.sh` (controllo di rilascio, richiede rete) e su `scripts/stack-smoke.sh` (progetto `vibrance-contract`, nessuna porta pubblicata, non fa parte del gate); con il consenso dell'utente.
 
 ## Errata al design
 Vedi la sezione «Errata» in fondo a DESIGN.md.

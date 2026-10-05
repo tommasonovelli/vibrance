@@ -124,8 +124,9 @@ FROM ${RUNTIME_IMAGE} AS runtime
 # The image's uid:gid, 1000:1000 (DESIGN.md §11.6). /musiclib (mount point of
 # MusicLib's data volume, read-only), /var/lib/vibrance (state) and /backup
 # are created owned by it: an empty named volume mounted there inherits that
-# owner, and a /musiclib owned by root would make a new MusicLib data volume
-# unusable by MusicLib if Vibrance mounted it first (DESIGN.md T21).
+# owner. A new MusicLib data volume that Vibrance mounts first thus belongs to
+# MusicLib's user from the start (DESIGN.md T21; scripts/stack-smoke.sh
+# checks it, NOTES.md N-153).
 ARG APP_UID=1000
 ARG APP_GID=1000
 
@@ -147,8 +148,11 @@ COPY --from=build-app --chown=root:root /home/dev/out/vibrance /usr/local/bin/vi
 # Never root. Compose overrides this with `user: UID:GID`; this is only the
 # fallback for a bare `docker run`.
 USER ${APP_UID}:${APP_GID}
+# The port of the default VIBRANCE_HTTP_ADDR, :8080.
+EXPOSE 8080
 WORKDIR /
+# The image runs the server; the operational subcommands replace the
+# command: `docker compose run --rm --no-deps vibrance restore --from ...`,
+# `docker compose exec vibrance vibrance backup --to ...` (docs/operations.md).
 ENTRYPOINT ["/usr/local/bin/vibrance"]
-# The server is `vibrance serve`. It becomes the default command together
-# with the Compose stack (DESIGN.md S22).
-CMD ["version"]
+CMD ["serve"]

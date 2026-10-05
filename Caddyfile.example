@@ -1,0 +1,29 @@
+# Caddy in front of Vibrance and MusicLib (compose.caddy.yaml). See
+# docs/operations.md, "HTTPS and two names". Copy it to ./Caddyfile, next to
+# compose.yaml, and replace example.com with your domain.
+#
+# One wildcard certificate for *.example.com, obtained with the DNS-01
+# challenge through the API of the DNS provider (CF_API_TOKEN in .env): no
+# port needs to be open to the Internet. Each product has its own name, and
+# Caddy passes it every request for that name with the Host header unchanged.
+# Any other name is refused. No `encode`: compression would change the ETag
+# of the audio and the covers.
+*.example.com {
+	tls {
+		dns cloudflare {env.CF_API_TOKEN}
+	}
+
+	@musiclib host musiclib.example.com
+	handle @musiclib {
+		reverse_proxy app:8080
+	}
+
+	@vibrance host vibrance.example.com
+	handle @vibrance {
+		reverse_proxy vibrance:8080
+	}
+
+	handle {
+		abort
+	}
+}
