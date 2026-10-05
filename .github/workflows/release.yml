@@ -1,0 +1,408 @@
+# Release: publishes the image of Vibrance and the GitHub Release of a tag.
+#
+# Triggered by pushing a tag vMAJOR.MINOR.PATCH that points at a commit of
+# main. The maintainer's procedure is in docs/development.md, "Releasing";
+# the contract suite with the real MusicLib (scripts/contract.sh) is run by
+# the maintainer before tagging, not here. Jobs:
+#   guard    the tag, compose.yaml, the release files and CHANGELOG.md agree,
+#            and compose.yaml and env.example are MusicLib's files plus
+#            Vibrance's blocks (scripts/check-compose-sync.sh); nothing is
+#            built
+#   publish  scripts/check.sh, the full test gate (ext4, no network), then
+#            the `runtime` image for linux/amd64, pushed to GHCR with its
+#            SBOM and provenance; a version already in the registry is refused
+#   release  smoke test of the pushed digest and of its third-party notices,
+#            then the GitHub Release with compose.yaml (Vibrance's image
+#            pinned by that digest), env.example, compose.caddy.yaml,
+#            Caddyfile.example, THIRD_PARTY_NOTICES.md, the FFmpeg source
+#            tarball and the MusicLib Dockerfile that built FFmpeg
+#
+# Every third-party action is pinned by commit SHA, and so are the BuildKit
+# and SBOM scanner images (the pins of MusicLib 1.2.0). Each job gets only
+# the permissions it needs.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions: {}
+
+# One release at a time, whatever its tag: a run waits for the one before it,
+# so the floating tags and the Latest release only move forward, and a second
+# run of the same tag refuses the version that the first one published.
+# GitHub keeps one pending run per group: a third one cancels the waiting one.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  # moby/buildkit's buildx-stable-1 channel when it was pinned (what
+  # setup-buildx-action would otherwise pull, unpinned).
+  BUILDKIT_IMAGE: moby/buildkit:v0.32.2@sha256:28a898719c18a33f4e8000685287fa36fd0dd9560c6440227d3a732d79bb41d8
+  # The scanner that writes the image's SBOM (BuildKit's default, pinned).
+  SBOM_GENERATOR: docker/buildkit-syft-scanner:1.12.0@sha256:ae4f3b554449e7e25548e7d8ccc029d17357348e30c6e3df01b92bc93654d6a9
+
+jobs:
+  guard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+      image: ${{ steps.check.outputs.image }}
+      notes: ${{ steps.check.outputs.notes }}
+    steps:
+      - name: Check out the tagged commit, with main and every tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check the tag, main, compose.yaml, the release files and CHANGELOG.md
+        id: check
+        run: |
+          set -euo pipefail
+          fail() { printf '::error::%s\n' "$*"; exit 1; }
+
+          [[ "${GITHUB_REF_TYPE}" == tag ]] || fail "not a tag push: ${GITHUB_REF}"
+          tag="${GITHUB_REF_NAME}"
+          semver='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+          [[ "${tag}" =~ ${semver} ]] \
+            || fail "tag '${tag}' is not a release tag: use vMAJOR.MINOR.PATCH (e.g. v0.1.0), without leading zeros, prefixes or suffixes"
+          version="${tag#v}"
+
+          # The tag still names the commit this run builds, and that commit is on main.
+          [[ "$(git rev-parse "refs/tags/${tag}^{commit}")" == "${GITHUB_SHA}" ]] \
+            || fail "tag ${tag} no longer points at ${GITHUB_SHA}: it was moved after the push"
+          git merge-base --is-ancestor "${GITHUB_SHA}" refs/remotes/origin/main \
+            || fail "commit ${GITHUB_SHA} of tag ${tag} is not on main: release only commits of main"
+
+          # compose.yaml runs exactly the image this release publishes.
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/vibrance"
+          model="$(docker compose -f compose.yaml config --no-interpolate --format json)" \
+            || fail "compose.yaml does not load (docker compose config)"
+          vibrance_image="$(jq -r '.services.vibrance.image' <<<"${model}")"
+          [[ "${vibrance_image}" == "${image}:${version}" ]] \
+            || fail "compose.yaml runs '${vibrance_image}', not '${image}:${version}': update the image of the vibrance service in compose.yaml"
+          for file in env.example compose.caddy.yaml Caddyfile.example THIRD_PARTY_NOTICES.md; do
+            [[ -f "${file}" ]] || fail "${file} is missing: it is attached to the release"
+          done
+
+          # The release notes: the body of the one '## [X.Y.Z]' section of
+          # CHANGELOG.md (the heading may go on with ' - YYYY-MM-DD'), up to
+          # the next '## ' heading or link reference definition, without
+          # surrounding blank lines.
+          [[ -f CHANGELOG.md ]] || fail "CHANGELOG.md is missing: it must have a '## [${version}] - YYYY-MM-DD' section"
+          notes="$(VERSION="${version}" awk '
+            function heading(line) {
+              return index(line, h) == 1 && (length(line) == length(h) || substr(line, length(h) + 1, 1) == " ")
+            }
+            BEGIN { h = "## [" ENVIRON["VERSION"] "]" }
+            heading($0) { if (++count == 1) state = 1; else state = 2; next }
+            state == 1 && (/^## / || /^\[[^]]+\]:[ \t]/) { state = 2 }
+            state != 1 { next }
+            NF == 0 { if (started) blanks++; next }
+            { while (blanks > 0) { print ""; blanks-- }; started = 1; print }
+            END { exit (count == 1 ? 0 : 3) }
+          ' CHANGELOG.md)" || fail "CHANGELOG.md must have exactly one '## [${version}]' section heading"
+          [[ -n "${notes}" ]] || fail "the '## [${version}]' section of CHANGELOG.md is empty"
+
+          delim="EOF_$(openssl rand -hex 16)"
+          {
+            printf 'version=%s\n' "${version}"
+            printf 'image=%s\n' "${image}"
+            printf 'notes<<%s\n%s\n%s\n' "${delim}" "${notes}" "${delim}"
+          } >> "${GITHUB_OUTPUT}"
+          printf 'Release %s of %s\n' "${version}" "${GITHUB_SHA}"
+
+      # DESIGN.md §11.7: the release gate runs the sync check. It downloads
+      # MusicLib's two files of the release that the Dockerfile pins.
+      - name: Check compose.yaml and env.example against MusicLib's release
+        run: scripts/check-compose-sync.sh
+
+  publish:
+    needs: guard
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - name: Check out the tagged commit, with every tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          driver-opts: image=${{ env.BUILDKIT_IMAGE }}
+
+      # Unchanged gate: sqlc diff, generate diff, build, vet, gofmt, go test
+      # -race on the ext4 test volume, without network. Compose builds the
+      # test image in this job's builder, with the Dockerfile's default uid
+      # as in the runtime build below, so that the toolchain and module
+      # layers built here are reused there. No token is in this step's
+      # environment (the GHCR login comes after it). The hosted runner is
+      # slower than a workstation: a longer per-package test timeout than
+      # the local 15m.
+      - name: Run the test gate
+        env:
+          VIBRANCE_DEV_UID: "10001"
+          VIBRANCE_DEV_GID: "10001"
+          BUILDX_BUILDER: ${{ steps.buildx.outputs.name }}
+          GATE_TEST_TIMEOUT: 25m
+        run: scripts/check.sh
+
+      - name: Log in to GHCR
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "${GHCR_TOKEN}" | docker login ghcr.io --username "${GITHUB_ACTOR}" --password-stdin
+
+      # A released tag is never overwritten. The check is here, right before
+      # the push, so that re-running this job alone cannot skip it. GHCR
+      # answers "denied" for a package that does not exist yet; a token that
+      # cannot read a package cannot push to it either, so that answer is as
+      # safe as "not found". Any other error stops the release.
+      - name: Refuse a version that is already published
+        env:
+          IMAGE: ${{ needs.guard.outputs.image }}
+          VERSION: ${{ needs.guard.outputs.version }}
+        run: |
+          set -euo pipefail
+          if out="$(docker buildx imagetools inspect "${IMAGE}:${VERSION}" 2>&1)"; then
+            printf '%s\n' "${out}"
+            printf '::error::%s:%s is already published: a release tag is never overwritten; release a new version\n' "${IMAGE}" "${VERSION}"
+            exit 1
+          fi
+          if ! grep -qiE 'not found|manifest unknown|name unknown|denied|unauthorized|forbidden' <<<"${out}"; then
+            printf '%s\n' "${out}"
+            printf '::error::cannot tell whether %s:%s exists; nothing was pushed\n' "${IMAGE}" "${VERSION}"
+            exit 1
+          fi
+          printf '%s:%s is not published yet (%s)\n' "${IMAGE}" "${VERSION}" "${out}"
+
+      # Floating tags X.Y, X and latest move only to the newest release of
+      # their series (latest: of all releases), by `sort -V` of the vX.Y.Z
+      # tags that this job fetched: a later fix of an older series, or a
+      # re-run of an older release, does not take them back.
+      - name: Choose the image tags
+        id: tags
+        env:
+          IMAGE: ${{ needs.guard.outputs.image }}
+          VERSION: ${{ needs.guard.outputs.version }}
+        run: |
+          set -euo pipefail
+          newest() { git tag --list "$1" | grep -E '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' | sort -V | tail -n 1; }
+          IFS=. read -r major minor _ <<<"${VERSION}"
+          tags="${IMAGE}:${VERSION}"
+          for series in "${major}.${minor}" "${major}" latest; do
+            pattern="v${series}.*"
+            [[ "${series}" == latest ]] && pattern="v*"
+            if [[ "$(newest "${pattern}")" == "v${VERSION}" ]]; then
+              tags+=$'\n'"${IMAGE}:${series}"
+            else
+              printf '::notice::v%s is not the newest %s release: %s:%s stays where it is\n' "${VERSION}" "${pattern}" "${IMAGE}" "${series}"
+            fi
+          done
+          delim="EOF_$(openssl rand -hex 16)"
+          printf 'tags<<%s\n%s\n%s\n' "${delim}" "${tags}" "${delim}" >> "${GITHUB_OUTPUT}"
+          printf 'Image tags:\n%s\n' "${tags}"
+
+      # Same builder as the gate: the toolchain and the modules come from
+      # its local cache.
+      - name: Build and push the runtime image
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: runtime
+          platforms: linux/amd64
+          build-args: |
+            VIBRANCE_VERSION=${{ needs.guard.outputs.version }}
+            VIBRANCE_REVISION=${{ github.sha }}
+            VIBRANCE_SOURCE=${{ github.server_url }}/${{ github.repository }}
+          tags: ${{ steps.tags.outputs.tags }}
+          push: true
+          sbom: generator=${{ env.SBOM_GENERATOR }}
+          # builder-id: the run that built it (the action's default provenance
+          # sets it, an explicit one must).
+          provenance: mode=max,builder-id=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}
+
+  release:
+    needs: [guard, publish]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write # the GitHub Release
+      packages: read # pulling the image while the package is still private
+    env:
+      IMAGE: ${{ needs.guard.outputs.image }}
+      VERSION: ${{ needs.guard.outputs.version }}
+      DIGEST: ${{ needs.publish.outputs.digest }}
+    steps:
+      - name: Check out the tagged commit, with every tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Smoke test the pushed image by digest
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          [[ "${DIGEST}" =~ ^sha256:[0-9a-f]{64}$ ]] || { printf '::error::no image digest from publish: %s\n' "${DIGEST}"; exit 1; }
+          printf '%s' "${GHCR_TOKEN}" | docker login ghcr.io --username "${GITHUB_ACTOR}" --password-stdin
+          ref="${IMAGE}@${DIGEST}"
+          out="$(docker run --rm --pull always --platform linux/amd64 --network none "${ref}" version)"
+          printf '%s\n' "${out}"
+          grep -Fqx "version: ${VERSION}" <<<"${out}" \
+            || { printf '::error::%s does not report version: %s\n' "${ref}" "${VERSION}"; exit 1; }
+          revision="$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "${ref}")"
+          [[ "${revision}" == "${GITHUB_SHA}" ]] \
+            || { printf '::error::%s has revision label %s, not %s\n' "${ref}" "${revision}" "${GITHUB_SHA}"; exit 1; }
+          docker run --rm --network none --entrypoint /usr/local/bin/ffmpeg "${ref}" -hide_banner -version | head -n 1
+
+      # The Go modules compiled into the published binary are exactly those
+      # THIRD_PARTY_NOTICES.md lists, at the same versions, and each has its
+      # folder of license texts under licenses/go-modules.
+      - name: Check the third-party notices against the image
+        run: |
+          set -euo pipefail
+          ref="${IMAGE}@${DIGEST}"
+          go_image="$(sed -n 's/^ARG GO_IMAGE=//p' Dockerfile)"
+          work="${RUNNER_TEMP}/notices"
+          mkdir -p "${work}"
+          ctr="$(docker create --platform linux/amd64 "${ref}")"
+          docker cp "${ctr}:/usr/local/bin/vibrance" "${work}/vibrance"
+          docker cp "${ctr}:/usr/share/doc/vibrance/THIRD_PARTY_NOTICES.md" "${work}/THIRD_PARTY_NOTICES.md"
+          docker rm "${ctr}" >/dev/null
+          cmp THIRD_PARTY_NOTICES.md "${work}/THIRD_PARTY_NOTICES.md" \
+            || { printf '::error::the image does not carry the THIRD_PARTY_NOTICES.md of this commit\n'; exit 1; }
+          docker run --rm --network none -v "${work}:/w:ro" "${go_image}" go version -m /w/vibrance \
+            | awk '$1 == "dep" { print $2, $3 }' | sort >"${work}/compiled"
+          [[ -s "${work}/compiled" ]] || { printf '::error::go version -m lists no module\n'; exit 1; }
+          sed -n 's/^| \([a-z0-9.-]*\.[a-z]*\/[^ |]*\) | \(v[^ |]*\) |.*/\1 \2/p' THIRD_PARTY_NOTICES.md | sort >"${work}/listed"
+          diff -u "${work}/listed" "${work}/compiled" \
+            || { printf '::error::THIRD_PARTY_NOTICES.md does not list the modules compiled into vibrance (above: - listed, + compiled)\n'; exit 1; }
+          while read -r module _; do
+            compgen -G "licenses/go-modules/${module}/LICENSE*" >/dev/null \
+              || { printf '::error::licenses/go-modules/%s has no license text\n' "${module}"; exit 1; }
+          done <"${work}/compiled"
+
+      # compose.yaml as the repository has it, with one change: the image of
+      # the vibrance service, in Vibrance's block, is pinned by the digest
+      # just published (DESIGN.md I12; NOTES.md N-146). MusicLib's lines are
+      # untouched, as scripts/check-compose-sync.sh checked in guard.
+      - name: Collect the release assets
+        run: |
+          set -euo pipefail
+          assets="${RUNNER_TEMP}/assets"
+          mkdir -p "${assets}"
+          from="    image: ${IMAGE}:${VERSION}"
+          [[ "$(grep -cFx "${from}" compose.yaml)" == 1 ]] \
+            || { printf '::error::compose.yaml has not exactly one line %s\n' "${from}"; exit 1; }
+          awk -v from="${from}" -v to="${from}@${DIGEST}" '$0 == from { $0 = to } { print }' compose.yaml >"${assets}/compose.yaml"
+          pinned="$(docker compose -f "${assets}/compose.yaml" config --no-interpolate --format json | jq -r '.services.vibrance.image')"
+          [[ "${pinned}" == "${IMAGE}:${VERSION}@${DIGEST}" ]] \
+            || { printf '::error::the vibrance service of the released compose.yaml runs %s\n' "${pinned}"; exit 1; }
+          diff compose.yaml "${assets}/compose.yaml" || true
+          cp env.example compose.caddy.yaml Caddyfile.example THIRD_PARTY_NOTICES.md "${assets}/"
+
+      # The source of the ffmpeg and ffprobe in the image (GPL-2.0-or-later,
+      # THIRD_PARTY_NOTICES.md): the FFmpeg tarball and the Dockerfile of the
+      # MusicLib release that built them, whose build-ffmpeg stage is the
+      # script that controls their compilation. The MusicLib version comes
+      # from ARG MUSICLIB_IMAGE, the one place that names it; the FFmpeg
+      # version and sha256 from that Dockerfile's ARGs, where MusicLib pins
+      # them. The version must be the one Vibrance checks at startup.
+      - name: Add the source of FFmpeg
+        run: |
+          set -euo pipefail
+          assets="${RUNNER_TEMP}/assets"
+          musiclib="$(sed -n 's|^ARG MUSICLIB_IMAGE=ghcr\.io/tommasonovelli/musiclib:\([0-9][0-9.]*\)@sha256:[0-9a-f]\{64\}$|\1|p' Dockerfile)"
+          [[ -n "${musiclib}" ]] || { printf '::error::cannot read the MusicLib version from ARG MUSICLIB_IMAGE\n'; exit 1; }
+          dockerfile="musiclib-${musiclib}-Dockerfile"
+          curl -fsSL --proto '=https' --retry 3 --retry-all-errors -o "${assets}/${dockerfile}" \
+            "https://raw.githubusercontent.com/tommasonovelli/vibrance-musiclib/v${musiclib}/Dockerfile"
+          arg() {
+            local value
+            value="$(sed -n "s/^ARG $1=//p" "${assets}/${dockerfile}")"
+            [[ "${value}" =~ ^[0-9A-Za-z.+-]+$ ]] || { printf '::error::no single ARG %s in %s\n' "$1" "${dockerfile}" >&2; return 1; }
+            printf '%s' "${value}"
+          }
+          ffmpeg="$(arg FFMPEG_VERSION)"
+          ffmpeg_sha="$(arg FFMPEG_SHA256)"
+          extra="$(arg FFMPEG_EXTRA_VERSION)"
+          grep -Fq "\"${ffmpeg}-${extra}\"" internal/media/*.go \
+            || { printf '::error::Vibrance does not pin ffmpeg %s-%s: the tarball would not be the source of its tools\n' "${ffmpeg}" "${extra}"; exit 1; }
+          curl -fsSL --proto '=https' --retry 3 --retry-all-errors -o "${assets}/ffmpeg-${ffmpeg}.tar.gz" "https://ffmpeg.org/releases/ffmpeg-${ffmpeg}.tar.gz"
+          printf '%s  %s\n' "${ffmpeg_sha}" "${assets}/ffmpeg-${ffmpeg}.tar.gz" | sha256sum -c -
+
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NOTES: ${{ needs.guard.outputs.notes }}
+        run: |
+          set -euo pipefail
+          repo_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
+          # The release's own part of the notes, after the CHANGELOG.md
+          # section. @NAME@ placeholders, filled in below.
+          image_notes="$(cat <<'EOF'
+          ### Container image
+
+          - Image: `@TAGGED@` (linux/amd64)
+          - Digest: `@DIGEST@`
+          - Pinned by digest: `@PINNED@` (the `compose.yaml` of this release runs it)
+
+          ### Install
+
+          Docker Engine with the Compose v2 plugin, Linux amd64, Docker's storage on local ext4. The block creates `~/musiclib`, writes random passwords for MusicLib's database, MusicLib's sign-in and Vibrance's first admin into `.env`, and starts MusicLib and Vibrance:
+
+          ```sh
+          mkdir -p ~/musiclib/import && cd ~/musiclib
+          [ -e compose.yaml ] || curl -fsSLO @DOWNLOAD@/compose.yaml
+          [ -e .env ] || { curl -fsSL -o .env @DOWNLOAD@/env.example && chmod 600 .env && sed -i "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$(openssl rand -hex 32)/" .env && sed -i "s|^MUSICLIB_PASSWORD=.*|MUSICLIB_PASSWORD=$(openssl rand -base64 24)|" .env && sed -i "s|^VIBRANCE_ADMIN_PASSWORD=.*|VIBRANCE_ADMIN_PASSWORD=$(openssl rand -base64 24)|" .env; }
+          docker compose up -d --wait
+          ```
+
+          Then open http://127.0.0.1:8090/ and sign in as `admin` with the password in `.env`: `grep VIBRANCE_ADMIN_PASSWORD .env`. Adopting an existing MusicLib, settings, backups and upgrades: @GUIDE@
+          EOF
+          )"
+          image_notes="${image_notes//@TAGGED@/${IMAGE}:${VERSION}}"
+          image_notes="${image_notes//@DIGEST@/${DIGEST}}"
+          image_notes="${image_notes//@PINNED@/${IMAGE}:${VERSION}@${DIGEST}}"
+          image_notes="${image_notes//@DOWNLOAD@/${repo_url}/releases/download/${GITHUB_REF_NAME}}"
+          image_notes="${image_notes//@GUIDE@/${repo_url}/blob/${GITHUB_REF_NAME}/docs/operations.md}"
+          printf '%s\n\n%s\n' "${NOTES}" "${image_notes}" > "${RUNNER_TEMP}/notes.md"
+          cat "${RUNNER_TEMP}/notes.md"
+
+          # Latest on GitHub, as :latest in publish: only the newest vX.Y.Z
+          # tag of those this job fetched.
+          newest="$(git tag --list 'v*' | grep -E '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' | sort -V | tail -n 1)"
+          latest=false
+          [[ "${newest}" == "${GITHUB_REF_NAME}" ]] && latest=true
+          printf 'Newest release tag: %s; Latest: %s\n' "${newest}" "${latest}"
+
+          gh release create "${GITHUB_REF_NAME}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --verify-tag \
+            --latest="${latest}" \
+            --title "Vibrance ${VERSION}" \
+            --notes-file "${RUNNER_TEMP}/notes.md" \
+            "${RUNNER_TEMP}"/assets/*

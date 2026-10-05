@@ -29,6 +29,8 @@ set -euo pipefail
 
 # shellcheck source=scripts/lib/common.sh
 source "$(dirname -- "${BASH_SOURCE[0]}")/lib/common.sh"
+# shellcheck source=scripts/lib/stack.sh
+source "$(dirname -- "${BASH_SOURCE[0]}")/lib/stack.sh"
 
 [[ $# -eq 0 ]] || die "usage: scripts/contract.sh (no arguments)"
 
@@ -49,9 +51,6 @@ readonly ALBUMS=(
   "epsilon:Écho Café/Epsilon Discs"
   "phi:Foxtrot Twins/Phi Same Audio"
 )
-
-# Compose's own settings in the caller's shell must not steer the test.
-unset COMPOSE_PROJECT_NAME COMPOSE_FILE COMPOSE_PROFILES COMPOSE_ENV_FILES COMPOSE_PATH_SEPARATOR
 
 TMP=""
 STACK=""
@@ -171,20 +170,13 @@ EOF
 }
 
 # Refuses to go on unless the Compose files are the project
-# vibrance-contract, with container names of that project only and no port
-# published on the host. The interpolated model holds the passwords: it is
-# written in the private temporary folder and only grepped.
+# vibrance-contract and touch nothing outside it (check_stack_model). The
+# interpolated model holds the passwords: it is written in the private
+# temporary folder and only read there.
 check_project() {
-  local model="${TMP}/model.yaml" name
+  local model="${TMP}/model.yaml"
   (umask 077 && stack config >"${model}" </dev/null) || die "docker compose config fails"
-  name="$(sed -n '1s/^name: //p' "${model}")"
-  [[ "${name}" == "${PROJECT}" ]] || die "the Compose project is '${name}', not ${PROJECT}: nothing was started"
-  if sed -n 's/^ *container_name: //p' "${model}" | grep -v "^${PROJECT}\(-[a-z]*\)\?\$"; then
-    die "a container name above is not of the project ${PROJECT}: nothing was started"
-  fi
-  if grep -q '^ *published:' "${model}"; then
-    die "the stack would publish a port on the host: nothing was started"
-  fi
+  check_stack_model "${model}" "${PROJECT}" "${STACK}"
 }
 
 # answer N TEXT: writes the answer to the action N into the suite's
@@ -231,7 +223,11 @@ act() {
       # The exec ends with the container when the signal stops the server.
       wait "${WATCH_PID}" || true
       out="$(grep -m1 '^signal \|^no scan$' "${TMP}/watch.log" || true)"
-      if [[ -n "${out}" ]]; then answer "${n}" "ok ${out}"; else answer "${n}" "error $(tr '\n' ' ' <"${TMP}/watch.log")"; fi
+      if [[ -n "${out}" ]] && ! grep -q '^error ' "${TMP}/watch.log"; then
+        answer "${n}" "ok ${out}"
+      else
+        answer "${n}" "error $(tr '\n' ' ' <"${TMP}/watch.log")"
+      fi
       ;;
     restart)
       if stack restart "${arg}" </dev/null >&2; then answer "${n}" ok; else answer "${n}" "error docker compose restart ${arg} failed"; fi

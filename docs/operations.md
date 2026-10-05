@@ -12,7 +12,7 @@ The examples use the same values everywhere, so you can copy them and change onl
 | `2026-10-05-2130` | the name of a backup |
 | `anna` | an account of Vibrance |
 
-MusicLib has its own guide, [operations.md of MusicLib](https://github.com/tommasonovelli/vibrance-musiclib/blob/v1.2.0/docs/operations.md): this one says what is different when Vibrance is in the stack, and refers to it for the rest. For building and testing Vibrance itself, see the [README](../README.md).
+MusicLib has its own guide, [operations.md of MusicLib](https://github.com/tommasonovelli/vibrance-musiclib/blob/v1.2.0/docs/operations.md): this one says what is different when Vibrance is in the stack, and refers to it for the rest. For building and testing Vibrance itself, and for how the server works inside, see the [developer guide](development.md).
 
 ## Contents
 

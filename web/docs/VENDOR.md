@@ -15,6 +15,36 @@ The page the server answers at `/api/docs` (`index.html`, written here) loads on
 | Size | 4381105 bytes |
 | SHA-256 | `f5ac0c3504a7ca77ca9fa96a6bb7c8f98b42c271864df35583f6ed9e6da40c23` |
 
+## License
+
+Scalar API Reference is Copyright (c) 2023-present Scalar, under the MIT License. The npm package declares `MIT` but carries no license file, so the text below is the `LICENSE` of Scalar's repository, <https://github.com/scalar/scalar>; it is also `licenses/scalar/LICENSE`, which the image carries in `/usr/share/doc/vibrance/` and [THIRD_PARTY_NOTICES.md](../../THIRD_PARTY_NOTICES.md) lists. The file is a bundle that also contains the libraries Scalar is built with; it keeps their license comments.
+
+```text
+MIT License
+
+Copyright (c) 2023-present Scalar
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+## The file
+
 The file is the one of the tarball byte for byte: `.gitattributes` keeps Git from converting its line endings. Its last line names a source map, `standalone.js.map`, which is not vendored: a browser with its developer tools open asks for `/api/docs/standalone.js.map` and gets `404`.
 
 ## To change the version

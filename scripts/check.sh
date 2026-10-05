@@ -9,7 +9,7 @@
 #
 # The sources are copied into the `test` image (a snapshot of the working
 # tree at build time); the container has a read-only root filesystem, TMPDIR
-# on the ext4 `testdata` volume and no network. See README.md.
+# on the ext4 `testdata` volume and no network. See docs/development.md.
 set -euo pipefail
 
 # shellcheck source=scripts/lib/common.sh

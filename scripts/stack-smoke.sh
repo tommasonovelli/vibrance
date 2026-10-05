@@ -39,6 +39,8 @@ set -euo pipefail
 
 # shellcheck source=scripts/lib/common.sh
 source "$(dirname -- "${BASH_SOURCE[0]}")/lib/common.sh"
+# shellcheck source=scripts/lib/stack.sh
+source "$(dirname -- "${BASH_SOURCE[0]}")/lib/stack.sh"
 
 readonly PROJECT=vibrance-contract
 readonly SMOKE_IMAGE=vibrance-stack-smoke:local
@@ -46,9 +48,6 @@ readonly ALBUM_SOURCE="testdata/library-v1/Bravo Tones/Beta MP3"
 readonly ALBUM_TITLE="Beta MP3"
 readonly DOMAIN=example.localhost
 readonly WAIT=(--wait --wait-timeout 300)
-
-# Compose's own settings in the caller's shell must not steer the test.
-unset COMPOSE_PROJECT_NAME COMPOSE_FILE COMPOSE_PROFILES COMPOSE_ENV_FILES COMPOSE_PATH_SEPARATOR
 
 GO_IMAGE="$(sed -n 's/^ARG GO_IMAGE=//p' "${REPO_ROOT}/Dockerfile")"
 [[ "${GO_IMAGE}" == *@sha256:* ]] || die "cannot read ARG GO_IMAGE from the Dockerfile"
@@ -166,22 +165,15 @@ EOF
 }
 
 # Refuses to go on unless every Compose file set is the project
-# vibrance-contract, with container names of that project only and no port
-# published on the host. The interpolated model holds the passwords: it is
-# written in the private temporary folder and only grepped.
+# vibrance-contract and touches nothing outside it (check_stack_model). The
+# interpolated model holds the passwords: it is written in the private
+# temporary folder and only read there.
 check_project() {
-  local set model name
+  local set model
   for set in base caddy; do
     model="${SMOKE_TMP}/model-${set}.yaml"
     (umask 077 && "${set}" config >"${model}") || die "docker compose config fails (${set})"
-    name="$(sed -n '1s/^name: //p' "${model}")"
-    [[ "${name}" == "${PROJECT}" ]] || die "the Compose project is '${name}', not ${PROJECT}: nothing was started"
-    if sed -n 's/^ *container_name: //p' "${model}" | grep -v "^${PROJECT}\(-[a-z]*\)\?\$"; then
-      die "a container name above is not of the project ${PROJECT}: nothing was started"
-    fi
-    if grep -q '^ *published:' "${model}"; then
-      die "the stack would publish a port on the host: nothing was started"
-    fi
+    check_stack_model "${model}" "${PROJECT}" "${STACK}"
   done
 }
 

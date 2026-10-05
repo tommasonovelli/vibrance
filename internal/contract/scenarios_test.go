@@ -183,16 +183,23 @@ func a4(t *testing.T, w *world) {
 
 // watchListings asks Vibrance for scans and lists its albums until ctx
 // ends; it fails on a list with more than n albums or with album id more
-// than once.
+// than once, and on a request that fails for another reason than the end
+// of ctx.
 func watchListings(ctx context.Context, vb *vibrance, id string, n int) error {
 	lists := 0
 	for ctx.Err() == nil {
 		if err := vb.call(ctx, http.MethodPost, "/api/v1/admin/library/scan", nil, http.StatusAccepted, nil); err != nil {
-			break
+			if ctx.Err() != nil {
+				break
+			}
+			return fmt.Errorf("during the rename: %w", err)
 		}
 		var l api.AlbumList
 		if err := vb.call(ctx, http.MethodGet, "/api/v1/albums?limit=200", nil, http.StatusOK, &l); err != nil {
-			break
+			if ctx.Err() != nil {
+				break
+			}
+			return fmt.Errorf("during the rename: %w", err)
 		}
 		lists++
 		count := 0

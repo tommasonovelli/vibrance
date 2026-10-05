@@ -1,5 +1,5 @@
 # Vibrance: development Compose file, the containerized toolchain. See
-# README.md.
+# docs/development.md.
 #
 #   scripts/check.sh    the gate in the `test` service
 #   scripts/dev.sh      a shell, or one command, in the `dev` service

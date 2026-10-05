@@ -29,9 +29,14 @@ ARG MUSICLIB_IMAGE=ghcr.io/tommasonovelli/musiclib:1.2.0@sha256:52204bdf0ca23eea
 ARG DEV_UID=10001
 ARG DEV_GID=10001
 
-# The application version, a token of [0-9A-Za-z.+-]. Only `build-app`
-# redeclares it, so a new value never invalidates the toolchain or test layers.
+# The application version, a token of [0-9A-Za-z.+-]. Only `build-app` and
+# the labels at the end of `runtime` redeclare it, so a new value never
+# invalidates the toolchain or test layers.
 ARG VIBRANCE_VERSION=devel
+# The commit and the repository URL of a release, for the image labels
+# (empty by default). Only the end of `runtime` redeclares them.
+ARG VIBRANCE_REVISION=
+ARG VIBRANCE_SOURCE=
 
 # ---------------------------------------------------------------------------
 # ffmpeg and ffprobe (DESIGN.md §3.6, D18): copied, never built, from the
@@ -133,15 +138,18 @@ ARG APP_GID=1000
 # ffmpeg and ffprobe: static, the same bytes as in the test and dev images.
 COPY --from=media-tools /usr/local/bin/ffmpeg /usr/local/bin/ffprobe /usr/local/bin/
 
-# /usr/share/doc/vibrance is created here: COPY --chmod would give the
-# directories it creates the file's mode.
-RUN install -d -o "${APP_UID}" -g "${APP_GID}" -m 0755 /musiclib /var/lib/vibrance /backup \
- && install -d -m 0755 /usr/share/doc/vibrance
+# Vibrance's license and the notices of the third-party software in this
+# image (ffmpeg, the Go modules, the script of the documentation page), with
+# the license texts they refer to (THIRD_PARTY_NOTICES.md), owned by root.
+COPY LICENSE THIRD_PARTY_NOTICES.md /usr/share/doc/vibrance/
+COPY licenses/ /usr/share/doc/vibrance/licenses/
 
-# Vibrance's license, 0644 whatever the mode in the checkout (a Windows
-# build context marks every file executable). The third-party notices
-# (ffmpeg, Go modules) come with the release (DESIGN.md S25; NOTES.md N-006).
-COPY --chmod=0644 LICENSE /usr/share/doc/vibrance/LICENSE
+# The texts get files 0644 and folders 0755 here, whatever the modes in the
+# checkout: a Windows build context marks every file executable, and COPY
+# --chmod would give the folders it creates the files' mode.
+RUN install -d -o "${APP_UID}" -g "${APP_GID}" -m 0755 /musiclib /var/lib/vibrance /backup \
+ && find /usr/share/doc/vibrance -type d -exec chmod 0755 {} + \
+ && find /usr/share/doc/vibrance -type f -exec chmod 0644 {} +
 
 COPY --from=build-app --chown=root:root /home/dev/out/vibrance /usr/local/bin/vibrance
 
@@ -156,3 +164,16 @@ WORKDIR /
 # `docker compose exec vibrance vibrance backup --to ...` (docs/operations.md).
 ENTRYPOINT ["/usr/local/bin/vibrance"]
 CMD ["serve"]
+
+# OCI annotations of the published image, last so that new values change no
+# layer (NOTES.md N-148, N-166). The version is the one stamped into the
+# binary; the release workflow passes the commit and the repository URL.
+ARG VIBRANCE_VERSION
+ARG VIBRANCE_REVISION
+ARG VIBRANCE_SOURCE
+LABEL org.opencontainers.image.title="Vibrance" \
+      org.opencontainers.image.description="Self-hosted listening server over the library of Vibrance MusicLib: accounts, favorites, playlists, search and an HTTP API." \
+      org.opencontainers.image.version="${VIBRANCE_VERSION}" \
+      org.opencontainers.image.revision="${VIBRANCE_REVISION}" \
+      org.opencontainers.image.source="${VIBRANCE_SOURCE}" \
+      org.opencontainers.image.licenses="MIT"
