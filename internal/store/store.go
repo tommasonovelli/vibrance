@@ -112,10 +112,18 @@ func Open(ctx context.Context, path string) (*Store, error) {
 // transaction that began as a reader and then writes fails at once with
 // SQLITE_BUSY when another connection wrote in between, whatever the busy
 // timeout (T3). The read handle refuses every write (query_only).
+//
+// The write connection also has a larger page cache than the 2 MB of SQLite
+// (cache_size, in KiB when negative). It was measured (step S24): a change of
+// a playlist of 10,000 items reads and writes more pages than 2 MB hold, and
+// takes a tenth less with 8 MB. The connections that read keep the default:
+// a cache counts, for every open connection, against the memory of the
+// server at rest.
 func dsn(path string, write bool) string {
 	q := url.Values{"_pragma": connPragmas}
 	if write {
 		q.Set("_txlock", "immediate")
+		q.Add("_pragma", "cache_size(-8000)")
 	} else {
 		q.Add("_pragma", "query_only(ON)")
 	}

@@ -79,13 +79,15 @@ type PlaylistItem struct {
 	Track    Track
 }
 
-// PlaylistItemPage is a page of the items of a playlist, with the playlist
-// as it was when the page was read. Next is the cursor of the page after
-// it, "" on the last page.
+// PlaylistItemPage is a page of the items of a playlist. ETag is the entity
+// tag of the playlist as it was when the page was read, and ItemCount how
+// many items it had then. Next is the cursor of the page after it, "" on the
+// last page.
 type PlaylistItemPage struct {
-	Playlist Playlist
-	Items    []PlaylistItem
-	Next     string
+	ETag      string
+	ItemCount int
+	Items     []PlaylistItem
+	Next      string
 }
 
 // AddedItem is an item AddPlaylistItems made.
@@ -149,16 +151,16 @@ func etagListed(ifMatch, etag string) bool {
 	return false
 }
 
-// checkRevision compares the If-Match of a change with the playlist it is
-// about to change: nil is no header, which is 428 precondition_required
-// when the change needs one; a header that does not name the current
+// checkRevision compares the If-Match of a change with the entity tag of the
+// playlist it is about to change: nil is no header, which is 428
+// precondition_required when the change needs one; a header that does not name the current
 // revision is 412 precondition_failed.
-func checkRevision(p Playlist, ifMatch *string, required bool) error {
+func checkRevision(etag string, ifMatch *string, required bool) error {
 	switch {
 	case ifMatch == nil && required:
 		return &httpx.Error{Status: http.StatusPreconditionRequired, Code: CodePreconditionRequired,
 			Message: "This change needs If-Match."}
-	case ifMatch != nil && !etagListed(*ifMatch, p.ETag()):
+	case ifMatch != nil && !etagListed(*ifMatch, etag):
 		return &httpx.Error{Status: http.StatusPreconditionFailed, Code: CodePreconditionFailed,
 			Message: "The playlist was changed in the meantime."}
 	}
@@ -186,15 +188,33 @@ func readPlaylist(ctx context.Context, q *store.Queries, userID, id string) (Pla
 	return playlistOf(row), nil
 }
 
-// openPlaylist begins a change, in the write transaction q: it reads the
-// playlist and checks If-Match against it, so the comparison and the change
-// are one transaction (§8.1).
-func openPlaylist(ctx context.Context, q *store.Queries, userID, id string, ifMatch *string, required bool) (Playlist, error) {
-	p, err := readPlaylist(ctx, q, userID, id)
-	if err != nil {
-		return Playlist{}, err
+// playlistHead reads, in the transaction q, the revision of the playlist id
+// of userID, as its entity tag, and how many items it has. It is readPlaylist
+// without the duration, which costs a read of the track of every item: a
+// change reads the whole playlist once, when it is done. Like readPlaylist it
+// is a check of the owner: a playlist that does not exist or is of another
+// user is 404 playlist_not_found.
+func playlistHead(ctx context.Context, q *store.Queries, userID, id string) (etag string, items int, err error) {
+	row, err := q.GetPlaylistStateOfUser(ctx, store.GetPlaylistStateOfUserParams{ID: id, UserID: userID})
+	switch {
+	case noRows(ctx, err):
+		return "", 0, playlistNotFound()
+	case err != nil:
+		return "", 0, err
 	}
-	return p, checkRevision(p, ifMatch, required)
+	return Playlist{ID: row.Playlist.ID, Revision: row.Playlist.Revision}.ETag(), int(row.ItemCount), nil
+}
+
+// openPlaylist begins a change, in the write transaction q: it reads the
+// revision of the playlist and checks If-Match against it, so the comparison
+// and the change are one transaction (§8.1). It returns how many items the
+// playlist has.
+func openPlaylist(ctx context.Context, q *store.Queries, userID, id string, ifMatch *string, required bool) (items int, err error) {
+	etag, items, err := playlistHead(ctx, q, userID, id)
+	if err != nil {
+		return 0, err
+	}
+	return items, checkRevision(etag, ifMatch, required)
 }
 
 // itemsChanged ends a change of the items, in its transaction: the
@@ -310,8 +330,8 @@ func (s *Service) DeletePlaylist(ctx context.Context, userID, id string, ifMatch
 }
 
 // ListPlaylistItems returns a page of the items of a playlist, by
-// (position, id) (§8.5), with the playlist as it is in the same read
-// transaction. A track that is no longer available stays in the list, with
+// (position, id) (§8.5), with the entity tag and the number of items of the
+// playlist as it is in the same read transaction. A track that is no longer available stays in the list, with
 // the last data known. after is the cursor of the page before, nil for the
 // first page; one that is not a cursor of this list, the empty string
 // included, is 400 invalid_cursor.
@@ -330,7 +350,7 @@ func (s *Service) ListPlaylistItems(ctx context.Context, userID, id string, limi
 		rows []store.ListPlaylistItemsRow
 	)
 	err := s.store.Read(ctx, func(q *store.Queries) (err error) {
-		if page.Playlist, err = readPlaylist(ctx, q, userID, id); err != nil {
+		if page.ETag, page.ItemCount, err = playlistHead(ctx, q, userID, id); err != nil {
 			return err
 		}
 		rows, err = q.ListPlaylistItems(ctx, params)
@@ -380,17 +400,18 @@ func (s *Service) AddPlaylistItems(ctx context.Context, userID, id string, track
 	now := s.now().UnixMilli()
 	var p Playlist
 	err := s.store.WithWriteTx(ctx, func(q *store.Queries) (err error) {
-		if p, err = openPlaylist(ctx, q, userID, id, ifMatch, position != nil); err != nil {
+		count, err := openPlaylist(ctx, q, userID, id, ifMatch, position != nil)
+		if err != nil {
 			return err
 		}
-		at := p.ItemCount
+		at := count
 		if position != nil {
 			at = *position
 		}
 		switch {
-		case at < 0 || at > p.ItemCount:
+		case at < 0 || at > count:
 			return invalidPosition()
-		case p.ItemCount+len(trackIDs) > MaxPlaylistItems:
+		case count+len(trackIDs) > MaxPlaylistItems:
 			return &httpx.Error{Status: http.StatusUnprocessableEntity, Code: CodeTooManyItems,
 				Message: "A playlist has at most 10000 items."}
 		}
@@ -398,7 +419,7 @@ func (s *Service) AddPlaylistItems(ctx context.Context, userID, id string, track
 			return err
 		}
 		err = q.ShiftPlaylistItems(ctx, store.ShiftPlaylistItemsParams{Places: int64(len(added)), PlaylistID: id,
-			First: int64(at), Last: int64(p.ItemCount) - 1})
+			First: int64(at), Last: int64(count) - 1})
 		if err != nil {
 			return err
 		}
@@ -482,7 +503,8 @@ func (s *Service) MovePlaylistItem(ctx context.Context, userID, id, itemID strin
 	now := s.now().UnixMilli()
 	var p Playlist
 	err := s.store.WithWriteTx(ctx, func(q *store.Queries) (err error) {
-		if p, err = openPlaylist(ctx, q, userID, id, ifMatch, true); err != nil {
+		count, err := openPlaylist(ctx, q, userID, id, ifMatch, true)
+		if err != nil {
 			return err
 		}
 		from, err := itemPosition(ctx, q, id, itemID)
@@ -490,7 +512,7 @@ func (s *Service) MovePlaylistItem(ctx context.Context, userID, id, itemID strin
 			return err
 		}
 		to := int64(position)
-		if position < 0 || position >= p.ItemCount {
+		if position < 0 || position >= count {
 			return invalidPosition()
 		}
 		// The items between the two places move by one towards the place

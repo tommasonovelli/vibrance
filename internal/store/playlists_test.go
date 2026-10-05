@@ -30,6 +30,7 @@ func TestPlaylistQueryPlans(t *testing.T) {
 	}{
 		"ListPlaylistItems":       {listPlaylistItems, []any{testUser, testList, 3, "i1", 1}},
 		"GetPlaylistOfUser":       {getPlaylistOfUser, []any{testList, testUser}},
+		"GetPlaylistStateOfUser":  {getPlaylistStateOfUser, []any{testList, testUser}},
 		"GetPlaylistItemPosition": {getPlaylistItemPosition, []any{"i1", testList}},
 		"GetTrackAvailability":    {getTrackAvailability, []any{testTrack}},
 		"ShiftPlaylistItems":      {shiftPlaylistItems, []any{1, testList, 0, 5}},
@@ -114,6 +115,24 @@ func TestRenumberPlaylistItems(t *testing.T) {
 	if got := items(); !slices.Equal(got, want[5:]) {
 		t.Fatalf("a tie is broken by the id: %v", got)
 	}
+	// Positions that are not dense in one way only: two items at one
+	// position with the highest in its place, and a gap with no two items at
+	// one position.
+	for _, c := range []struct {
+		what      string
+		positions [3]int
+	}{{"a tie alone", [3]int{0, 0, 2}}, {"a gap alone", [3]int{0, 1, 3}}, {"no first position", [3]int{1, 2, 3}}} {
+		mustExec(t, s.write, `DELETE FROM playlist_items WHERE playlist_id = ?`, testList)
+		mustExec(t, s.write, `INSERT INTO playlist_items (id, playlist_id, track_id, position, added_at) VALUES
+			('a', ?1, ?2, ?3, 1), ('b', ?1, ?2, ?4, 1), ('c', ?1, ?2, ?5, 1)`, testList, testTrack, c.positions[0], c.positions[1], c.positions[2])
+		write(t, s, func(q *Queries) error { return q.RenumberPlaylistItems(ctx, testList) })
+		for i, r := range items()[:3] {
+			if r.id != string(rune('a'+i)) || r.position != int64(i) {
+				t.Fatalf("%s: %v", c.what, items())
+			}
+		}
+	}
+	mustExec(t, s.write, `DELETE FROM playlist_items WHERE playlist_id = ?`, testList)
 	// Items that all move forward: each is given its place once, although
 	// its new position is further on in the index the items are read from.
 	mustExec(t, s.write, `INSERT INTO playlist_items (id, playlist_id, track_id, position, added_at) VALUES

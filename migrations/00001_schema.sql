@@ -155,6 +155,12 @@ CREATE UNIQUE INDEX tracks_album_fingerprint_occurrence_idx ON tracks (album_id,
 -- playlists and the favorites that point to it move to an available track
 -- with its fingerprint (the scanner, at the end of every cycle).
 CREATE INDEX tracks_fingerprint_idx ON tracks (fingerprint);
+-- What a playlist needs of the track of each item to add up its duration
+-- (DESIGN.md 8.2: only the tracks that are available count), found by the id
+-- of the track and read from the index alone. Not among the indexes of 5.2:
+-- without it every reading of a playlist of 10,000 items, and so every
+-- change of one, reads 10,000 rows of tracks.
+CREATE INDEX tracks_duration_idx ON tracks (id, available, duration_ms);
 
 CREATE TABLE favorites (
     user_id    text    NOT NULL REFERENCES users (id) ON DELETE CASCADE,

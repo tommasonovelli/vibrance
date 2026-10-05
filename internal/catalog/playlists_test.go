@@ -130,8 +130,8 @@ func allItems(t *testing.T, svc *Service, userID, id string, limit int) []Playli
 		case page.Next == "" && len(page.Items) == 0 && pages > 0:
 			t.Fatalf("limit %d: an empty last page after a cursor", limit)
 		case page.Next == "":
-			if page.Playlist.ItemCount != len(items) {
-				t.Fatalf("limit %d: %d items listed, item_count %d", limit, len(items), page.Playlist.ItemCount)
+			if page.ItemCount != len(items) {
+				t.Fatalf("limit %d: %d items listed, item_count %d", limit, len(items), page.ItemCount)
 			}
 			return items
 		case len(page.Items) != limit:
@@ -201,16 +201,16 @@ func TestPlaylistETag(t *testing.T) {
 	// Without a header a change that needs none goes on, and one that needs
 	// it is refused; with one, it must name the revision.
 	stale := `"playlist:0199a5c3-51d0-7e42-8a6b-9c0d1e2f3a4b:6"`
-	if err := checkRevision(p, nil, false); err != nil {
+	if err := checkRevision(p.ETag(), nil, false); err != nil {
 		t.Errorf("no If-Match, not required: %v", err)
 	}
-	wantCode(t, "no If-Match, required", checkRevision(p, nil, true), http.StatusPreconditionRequired, CodePreconditionRequired)
+	wantCode(t, "no If-Match, required", checkRevision(p.ETag(), nil, true), http.StatusPreconditionRequired, CodePreconditionRequired)
 	for _, required := range []bool{false, true} {
-		if err := checkRevision(p, ptr(etag), required); err != nil {
+		if err := checkRevision(p.ETag(), ptr(etag), required); err != nil {
 			t.Errorf("the right If-Match, required %v: %v", required, err)
 		}
-		wantCode(t, "a stale If-Match", checkRevision(p, &stale, required), http.StatusPreconditionFailed, CodePreconditionFailed)
-		wantCode(t, "an empty If-Match", checkRevision(p, ptr(""), required), http.StatusPreconditionFailed, CodePreconditionFailed)
+		wantCode(t, "a stale If-Match", checkRevision(p.ETag(), &stale, required), http.StatusPreconditionFailed, CodePreconditionFailed)
+		wantCode(t, "an empty If-Match", checkRevision(p.ETag(), ptr(""), required), http.StatusPreconditionFailed, CodePreconditionFailed)
 	}
 }
 
@@ -1075,7 +1075,7 @@ func TestPlaylistItemCursors(t *testing.T) {
 	p := newPlaylist(t, svc, userA, "cursors")
 	p, added := appendTracks(t, svc, userA, p.ID, tracks...)
 	page, err := svc.ListPlaylistItems(ctx, userA, p.ID, 2, nil)
-	if err != nil || len(page.Items) != 2 || page.Next == "" || page.Playlist != p {
+	if err != nil || len(page.Items) != 2 || page.Next == "" || page.ETag != p.ETag() || page.ItemCount != p.ItemCount {
 		t.Fatalf("the first page: %+v, %v", page, err)
 	}
 	// The cursors of the other lists, and what is no cursor at all.
@@ -1109,12 +1109,13 @@ func TestPlaylistItemCursors(t *testing.T) {
 
 	// The item the cursor names, the second, is removed: the page after it
 	// begins where it was.
-	if _, err := svc.RemovePlaylistItem(ctx, userA, p.ID, added[1].ItemID, nil); err != nil {
-		t.Fatal(err)
+	removed, err := svc.RemovePlaylistItem(ctx, userA, p.ID, added[1].ItemID, nil)
+	if err != nil || removed.Revision != p.Revision+1 {
+		t.Fatalf("removing an item: %+v, %v", removed, err)
 	}
 	next, err := svc.ListPlaylistItems(ctx, userA, p.ID, 2, &page.Next)
 	if err != nil || len(next.Items) != 2 || next.Items[0].ID != added[2].ItemID || next.Items[1].ID != added[3].ItemID ||
-		next.Playlist.Revision != p.Revision+1 || next.Playlist.ETag() == page.Playlist.ETag() {
+		next.ETag != removed.ETag() || next.ItemCount != removed.ItemCount {
 		t.Fatalf("the page after a removed item: %+v, %v", next, err)
 	}
 	// A cursor past the end is an empty last page.
@@ -1311,8 +1312,8 @@ func readDensePages(ctx context.Context, svc *Service, userID, id string, limit 
 				return fmt.Errorf("limit %d: the first page has the position %d at %d", limit, it.Position, i)
 			case it.Position != page.Items[0].Position+i:
 				return fmt.Errorf("limit %d: the positions of a page are not dense: %d after %d", limit, it.Position, page.Items[0].Position)
-			case it.Position >= page.Playlist.ItemCount:
-				return fmt.Errorf("limit %d: the position %d in a playlist of %d items", limit, it.Position, page.Playlist.ItemCount)
+			case it.Position >= page.ItemCount:
+				return fmt.Errorf("limit %d: the position %d in a playlist of %d items", limit, it.Position, page.ItemCount)
 			}
 		}
 		if page.Next == "" {

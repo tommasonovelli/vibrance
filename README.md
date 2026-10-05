@@ -20,6 +20,7 @@ scripts/generate.sh              # regenerate internal/api from api/openapi.yaml
 scripts/check-compose-sync.sh    # compose.yaml and env.example are MusicLib's files plus Vibrance's blocks (network)
 scripts/stack-smoke.sh           # the Compose stack for real, in the project vibrance-contract (network, ~10 minutes)
 scripts/contract.sh              # the contract suite with the real MusicLib, in the project vibrance-contract (network, a few minutes)
+scripts/perf.sh                  # the performance suite: the budgets on a synthetic index of 200,000 tracks (about 7 minutes, on an idle machine)
 
 docker build --target runtime -t vibrance:local .
 docker run --rm vibrance:local version   # prints: version: devel

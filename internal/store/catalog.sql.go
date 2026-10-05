@@ -181,15 +181,9 @@ SELECT albums.seq, albums.id, albums.artist_id, albums.artist_key, albums.title,
 FROM albums
 JOIN artists ON artists.id = albums.artist_id
 WHERE albums.available = 1
-  AND (CAST(?1 AS TEXT) IS NULL OR albums.artist_id = CAST(?1 AS TEXT))
 ORDER BY albums.first_seen_at, albums.id
-LIMIT ?2
+LIMIT ?1
 `
-
-type ListAlbumsByAddedAscParams struct {
-	ArtistID sql.NullString
-	PageSize int64
-}
 
 type ListAlbumsByAddedAscRow struct {
 	Album      Album
@@ -198,8 +192,8 @@ type ListAlbumsByAddedAscRow struct {
 
 // ListAlbumsByAddedAsc returns the first page of the available albums by
 // (first_seen_at, id), ascending.
-func (q *Queries) ListAlbumsByAddedAsc(ctx context.Context, arg ListAlbumsByAddedAscParams) ([]ListAlbumsByAddedAscRow, error) {
-	rows, err := q.db.QueryContext(ctx, listAlbumsByAddedAsc, arg.ArtistID, arg.PageSize)
+func (q *Queries) ListAlbumsByAddedAsc(ctx context.Context, pageSize int64) ([]ListAlbumsByAddedAscRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAlbumsByAddedAsc, pageSize)
 	if err != nil {
 		return nil, err
 	}
@@ -252,14 +246,12 @@ SELECT albums.seq, albums.id, albums.artist_id, albums.artist_key, albums.title,
 FROM albums
 JOIN artists ON artists.id = albums.artist_id
 WHERE albums.available = 1
-  AND (CAST(?1 AS TEXT) IS NULL OR albums.artist_id = CAST(?1 AS TEXT))
-  AND (albums.first_seen_at, albums.id) > (CAST(?2 AS INTEGER), CAST(?3 AS TEXT))
+  AND (albums.first_seen_at, albums.id) > (CAST(?1 AS INTEGER), CAST(?2 AS TEXT))
 ORDER BY albums.first_seen_at, albums.id
-LIMIT ?4
+LIMIT ?3
 `
 
 type ListAlbumsByAddedAscAfterParams struct {
-	ArtistID    sql.NullString
 	FirstSeenAt int64
 	AfterID     string
 	PageSize    int64
@@ -273,12 +265,7 @@ type ListAlbumsByAddedAscAfterRow struct {
 // ListAlbumsByAddedAscAfter returns the page of ListAlbumsByAddedAsc
 // after the album with that key.
 func (q *Queries) ListAlbumsByAddedAscAfter(ctx context.Context, arg ListAlbumsByAddedAscAfterParams) ([]ListAlbumsByAddedAscAfterRow, error) {
-	rows, err := q.db.QueryContext(ctx, listAlbumsByAddedAscAfter,
-		arg.ArtistID,
-		arg.FirstSeenAt,
-		arg.AfterID,
-		arg.PageSize,
-	)
+	rows, err := q.db.QueryContext(ctx, listAlbumsByAddedAscAfter, arg.FirstSeenAt, arg.AfterID, arg.PageSize)
 	if err != nil {
 		return nil, err
 	}
@@ -331,15 +318,9 @@ SELECT albums.seq, albums.id, albums.artist_id, albums.artist_key, albums.title,
 FROM albums
 JOIN artists ON artists.id = albums.artist_id
 WHERE albums.available = 1
-  AND (CAST(?1 AS TEXT) IS NULL OR albums.artist_id = CAST(?1 AS TEXT))
 ORDER BY albums.first_seen_at DESC, albums.id DESC
-LIMIT ?2
+LIMIT ?1
 `
-
-type ListAlbumsByAddedDescParams struct {
-	ArtistID sql.NullString
-	PageSize int64
-}
 
 type ListAlbumsByAddedDescRow struct {
 	Album      Album
@@ -348,8 +329,8 @@ type ListAlbumsByAddedDescRow struct {
 
 // ListAlbumsByAddedDesc returns the first page of the available albums by
 // (first_seen_at, id), reversed.
-func (q *Queries) ListAlbumsByAddedDesc(ctx context.Context, arg ListAlbumsByAddedDescParams) ([]ListAlbumsByAddedDescRow, error) {
-	rows, err := q.db.QueryContext(ctx, listAlbumsByAddedDesc, arg.ArtistID, arg.PageSize)
+func (q *Queries) ListAlbumsByAddedDesc(ctx context.Context, pageSize int64) ([]ListAlbumsByAddedDescRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAlbumsByAddedDesc, pageSize)
 	if err != nil {
 		return nil, err
 	}
@@ -402,14 +383,12 @@ SELECT albums.seq, albums.id, albums.artist_id, albums.artist_key, albums.title,
 FROM albums
 JOIN artists ON artists.id = albums.artist_id
 WHERE albums.available = 1
-  AND (CAST(?1 AS TEXT) IS NULL OR albums.artist_id = CAST(?1 AS TEXT))
-  AND (albums.first_seen_at, albums.id) < (CAST(?2 AS INTEGER), CAST(?3 AS TEXT))
+  AND (albums.first_seen_at, albums.id) < (CAST(?1 AS INTEGER), CAST(?2 AS TEXT))
 ORDER BY albums.first_seen_at DESC, albums.id DESC
-LIMIT ?4
+LIMIT ?3
 `
 
 type ListAlbumsByAddedDescAfterParams struct {
-	ArtistID    sql.NullString
 	FirstSeenAt int64
 	AfterID     string
 	PageSize    int64
@@ -423,12 +402,7 @@ type ListAlbumsByAddedDescAfterRow struct {
 // ListAlbumsByAddedDescAfter returns the page of ListAlbumsByAddedDesc
 // after the album with that key.
 func (q *Queries) ListAlbumsByAddedDescAfter(ctx context.Context, arg ListAlbumsByAddedDescAfterParams) ([]ListAlbumsByAddedDescAfterRow, error) {
-	rows, err := q.db.QueryContext(ctx, listAlbumsByAddedDescAfter,
-		arg.ArtistID,
-		arg.FirstSeenAt,
-		arg.AfterID,
-		arg.PageSize,
-	)
+	rows, err := q.db.QueryContext(ctx, listAlbumsByAddedDescAfter, arg.FirstSeenAt, arg.AfterID, arg.PageSize)
 	if err != nil {
 		return nil, err
 	}
@@ -481,15 +455,9 @@ SELECT albums.seq, albums.id, albums.artist_id, albums.artist_key, albums.title,
 FROM albums
 JOIN artists ON artists.id = albums.artist_id
 WHERE albums.available = 1
-  AND (CAST(?1 AS TEXT) IS NULL OR albums.artist_id = CAST(?1 AS TEXT))
 ORDER BY albums.artist_key, albums.year_key, albums.title_key, albums.id
-LIMIT ?2
+LIMIT ?1
 `
-
-type ListAlbumsByArtistAscParams struct {
-	ArtistID sql.NullString
-	PageSize int64
-}
 
 type ListAlbumsByArtistAscRow struct {
 	Album      Album
@@ -498,8 +466,8 @@ type ListAlbumsByArtistAscRow struct {
 
 // ListAlbumsByArtistAsc returns the first page of the available albums by
 // (artist_key, year_key, title_key, id), ascending.
-func (q *Queries) ListAlbumsByArtistAsc(ctx context.Context, arg ListAlbumsByArtistAscParams) ([]ListAlbumsByArtistAscRow, error) {
-	rows, err := q.db.QueryContext(ctx, listAlbumsByArtistAsc, arg.ArtistID, arg.PageSize)
+func (q *Queries) ListAlbumsByArtistAsc(ctx context.Context, pageSize int64) ([]ListAlbumsByArtistAscRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAlbumsByArtistAsc, pageSize)
 	if err != nil {
 		return nil, err
 	}
@@ -552,14 +520,12 @@ SELECT albums.seq, albums.id, albums.artist_id, albums.artist_key, albums.title,
 FROM albums
 JOIN artists ON artists.id = albums.artist_id
 WHERE albums.available = 1
-  AND (CAST(?1 AS TEXT) IS NULL OR albums.artist_id = CAST(?1 AS TEXT))
-  AND (albums.artist_key, albums.year_key, albums.title_key, albums.id) > (CAST(?2 AS BLOB), CAST(?3 AS INTEGER), CAST(?4 AS BLOB), CAST(?5 AS TEXT))
+  AND (albums.artist_key, albums.year_key, albums.title_key, albums.id) > (CAST(?1 AS BLOB), CAST(?2 AS INTEGER), CAST(?3 AS BLOB), CAST(?4 AS TEXT))
 ORDER BY albums.artist_key, albums.year_key, albums.title_key, albums.id
-LIMIT ?6
+LIMIT ?5
 `
 
 type ListAlbumsByArtistAscAfterParams struct {
-	ArtistID  sql.NullString
 	ArtistKey []byte
 	YearKey   int64
 	TitleKey  []byte
@@ -576,7 +542,6 @@ type ListAlbumsByArtistAscAfterRow struct {
 // after the album with that key.
 func (q *Queries) ListAlbumsByArtistAscAfter(ctx context.Context, arg ListAlbumsByArtistAscAfterParams) ([]ListAlbumsByArtistAscAfterRow, error) {
 	rows, err := q.db.QueryContext(ctx, listAlbumsByArtistAscAfter,
-		arg.ArtistID,
 		arg.ArtistKey,
 		arg.YearKey,
 		arg.TitleKey,
@@ -635,15 +600,9 @@ SELECT albums.seq, albums.id, albums.artist_id, albums.artist_key, albums.title,
 FROM albums
 JOIN artists ON artists.id = albums.artist_id
 WHERE albums.available = 1
-  AND (CAST(?1 AS TEXT) IS NULL OR albums.artist_id = CAST(?1 AS TEXT))
 ORDER BY albums.artist_key DESC, albums.year_key DESC, albums.title_key DESC, albums.id DESC
-LIMIT ?2
+LIMIT ?1
 `
-
-type ListAlbumsByArtistDescParams struct {
-	ArtistID sql.NullString
-	PageSize int64
-}
 
 type ListAlbumsByArtistDescRow struct {
 	Album      Album
@@ -652,8 +611,8 @@ type ListAlbumsByArtistDescRow struct {
 
 // ListAlbumsByArtistDesc returns the first page of the available albums by
 // (artist_key, year_key, title_key, id), reversed.
-func (q *Queries) ListAlbumsByArtistDesc(ctx context.Context, arg ListAlbumsByArtistDescParams) ([]ListAlbumsByArtistDescRow, error) {
-	rows, err := q.db.QueryContext(ctx, listAlbumsByArtistDesc, arg.ArtistID, arg.PageSize)
+func (q *Queries) ListAlbumsByArtistDesc(ctx context.Context, pageSize int64) ([]ListAlbumsByArtistDescRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAlbumsByArtistDesc, pageSize)
 	if err != nil {
 		return nil, err
 	}
@@ -706,14 +665,12 @@ SELECT albums.seq, albums.id, albums.artist_id, albums.artist_key, albums.title,
 FROM albums
 JOIN artists ON artists.id = albums.artist_id
 WHERE albums.available = 1
-  AND (CAST(?1 AS TEXT) IS NULL OR albums.artist_id = CAST(?1 AS TEXT))
-  AND (albums.artist_key, albums.year_key, albums.title_key, albums.id) < (CAST(?2 AS BLOB), CAST(?3 AS INTEGER), CAST(?4 AS BLOB), CAST(?5 AS TEXT))
+  AND (albums.artist_key, albums.year_key, albums.title_key, albums.id) < (CAST(?1 AS BLOB), CAST(?2 AS INTEGER), CAST(?3 AS BLOB), CAST(?4 AS TEXT))
 ORDER BY albums.artist_key DESC, albums.year_key DESC, albums.title_key DESC, albums.id DESC
-LIMIT ?6
+LIMIT ?5
 `
 
 type ListAlbumsByArtistDescAfterParams struct {
-	ArtistID  sql.NullString
 	ArtistKey []byte
 	YearKey   int64
 	TitleKey  []byte
@@ -730,7 +687,6 @@ type ListAlbumsByArtistDescAfterRow struct {
 // after the album with that key.
 func (q *Queries) ListAlbumsByArtistDescAfter(ctx context.Context, arg ListAlbumsByArtistDescAfterParams) ([]ListAlbumsByArtistDescAfterRow, error) {
 	rows, err := q.db.QueryContext(ctx, listAlbumsByArtistDescAfter,
-		arg.ArtistID,
 		arg.ArtistKey,
 		arg.YearKey,
 		arg.TitleKey,
@@ -789,15 +745,9 @@ SELECT albums.seq, albums.id, albums.artist_id, albums.artist_key, albums.title,
 FROM albums
 JOIN artists ON artists.id = albums.artist_id
 WHERE albums.available = 1
-  AND (CAST(?1 AS TEXT) IS NULL OR albums.artist_id = CAST(?1 AS TEXT))
 ORDER BY albums.title_key, albums.id
-LIMIT ?2
+LIMIT ?1
 `
-
-type ListAlbumsByTitleAscParams struct {
-	ArtistID sql.NullString
-	PageSize int64
-}
 
 type ListAlbumsByTitleAscRow struct {
 	Album      Album
@@ -805,11 +755,11 @@ type ListAlbumsByTitleAscRow struct {
 }
 
 // ListAlbumsByTitleAsc returns the first page of the available albums by
-// (title_key, id), ascending. In every list of the albums, artist_id, when
-// not null, keeps only the albums of that artist, and a Desc order reverses
-// every key of the Asc one (DESIGN.md 8.5).
-func (q *Queries) ListAlbumsByTitleAsc(ctx context.Context, arg ListAlbumsByTitleAscParams) ([]ListAlbumsByTitleAscRow, error) {
-	rows, err := q.db.QueryContext(ctx, listAlbumsByTitleAsc, arg.ArtistID, arg.PageSize)
+// (title_key, id), ascending. In every list of the albums a Desc order
+// reverses every key of the Asc one (DESIGN.md 8.5). The lists of the albums
+// of one artist are the ListArtistAlbums queries below.
+func (q *Queries) ListAlbumsByTitleAsc(ctx context.Context, pageSize int64) ([]ListAlbumsByTitleAscRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAlbumsByTitleAsc, pageSize)
 	if err != nil {
 		return nil, err
 	}
@@ -862,14 +812,12 @@ SELECT albums.seq, albums.id, albums.artist_id, albums.artist_key, albums.title,
 FROM albums
 JOIN artists ON artists.id = albums.artist_id
 WHERE albums.available = 1
-  AND (CAST(?1 AS TEXT) IS NULL OR albums.artist_id = CAST(?1 AS TEXT))
-  AND (albums.title_key, albums.id) > (CAST(?2 AS BLOB), CAST(?3 AS TEXT))
+  AND (albums.title_key, albums.id) > (CAST(?1 AS BLOB), CAST(?2 AS TEXT))
 ORDER BY albums.title_key, albums.id
-LIMIT ?4
+LIMIT ?3
 `
 
 type ListAlbumsByTitleAscAfterParams struct {
-	ArtistID sql.NullString
 	TitleKey []byte
 	AfterID  string
 	PageSize int64
@@ -883,12 +831,7 @@ type ListAlbumsByTitleAscAfterRow struct {
 // ListAlbumsByTitleAscAfter returns the page of ListAlbumsByTitleAsc
 // after the album with that key.
 func (q *Queries) ListAlbumsByTitleAscAfter(ctx context.Context, arg ListAlbumsByTitleAscAfterParams) ([]ListAlbumsByTitleAscAfterRow, error) {
-	rows, err := q.db.QueryContext(ctx, listAlbumsByTitleAscAfter,
-		arg.ArtistID,
-		arg.TitleKey,
-		arg.AfterID,
-		arg.PageSize,
-	)
+	rows, err := q.db.QueryContext(ctx, listAlbumsByTitleAscAfter, arg.TitleKey, arg.AfterID, arg.PageSize)
 	if err != nil {
 		return nil, err
 	}
@@ -941,15 +884,9 @@ SELECT albums.seq, albums.id, albums.artist_id, albums.artist_key, albums.title,
 FROM albums
 JOIN artists ON artists.id = albums.artist_id
 WHERE albums.available = 1
-  AND (CAST(?1 AS TEXT) IS NULL OR albums.artist_id = CAST(?1 AS TEXT))
 ORDER BY albums.title_key DESC, albums.id DESC
-LIMIT ?2
+LIMIT ?1
 `
-
-type ListAlbumsByTitleDescParams struct {
-	ArtistID sql.NullString
-	PageSize int64
-}
 
 type ListAlbumsByTitleDescRow struct {
 	Album      Album
@@ -958,8 +895,8 @@ type ListAlbumsByTitleDescRow struct {
 
 // ListAlbumsByTitleDesc returns the first page of the available albums by
 // (title_key, id), reversed.
-func (q *Queries) ListAlbumsByTitleDesc(ctx context.Context, arg ListAlbumsByTitleDescParams) ([]ListAlbumsByTitleDescRow, error) {
-	rows, err := q.db.QueryContext(ctx, listAlbumsByTitleDesc, arg.ArtistID, arg.PageSize)
+func (q *Queries) ListAlbumsByTitleDesc(ctx context.Context, pageSize int64) ([]ListAlbumsByTitleDescRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAlbumsByTitleDesc, pageSize)
 	if err != nil {
 		return nil, err
 	}
@@ -1012,14 +949,12 @@ SELECT albums.seq, albums.id, albums.artist_id, albums.artist_key, albums.title,
 FROM albums
 JOIN artists ON artists.id = albums.artist_id
 WHERE albums.available = 1
-  AND (CAST(?1 AS TEXT) IS NULL OR albums.artist_id = CAST(?1 AS TEXT))
-  AND (albums.title_key, albums.id) < (CAST(?2 AS BLOB), CAST(?3 AS TEXT))
+  AND (albums.title_key, albums.id) < (CAST(?1 AS BLOB), CAST(?2 AS TEXT))
 ORDER BY albums.title_key DESC, albums.id DESC
-LIMIT ?4
+LIMIT ?3
 `
 
 type ListAlbumsByTitleDescAfterParams struct {
-	ArtistID sql.NullString
 	TitleKey []byte
 	AfterID  string
 	PageSize int64
@@ -1033,12 +968,7 @@ type ListAlbumsByTitleDescAfterRow struct {
 // ListAlbumsByTitleDescAfter returns the page of ListAlbumsByTitleDesc
 // after the album with that key.
 func (q *Queries) ListAlbumsByTitleDescAfter(ctx context.Context, arg ListAlbumsByTitleDescAfterParams) ([]ListAlbumsByTitleDescAfterRow, error) {
-	rows, err := q.db.QueryContext(ctx, listAlbumsByTitleDescAfter,
-		arg.ArtistID,
-		arg.TitleKey,
-		arg.AfterID,
-		arg.PageSize,
-	)
+	rows, err := q.db.QueryContext(ctx, listAlbumsByTitleDescAfter, arg.TitleKey, arg.AfterID, arg.PageSize)
 	if err != nil {
 		return nil, err
 	}
@@ -1091,15 +1021,9 @@ SELECT albums.seq, albums.id, albums.artist_id, albums.artist_key, albums.title,
 FROM albums
 JOIN artists ON artists.id = albums.artist_id
 WHERE albums.available = 1
-  AND (CAST(?1 AS TEXT) IS NULL OR albums.artist_id = CAST(?1 AS TEXT))
 ORDER BY albums.year_key, albums.title_key, albums.id
-LIMIT ?2
+LIMIT ?1
 `
-
-type ListAlbumsByYearAscParams struct {
-	ArtistID sql.NullString
-	PageSize int64
-}
 
 type ListAlbumsByYearAscRow struct {
 	Album      Album
@@ -1108,8 +1032,8 @@ type ListAlbumsByYearAscRow struct {
 
 // ListAlbumsByYearAsc returns the first page of the available albums by
 // (year_key, title_key, id), ascending.
-func (q *Queries) ListAlbumsByYearAsc(ctx context.Context, arg ListAlbumsByYearAscParams) ([]ListAlbumsByYearAscRow, error) {
-	rows, err := q.db.QueryContext(ctx, listAlbumsByYearAsc, arg.ArtistID, arg.PageSize)
+func (q *Queries) ListAlbumsByYearAsc(ctx context.Context, pageSize int64) ([]ListAlbumsByYearAscRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAlbumsByYearAsc, pageSize)
 	if err != nil {
 		return nil, err
 	}
@@ -1162,14 +1086,12 @@ SELECT albums.seq, albums.id, albums.artist_id, albums.artist_key, albums.title,
 FROM albums
 JOIN artists ON artists.id = albums.artist_id
 WHERE albums.available = 1
-  AND (CAST(?1 AS TEXT) IS NULL OR albums.artist_id = CAST(?1 AS TEXT))
-  AND (albums.year_key, albums.title_key, albums.id) > (CAST(?2 AS INTEGER), CAST(?3 AS BLOB), CAST(?4 AS TEXT))
+  AND (albums.year_key, albums.title_key, albums.id) > (CAST(?1 AS INTEGER), CAST(?2 AS BLOB), CAST(?3 AS TEXT))
 ORDER BY albums.year_key, albums.title_key, albums.id
-LIMIT ?5
+LIMIT ?4
 `
 
 type ListAlbumsByYearAscAfterParams struct {
-	ArtistID sql.NullString
 	YearKey  int64
 	TitleKey []byte
 	AfterID  string
@@ -1185,7 +1107,6 @@ type ListAlbumsByYearAscAfterRow struct {
 // after the album with that key.
 func (q *Queries) ListAlbumsByYearAscAfter(ctx context.Context, arg ListAlbumsByYearAscAfterParams) ([]ListAlbumsByYearAscAfterRow, error) {
 	rows, err := q.db.QueryContext(ctx, listAlbumsByYearAscAfter,
-		arg.ArtistID,
 		arg.YearKey,
 		arg.TitleKey,
 		arg.AfterID,
@@ -1243,15 +1164,9 @@ SELECT albums.seq, albums.id, albums.artist_id, albums.artist_key, albums.title,
 FROM albums
 JOIN artists ON artists.id = albums.artist_id
 WHERE albums.available = 1
-  AND (CAST(?1 AS TEXT) IS NULL OR albums.artist_id = CAST(?1 AS TEXT))
 ORDER BY albums.year_key DESC, albums.title_key DESC, albums.id DESC
-LIMIT ?2
+LIMIT ?1
 `
-
-type ListAlbumsByYearDescParams struct {
-	ArtistID sql.NullString
-	PageSize int64
-}
 
 type ListAlbumsByYearDescRow struct {
 	Album      Album
@@ -1260,8 +1175,8 @@ type ListAlbumsByYearDescRow struct {
 
 // ListAlbumsByYearDesc returns the first page of the available albums by
 // (year_key, title_key, id), reversed.
-func (q *Queries) ListAlbumsByYearDesc(ctx context.Context, arg ListAlbumsByYearDescParams) ([]ListAlbumsByYearDescRow, error) {
-	rows, err := q.db.QueryContext(ctx, listAlbumsByYearDesc, arg.ArtistID, arg.PageSize)
+func (q *Queries) ListAlbumsByYearDesc(ctx context.Context, pageSize int64) ([]ListAlbumsByYearDescRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAlbumsByYearDesc, pageSize)
 	if err != nil {
 		return nil, err
 	}
@@ -1314,14 +1229,12 @@ SELECT albums.seq, albums.id, albums.artist_id, albums.artist_key, albums.title,
 FROM albums
 JOIN artists ON artists.id = albums.artist_id
 WHERE albums.available = 1
-  AND (CAST(?1 AS TEXT) IS NULL OR albums.artist_id = CAST(?1 AS TEXT))
-  AND (albums.year_key, albums.title_key, albums.id) < (CAST(?2 AS INTEGER), CAST(?3 AS BLOB), CAST(?4 AS TEXT))
+  AND (albums.year_key, albums.title_key, albums.id) < (CAST(?1 AS INTEGER), CAST(?2 AS BLOB), CAST(?3 AS TEXT))
 ORDER BY albums.year_key DESC, albums.title_key DESC, albums.id DESC
-LIMIT ?5
+LIMIT ?4
 `
 
 type ListAlbumsByYearDescAfterParams struct {
-	ArtistID sql.NullString
 	YearKey  int64
 	TitleKey []byte
 	AfterID  string
@@ -1337,7 +1250,6 @@ type ListAlbumsByYearDescAfterRow struct {
 // after the album with that key.
 func (q *Queries) ListAlbumsByYearDescAfter(ctx context.Context, arg ListAlbumsByYearDescAfterParams) ([]ListAlbumsByYearDescAfterRow, error) {
 	rows, err := q.db.QueryContext(ctx, listAlbumsByYearDescAfter,
-		arg.ArtistID,
 		arg.YearKey,
 		arg.TitleKey,
 		arg.AfterID,
@@ -1416,6 +1328,674 @@ func (q *Queries) ListAlbumsOfArtist(ctx context.Context, artistID string) ([]Li
 	var items []ListAlbumsOfArtistRow
 	for rows.Next() {
 		var i ListAlbumsOfArtistRow
+		if err := rows.Scan(
+			&i.Album.Seq,
+			&i.Album.ID,
+			&i.Album.ArtistID,
+			&i.Album.ArtistKey,
+			&i.Album.Title,
+			&i.Album.TitleKey,
+			&i.Album.Year,
+			&i.Album.YearKey,
+			&i.Album.Genre,
+			&i.Album.Compilation,
+			&i.Album.RelPath,
+			&i.Album.AlbumRevision,
+			&i.Album.RenderVersion,
+			&i.Album.ReceiptHash,
+			&i.Album.CoverRel,
+			&i.Album.CoverSha256,
+			&i.Album.CoverMime,
+			&i.Album.CoverSize,
+			&i.Album.CoverMtimeNs,
+			&i.Album.TrackCount,
+			&i.Album.DurationMs,
+			&i.Album.Available,
+			&i.Album.FirstSeenAt,
+			&i.Album.UpdatedAt,
+			&i.ArtistName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listArtistAlbumsByAddedAsc = `-- name: ListArtistAlbumsByAddedAsc :many
+SELECT albums.seq, albums.id, albums.artist_id, albums.artist_key, albums.title, albums.title_key, albums.year, albums.year_key, albums.genre, albums.compilation, albums.rel_path, albums.album_revision, albums.render_version, albums.receipt_hash, albums.cover_rel, albums.cover_sha256, albums.cover_mime, albums.cover_size, albums.cover_mtime_ns, albums.track_count, albums.duration_ms, albums.available, albums.first_seen_at, albums.updated_at, artists.name AS artist_name
+FROM albums INDEXED BY albums_artist_id_idx
+JOIN artists ON artists.id = albums.artist_id
+WHERE albums.artist_id = ?1 AND albums.available = 1
+  AND (CAST(?2 AS INTEGER) <> 0
+       OR (albums.first_seen_at, albums.id) > (CAST(?3 AS INTEGER), CAST(?4 AS TEXT)))
+ORDER BY albums.first_seen_at, albums.id
+LIMIT ?5
+`
+
+type ListArtistAlbumsByAddedAscParams struct {
+	ArtistID    string
+	FirstPage   int64
+	FirstSeenAt int64
+	AfterID     string
+	PageSize    int64
+}
+
+type ListArtistAlbumsByAddedAscRow struct {
+	Album      Album
+	ArtistName string
+}
+
+// ListArtistAlbumsByAddedAsc returns a page of the available albums of an
+// artist by (first_seen_at, id), ascending.
+func (q *Queries) ListArtistAlbumsByAddedAsc(ctx context.Context, arg ListArtistAlbumsByAddedAscParams) ([]ListArtistAlbumsByAddedAscRow, error) {
+	rows, err := q.db.QueryContext(ctx, listArtistAlbumsByAddedAsc,
+		arg.ArtistID,
+		arg.FirstPage,
+		arg.FirstSeenAt,
+		arg.AfterID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListArtistAlbumsByAddedAscRow
+	for rows.Next() {
+		var i ListArtistAlbumsByAddedAscRow
+		if err := rows.Scan(
+			&i.Album.Seq,
+			&i.Album.ID,
+			&i.Album.ArtistID,
+			&i.Album.ArtistKey,
+			&i.Album.Title,
+			&i.Album.TitleKey,
+			&i.Album.Year,
+			&i.Album.YearKey,
+			&i.Album.Genre,
+			&i.Album.Compilation,
+			&i.Album.RelPath,
+			&i.Album.AlbumRevision,
+			&i.Album.RenderVersion,
+			&i.Album.ReceiptHash,
+			&i.Album.CoverRel,
+			&i.Album.CoverSha256,
+			&i.Album.CoverMime,
+			&i.Album.CoverSize,
+			&i.Album.CoverMtimeNs,
+			&i.Album.TrackCount,
+			&i.Album.DurationMs,
+			&i.Album.Available,
+			&i.Album.FirstSeenAt,
+			&i.Album.UpdatedAt,
+			&i.ArtistName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listArtistAlbumsByAddedDesc = `-- name: ListArtistAlbumsByAddedDesc :many
+SELECT albums.seq, albums.id, albums.artist_id, albums.artist_key, albums.title, albums.title_key, albums.year, albums.year_key, albums.genre, albums.compilation, albums.rel_path, albums.album_revision, albums.render_version, albums.receipt_hash, albums.cover_rel, albums.cover_sha256, albums.cover_mime, albums.cover_size, albums.cover_mtime_ns, albums.track_count, albums.duration_ms, albums.available, albums.first_seen_at, albums.updated_at, artists.name AS artist_name
+FROM albums INDEXED BY albums_artist_id_idx
+JOIN artists ON artists.id = albums.artist_id
+WHERE albums.artist_id = ?1 AND albums.available = 1
+  AND (CAST(?2 AS INTEGER) <> 0
+       OR (albums.first_seen_at, albums.id) < (CAST(?3 AS INTEGER), CAST(?4 AS TEXT)))
+ORDER BY albums.first_seen_at DESC, albums.id DESC
+LIMIT ?5
+`
+
+type ListArtistAlbumsByAddedDescParams struct {
+	ArtistID    string
+	FirstPage   int64
+	FirstSeenAt int64
+	AfterID     string
+	PageSize    int64
+}
+
+type ListArtistAlbumsByAddedDescRow struct {
+	Album      Album
+	ArtistName string
+}
+
+// ListArtistAlbumsByAddedDesc returns a page of the available albums of an
+// artist by (first_seen_at, id), reversed.
+func (q *Queries) ListArtistAlbumsByAddedDesc(ctx context.Context, arg ListArtistAlbumsByAddedDescParams) ([]ListArtistAlbumsByAddedDescRow, error) {
+	rows, err := q.db.QueryContext(ctx, listArtistAlbumsByAddedDesc,
+		arg.ArtistID,
+		arg.FirstPage,
+		arg.FirstSeenAt,
+		arg.AfterID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListArtistAlbumsByAddedDescRow
+	for rows.Next() {
+		var i ListArtistAlbumsByAddedDescRow
+		if err := rows.Scan(
+			&i.Album.Seq,
+			&i.Album.ID,
+			&i.Album.ArtistID,
+			&i.Album.ArtistKey,
+			&i.Album.Title,
+			&i.Album.TitleKey,
+			&i.Album.Year,
+			&i.Album.YearKey,
+			&i.Album.Genre,
+			&i.Album.Compilation,
+			&i.Album.RelPath,
+			&i.Album.AlbumRevision,
+			&i.Album.RenderVersion,
+			&i.Album.ReceiptHash,
+			&i.Album.CoverRel,
+			&i.Album.CoverSha256,
+			&i.Album.CoverMime,
+			&i.Album.CoverSize,
+			&i.Album.CoverMtimeNs,
+			&i.Album.TrackCount,
+			&i.Album.DurationMs,
+			&i.Album.Available,
+			&i.Album.FirstSeenAt,
+			&i.Album.UpdatedAt,
+			&i.ArtistName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listArtistAlbumsByArtistAsc = `-- name: ListArtistAlbumsByArtistAsc :many
+SELECT albums.seq, albums.id, albums.artist_id, albums.artist_key, albums.title, albums.title_key, albums.year, albums.year_key, albums.genre, albums.compilation, albums.rel_path, albums.album_revision, albums.render_version, albums.receipt_hash, albums.cover_rel, albums.cover_sha256, albums.cover_mime, albums.cover_size, albums.cover_mtime_ns, albums.track_count, albums.duration_ms, albums.available, albums.first_seen_at, albums.updated_at, artists.name AS artist_name
+FROM albums INDEXED BY albums_artist_id_idx
+JOIN artists ON artists.id = albums.artist_id
+WHERE albums.artist_id = ?1 AND albums.available = 1
+  AND (CAST(?2 AS INTEGER) <> 0
+       OR (albums.artist_key, albums.year_key, albums.title_key, albums.id) > (CAST(?3 AS BLOB), CAST(?4 AS INTEGER), CAST(?5 AS BLOB), CAST(?6 AS TEXT)))
+ORDER BY albums.artist_key, albums.year_key, albums.title_key, albums.id
+LIMIT ?7
+`
+
+type ListArtistAlbumsByArtistAscParams struct {
+	ArtistID  string
+	FirstPage int64
+	ArtistKey []byte
+	YearKey   int64
+	TitleKey  []byte
+	AfterID   string
+	PageSize  int64
+}
+
+type ListArtistAlbumsByArtistAscRow struct {
+	Album      Album
+	ArtistName string
+}
+
+// ListArtistAlbumsByArtistAsc returns a page of the available albums of an
+// artist by (artist_key, year_key, title_key, id), ascending.
+func (q *Queries) ListArtistAlbumsByArtistAsc(ctx context.Context, arg ListArtistAlbumsByArtistAscParams) ([]ListArtistAlbumsByArtistAscRow, error) {
+	rows, err := q.db.QueryContext(ctx, listArtistAlbumsByArtistAsc,
+		arg.ArtistID,
+		arg.FirstPage,
+		arg.ArtistKey,
+		arg.YearKey,
+		arg.TitleKey,
+		arg.AfterID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListArtistAlbumsByArtistAscRow
+	for rows.Next() {
+		var i ListArtistAlbumsByArtistAscRow
+		if err := rows.Scan(
+			&i.Album.Seq,
+			&i.Album.ID,
+			&i.Album.ArtistID,
+			&i.Album.ArtistKey,
+			&i.Album.Title,
+			&i.Album.TitleKey,
+			&i.Album.Year,
+			&i.Album.YearKey,
+			&i.Album.Genre,
+			&i.Album.Compilation,
+			&i.Album.RelPath,
+			&i.Album.AlbumRevision,
+			&i.Album.RenderVersion,
+			&i.Album.ReceiptHash,
+			&i.Album.CoverRel,
+			&i.Album.CoverSha256,
+			&i.Album.CoverMime,
+			&i.Album.CoverSize,
+			&i.Album.CoverMtimeNs,
+			&i.Album.TrackCount,
+			&i.Album.DurationMs,
+			&i.Album.Available,
+			&i.Album.FirstSeenAt,
+			&i.Album.UpdatedAt,
+			&i.ArtistName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listArtistAlbumsByArtistDesc = `-- name: ListArtistAlbumsByArtistDesc :many
+SELECT albums.seq, albums.id, albums.artist_id, albums.artist_key, albums.title, albums.title_key, albums.year, albums.year_key, albums.genre, albums.compilation, albums.rel_path, albums.album_revision, albums.render_version, albums.receipt_hash, albums.cover_rel, albums.cover_sha256, albums.cover_mime, albums.cover_size, albums.cover_mtime_ns, albums.track_count, albums.duration_ms, albums.available, albums.first_seen_at, albums.updated_at, artists.name AS artist_name
+FROM albums INDEXED BY albums_artist_id_idx
+JOIN artists ON artists.id = albums.artist_id
+WHERE albums.artist_id = ?1 AND albums.available = 1
+  AND (CAST(?2 AS INTEGER) <> 0
+       OR (albums.artist_key, albums.year_key, albums.title_key, albums.id) < (CAST(?3 AS BLOB), CAST(?4 AS INTEGER), CAST(?5 AS BLOB), CAST(?6 AS TEXT)))
+ORDER BY albums.artist_key DESC, albums.year_key DESC, albums.title_key DESC, albums.id DESC
+LIMIT ?7
+`
+
+type ListArtistAlbumsByArtistDescParams struct {
+	ArtistID  string
+	FirstPage int64
+	ArtistKey []byte
+	YearKey   int64
+	TitleKey  []byte
+	AfterID   string
+	PageSize  int64
+}
+
+type ListArtistAlbumsByArtistDescRow struct {
+	Album      Album
+	ArtistName string
+}
+
+// ListArtistAlbumsByArtistDesc returns a page of the available albums of an
+// artist by (artist_key, year_key, title_key, id), reversed.
+func (q *Queries) ListArtistAlbumsByArtistDesc(ctx context.Context, arg ListArtistAlbumsByArtistDescParams) ([]ListArtistAlbumsByArtistDescRow, error) {
+	rows, err := q.db.QueryContext(ctx, listArtistAlbumsByArtistDesc,
+		arg.ArtistID,
+		arg.FirstPage,
+		arg.ArtistKey,
+		arg.YearKey,
+		arg.TitleKey,
+		arg.AfterID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListArtistAlbumsByArtistDescRow
+	for rows.Next() {
+		var i ListArtistAlbumsByArtistDescRow
+		if err := rows.Scan(
+			&i.Album.Seq,
+			&i.Album.ID,
+			&i.Album.ArtistID,
+			&i.Album.ArtistKey,
+			&i.Album.Title,
+			&i.Album.TitleKey,
+			&i.Album.Year,
+			&i.Album.YearKey,
+			&i.Album.Genre,
+			&i.Album.Compilation,
+			&i.Album.RelPath,
+			&i.Album.AlbumRevision,
+			&i.Album.RenderVersion,
+			&i.Album.ReceiptHash,
+			&i.Album.CoverRel,
+			&i.Album.CoverSha256,
+			&i.Album.CoverMime,
+			&i.Album.CoverSize,
+			&i.Album.CoverMtimeNs,
+			&i.Album.TrackCount,
+			&i.Album.DurationMs,
+			&i.Album.Available,
+			&i.Album.FirstSeenAt,
+			&i.Album.UpdatedAt,
+			&i.ArtistName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listArtistAlbumsByTitleAsc = `-- name: ListArtistAlbumsByTitleAsc :many
+
+SELECT albums.seq, albums.id, albums.artist_id, albums.artist_key, albums.title, albums.title_key, albums.year, albums.year_key, albums.genre, albums.compilation, albums.rel_path, albums.album_revision, albums.render_version, albums.receipt_hash, albums.cover_rel, albums.cover_sha256, albums.cover_mime, albums.cover_size, albums.cover_mtime_ns, albums.track_count, albums.duration_ms, albums.available, albums.first_seen_at, albums.updated_at, artists.name AS artist_name
+FROM albums INDEXED BY albums_artist_id_idx
+JOIN artists ON artists.id = albums.artist_id
+WHERE albums.artist_id = ?1 AND albums.available = 1
+  AND (CAST(?2 AS INTEGER) <> 0
+       OR (albums.title_key, albums.id) > (CAST(?3 AS BLOB), CAST(?4 AS TEXT)))
+ORDER BY albums.title_key, albums.id
+LIMIT ?5
+`
+
+type ListArtistAlbumsByTitleAscParams struct {
+	ArtistID  string
+	FirstPage int64
+	TitleKey  []byte
+	AfterID   string
+	PageSize  int64
+}
+
+type ListArtistAlbumsByTitleAscRow struct {
+	Album      Album
+	ArtistName string
+}
+
+// The lists of the albums of one artist (DESIGN.md 8.5: artist=<id>), in
+// the same eight orders. They read the albums of the artist from
+// albums_artist_id_idx and sort them, a few hundred rows at most, where the
+// lists above walk the index of their order: with a filter those would skip
+// the albums of every other artist, up to the whole list for an artist
+// whose albums come last. One query is both the first page (first_page not
+// 0: the key of the cursor is not read) and the pages after a key.
+// ListArtistAlbumsByTitleAsc returns a page of the available albums of an
+// artist by (title_key, id), ascending.
+func (q *Queries) ListArtistAlbumsByTitleAsc(ctx context.Context, arg ListArtistAlbumsByTitleAscParams) ([]ListArtistAlbumsByTitleAscRow, error) {
+	rows, err := q.db.QueryContext(ctx, listArtistAlbumsByTitleAsc,
+		arg.ArtistID,
+		arg.FirstPage,
+		arg.TitleKey,
+		arg.AfterID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListArtistAlbumsByTitleAscRow
+	for rows.Next() {
+		var i ListArtistAlbumsByTitleAscRow
+		if err := rows.Scan(
+			&i.Album.Seq,
+			&i.Album.ID,
+			&i.Album.ArtistID,
+			&i.Album.ArtistKey,
+			&i.Album.Title,
+			&i.Album.TitleKey,
+			&i.Album.Year,
+			&i.Album.YearKey,
+			&i.Album.Genre,
+			&i.Album.Compilation,
+			&i.Album.RelPath,
+			&i.Album.AlbumRevision,
+			&i.Album.RenderVersion,
+			&i.Album.ReceiptHash,
+			&i.Album.CoverRel,
+			&i.Album.CoverSha256,
+			&i.Album.CoverMime,
+			&i.Album.CoverSize,
+			&i.Album.CoverMtimeNs,
+			&i.Album.TrackCount,
+			&i.Album.DurationMs,
+			&i.Album.Available,
+			&i.Album.FirstSeenAt,
+			&i.Album.UpdatedAt,
+			&i.ArtistName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listArtistAlbumsByTitleDesc = `-- name: ListArtistAlbumsByTitleDesc :many
+SELECT albums.seq, albums.id, albums.artist_id, albums.artist_key, albums.title, albums.title_key, albums.year, albums.year_key, albums.genre, albums.compilation, albums.rel_path, albums.album_revision, albums.render_version, albums.receipt_hash, albums.cover_rel, albums.cover_sha256, albums.cover_mime, albums.cover_size, albums.cover_mtime_ns, albums.track_count, albums.duration_ms, albums.available, albums.first_seen_at, albums.updated_at, artists.name AS artist_name
+FROM albums INDEXED BY albums_artist_id_idx
+JOIN artists ON artists.id = albums.artist_id
+WHERE albums.artist_id = ?1 AND albums.available = 1
+  AND (CAST(?2 AS INTEGER) <> 0
+       OR (albums.title_key, albums.id) < (CAST(?3 AS BLOB), CAST(?4 AS TEXT)))
+ORDER BY albums.title_key DESC, albums.id DESC
+LIMIT ?5
+`
+
+type ListArtistAlbumsByTitleDescParams struct {
+	ArtistID  string
+	FirstPage int64
+	TitleKey  []byte
+	AfterID   string
+	PageSize  int64
+}
+
+type ListArtistAlbumsByTitleDescRow struct {
+	Album      Album
+	ArtistName string
+}
+
+// ListArtistAlbumsByTitleDesc returns a page of the available albums of an
+// artist by (title_key, id), reversed.
+func (q *Queries) ListArtistAlbumsByTitleDesc(ctx context.Context, arg ListArtistAlbumsByTitleDescParams) ([]ListArtistAlbumsByTitleDescRow, error) {
+	rows, err := q.db.QueryContext(ctx, listArtistAlbumsByTitleDesc,
+		arg.ArtistID,
+		arg.FirstPage,
+		arg.TitleKey,
+		arg.AfterID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListArtistAlbumsByTitleDescRow
+	for rows.Next() {
+		var i ListArtistAlbumsByTitleDescRow
+		if err := rows.Scan(
+			&i.Album.Seq,
+			&i.Album.ID,
+			&i.Album.ArtistID,
+			&i.Album.ArtistKey,
+			&i.Album.Title,
+			&i.Album.TitleKey,
+			&i.Album.Year,
+			&i.Album.YearKey,
+			&i.Album.Genre,
+			&i.Album.Compilation,
+			&i.Album.RelPath,
+			&i.Album.AlbumRevision,
+			&i.Album.RenderVersion,
+			&i.Album.ReceiptHash,
+			&i.Album.CoverRel,
+			&i.Album.CoverSha256,
+			&i.Album.CoverMime,
+			&i.Album.CoverSize,
+			&i.Album.CoverMtimeNs,
+			&i.Album.TrackCount,
+			&i.Album.DurationMs,
+			&i.Album.Available,
+			&i.Album.FirstSeenAt,
+			&i.Album.UpdatedAt,
+			&i.ArtistName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listArtistAlbumsByYearAsc = `-- name: ListArtistAlbumsByYearAsc :many
+SELECT albums.seq, albums.id, albums.artist_id, albums.artist_key, albums.title, albums.title_key, albums.year, albums.year_key, albums.genre, albums.compilation, albums.rel_path, albums.album_revision, albums.render_version, albums.receipt_hash, albums.cover_rel, albums.cover_sha256, albums.cover_mime, albums.cover_size, albums.cover_mtime_ns, albums.track_count, albums.duration_ms, albums.available, albums.first_seen_at, albums.updated_at, artists.name AS artist_name
+FROM albums INDEXED BY albums_artist_id_idx
+JOIN artists ON artists.id = albums.artist_id
+WHERE albums.artist_id = ?1 AND albums.available = 1
+  AND (CAST(?2 AS INTEGER) <> 0
+       OR (albums.year_key, albums.title_key, albums.id) > (CAST(?3 AS INTEGER), CAST(?4 AS BLOB), CAST(?5 AS TEXT)))
+ORDER BY albums.year_key, albums.title_key, albums.id
+LIMIT ?6
+`
+
+type ListArtistAlbumsByYearAscParams struct {
+	ArtistID  string
+	FirstPage int64
+	YearKey   int64
+	TitleKey  []byte
+	AfterID   string
+	PageSize  int64
+}
+
+type ListArtistAlbumsByYearAscRow struct {
+	Album      Album
+	ArtistName string
+}
+
+// ListArtistAlbumsByYearAsc returns a page of the available albums of an
+// artist by (year_key, title_key, id), ascending.
+func (q *Queries) ListArtistAlbumsByYearAsc(ctx context.Context, arg ListArtistAlbumsByYearAscParams) ([]ListArtistAlbumsByYearAscRow, error) {
+	rows, err := q.db.QueryContext(ctx, listArtistAlbumsByYearAsc,
+		arg.ArtistID,
+		arg.FirstPage,
+		arg.YearKey,
+		arg.TitleKey,
+		arg.AfterID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListArtistAlbumsByYearAscRow
+	for rows.Next() {
+		var i ListArtistAlbumsByYearAscRow
+		if err := rows.Scan(
+			&i.Album.Seq,
+			&i.Album.ID,
+			&i.Album.ArtistID,
+			&i.Album.ArtistKey,
+			&i.Album.Title,
+			&i.Album.TitleKey,
+			&i.Album.Year,
+			&i.Album.YearKey,
+			&i.Album.Genre,
+			&i.Album.Compilation,
+			&i.Album.RelPath,
+			&i.Album.AlbumRevision,
+			&i.Album.RenderVersion,
+			&i.Album.ReceiptHash,
+			&i.Album.CoverRel,
+			&i.Album.CoverSha256,
+			&i.Album.CoverMime,
+			&i.Album.CoverSize,
+			&i.Album.CoverMtimeNs,
+			&i.Album.TrackCount,
+			&i.Album.DurationMs,
+			&i.Album.Available,
+			&i.Album.FirstSeenAt,
+			&i.Album.UpdatedAt,
+			&i.ArtistName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listArtistAlbumsByYearDesc = `-- name: ListArtistAlbumsByYearDesc :many
+SELECT albums.seq, albums.id, albums.artist_id, albums.artist_key, albums.title, albums.title_key, albums.year, albums.year_key, albums.genre, albums.compilation, albums.rel_path, albums.album_revision, albums.render_version, albums.receipt_hash, albums.cover_rel, albums.cover_sha256, albums.cover_mime, albums.cover_size, albums.cover_mtime_ns, albums.track_count, albums.duration_ms, albums.available, albums.first_seen_at, albums.updated_at, artists.name AS artist_name
+FROM albums INDEXED BY albums_artist_id_idx
+JOIN artists ON artists.id = albums.artist_id
+WHERE albums.artist_id = ?1 AND albums.available = 1
+  AND (CAST(?2 AS INTEGER) <> 0
+       OR (albums.year_key, albums.title_key, albums.id) < (CAST(?3 AS INTEGER), CAST(?4 AS BLOB), CAST(?5 AS TEXT)))
+ORDER BY albums.year_key DESC, albums.title_key DESC, albums.id DESC
+LIMIT ?6
+`
+
+type ListArtistAlbumsByYearDescParams struct {
+	ArtistID  string
+	FirstPage int64
+	YearKey   int64
+	TitleKey  []byte
+	AfterID   string
+	PageSize  int64
+}
+
+type ListArtistAlbumsByYearDescRow struct {
+	Album      Album
+	ArtistName string
+}
+
+// ListArtistAlbumsByYearDesc returns a page of the available albums of an
+// artist by (year_key, title_key, id), reversed.
+func (q *Queries) ListArtistAlbumsByYearDesc(ctx context.Context, arg ListArtistAlbumsByYearDescParams) ([]ListArtistAlbumsByYearDescRow, error) {
+	rows, err := q.db.QueryContext(ctx, listArtistAlbumsByYearDesc,
+		arg.ArtistID,
+		arg.FirstPage,
+		arg.YearKey,
+		arg.TitleKey,
+		arg.AfterID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListArtistAlbumsByYearDescRow
+	for rows.Next() {
+		var i ListArtistAlbumsByYearDescRow
 		if err := rows.Scan(
 			&i.Album.Seq,
 			&i.Album.ID,

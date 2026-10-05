@@ -95,7 +95,7 @@ func (s Server) ListPlaylistItems(ctx context.Context, req ListPlaylistItemsRequ
 		body.Items = append(body.Items, PlaylistItem{Id: item.ID, Position: item.Position, AddedAt: timestamp(item.AddedAt),
 			Track: trackOf(item.Track)})
 	}
-	return ListPlaylistItems200JSONResponse{Body: body, Headers: ListPlaylistItems200ResponseHeaders{ETag: page.Playlist.ETag()}}, nil
+	return ListPlaylistItems200JSONResponse{Body: body, Headers: ListPlaylistItems200ResponseHeaders{ETag: page.ETag}}, nil
 }
 
 // AddPlaylistItems adds tracks to a playlist, at the end or at a position.

@@ -29,14 +29,13 @@ LIMIT sqlc.arg(page_size);
 
 -- name: ListAlbumsByTitleAsc :many
 -- ListAlbumsByTitleAsc returns the first page of the available albums by
--- (title_key, id), ascending. In every list of the albums, artist_id, when
--- not null, keeps only the albums of that artist, and a Desc order reverses
--- every key of the Asc one (DESIGN.md 8.5).
+-- (title_key, id), ascending. In every list of the albums a Desc order
+-- reverses every key of the Asc one (DESIGN.md 8.5). The lists of the albums
+-- of one artist are the ListArtistAlbums queries below.
 SELECT sqlc.embed(albums), artists.name AS artist_name
 FROM albums
 JOIN artists ON artists.id = albums.artist_id
 WHERE albums.available = 1
-  AND (CAST(sqlc.narg(artist_id) AS TEXT) IS NULL OR albums.artist_id = CAST(sqlc.narg(artist_id) AS TEXT))
 ORDER BY albums.title_key, albums.id
 LIMIT sqlc.arg(page_size);
 
@@ -47,7 +46,6 @@ SELECT sqlc.embed(albums), artists.name AS artist_name
 FROM albums
 JOIN artists ON artists.id = albums.artist_id
 WHERE albums.available = 1
-  AND (CAST(sqlc.narg(artist_id) AS TEXT) IS NULL OR albums.artist_id = CAST(sqlc.narg(artist_id) AS TEXT))
   AND (albums.title_key, albums.id) > (CAST(sqlc.arg(title_key) AS BLOB), CAST(sqlc.arg(after_id) AS TEXT))
 ORDER BY albums.title_key, albums.id
 LIMIT sqlc.arg(page_size);
@@ -59,7 +57,6 @@ SELECT sqlc.embed(albums), artists.name AS artist_name
 FROM albums
 JOIN artists ON artists.id = albums.artist_id
 WHERE albums.available = 1
-  AND (CAST(sqlc.narg(artist_id) AS TEXT) IS NULL OR albums.artist_id = CAST(sqlc.narg(artist_id) AS TEXT))
 ORDER BY albums.artist_key, albums.year_key, albums.title_key, albums.id
 LIMIT sqlc.arg(page_size);
 
@@ -70,7 +67,6 @@ SELECT sqlc.embed(albums), artists.name AS artist_name
 FROM albums
 JOIN artists ON artists.id = albums.artist_id
 WHERE albums.available = 1
-  AND (CAST(sqlc.narg(artist_id) AS TEXT) IS NULL OR albums.artist_id = CAST(sqlc.narg(artist_id) AS TEXT))
   AND (albums.artist_key, albums.year_key, albums.title_key, albums.id) > (CAST(sqlc.arg(artist_key) AS BLOB), CAST(sqlc.arg(year_key) AS INTEGER), CAST(sqlc.arg(title_key) AS BLOB), CAST(sqlc.arg(after_id) AS TEXT))
 ORDER BY albums.artist_key, albums.year_key, albums.title_key, albums.id
 LIMIT sqlc.arg(page_size);
@@ -82,7 +78,6 @@ SELECT sqlc.embed(albums), artists.name AS artist_name
 FROM albums
 JOIN artists ON artists.id = albums.artist_id
 WHERE albums.available = 1
-  AND (CAST(sqlc.narg(artist_id) AS TEXT) IS NULL OR albums.artist_id = CAST(sqlc.narg(artist_id) AS TEXT))
 ORDER BY albums.year_key, albums.title_key, albums.id
 LIMIT sqlc.arg(page_size);
 
@@ -93,7 +88,6 @@ SELECT sqlc.embed(albums), artists.name AS artist_name
 FROM albums
 JOIN artists ON artists.id = albums.artist_id
 WHERE albums.available = 1
-  AND (CAST(sqlc.narg(artist_id) AS TEXT) IS NULL OR albums.artist_id = CAST(sqlc.narg(artist_id) AS TEXT))
   AND (albums.year_key, albums.title_key, albums.id) > (CAST(sqlc.arg(year_key) AS INTEGER), CAST(sqlc.arg(title_key) AS BLOB), CAST(sqlc.arg(after_id) AS TEXT))
 ORDER BY albums.year_key, albums.title_key, albums.id
 LIMIT sqlc.arg(page_size);
@@ -105,7 +99,6 @@ SELECT sqlc.embed(albums), artists.name AS artist_name
 FROM albums
 JOIN artists ON artists.id = albums.artist_id
 WHERE albums.available = 1
-  AND (CAST(sqlc.narg(artist_id) AS TEXT) IS NULL OR albums.artist_id = CAST(sqlc.narg(artist_id) AS TEXT))
 ORDER BY albums.first_seen_at, albums.id
 LIMIT sqlc.arg(page_size);
 
@@ -116,7 +109,6 @@ SELECT sqlc.embed(albums), artists.name AS artist_name
 FROM albums
 JOIN artists ON artists.id = albums.artist_id
 WHERE albums.available = 1
-  AND (CAST(sqlc.narg(artist_id) AS TEXT) IS NULL OR albums.artist_id = CAST(sqlc.narg(artist_id) AS TEXT))
   AND (albums.first_seen_at, albums.id) > (CAST(sqlc.arg(first_seen_at) AS INTEGER), CAST(sqlc.arg(after_id) AS TEXT))
 ORDER BY albums.first_seen_at, albums.id
 LIMIT sqlc.arg(page_size);
@@ -128,7 +120,6 @@ SELECT sqlc.embed(albums), artists.name AS artist_name
 FROM albums
 JOIN artists ON artists.id = albums.artist_id
 WHERE albums.available = 1
-  AND (CAST(sqlc.narg(artist_id) AS TEXT) IS NULL OR albums.artist_id = CAST(sqlc.narg(artist_id) AS TEXT))
 ORDER BY albums.title_key DESC, albums.id DESC
 LIMIT sqlc.arg(page_size);
 
@@ -139,7 +130,6 @@ SELECT sqlc.embed(albums), artists.name AS artist_name
 FROM albums
 JOIN artists ON artists.id = albums.artist_id
 WHERE albums.available = 1
-  AND (CAST(sqlc.narg(artist_id) AS TEXT) IS NULL OR albums.artist_id = CAST(sqlc.narg(artist_id) AS TEXT))
   AND (albums.title_key, albums.id) < (CAST(sqlc.arg(title_key) AS BLOB), CAST(sqlc.arg(after_id) AS TEXT))
 ORDER BY albums.title_key DESC, albums.id DESC
 LIMIT sqlc.arg(page_size);
@@ -151,7 +141,6 @@ SELECT sqlc.embed(albums), artists.name AS artist_name
 FROM albums
 JOIN artists ON artists.id = albums.artist_id
 WHERE albums.available = 1
-  AND (CAST(sqlc.narg(artist_id) AS TEXT) IS NULL OR albums.artist_id = CAST(sqlc.narg(artist_id) AS TEXT))
 ORDER BY albums.artist_key DESC, albums.year_key DESC, albums.title_key DESC, albums.id DESC
 LIMIT sqlc.arg(page_size);
 
@@ -162,7 +151,6 @@ SELECT sqlc.embed(albums), artists.name AS artist_name
 FROM albums
 JOIN artists ON artists.id = albums.artist_id
 WHERE albums.available = 1
-  AND (CAST(sqlc.narg(artist_id) AS TEXT) IS NULL OR albums.artist_id = CAST(sqlc.narg(artist_id) AS TEXT))
   AND (albums.artist_key, albums.year_key, albums.title_key, albums.id) < (CAST(sqlc.arg(artist_key) AS BLOB), CAST(sqlc.arg(year_key) AS INTEGER), CAST(sqlc.arg(title_key) AS BLOB), CAST(sqlc.arg(after_id) AS TEXT))
 ORDER BY albums.artist_key DESC, albums.year_key DESC, albums.title_key DESC, albums.id DESC
 LIMIT sqlc.arg(page_size);
@@ -174,7 +162,6 @@ SELECT sqlc.embed(albums), artists.name AS artist_name
 FROM albums
 JOIN artists ON artists.id = albums.artist_id
 WHERE albums.available = 1
-  AND (CAST(sqlc.narg(artist_id) AS TEXT) IS NULL OR albums.artist_id = CAST(sqlc.narg(artist_id) AS TEXT))
 ORDER BY albums.year_key DESC, albums.title_key DESC, albums.id DESC
 LIMIT sqlc.arg(page_size);
 
@@ -185,7 +172,6 @@ SELECT sqlc.embed(albums), artists.name AS artist_name
 FROM albums
 JOIN artists ON artists.id = albums.artist_id
 WHERE albums.available = 1
-  AND (CAST(sqlc.narg(artist_id) AS TEXT) IS NULL OR albums.artist_id = CAST(sqlc.narg(artist_id) AS TEXT))
   AND (albums.year_key, albums.title_key, albums.id) < (CAST(sqlc.arg(year_key) AS INTEGER), CAST(sqlc.arg(title_key) AS BLOB), CAST(sqlc.arg(after_id) AS TEXT))
 ORDER BY albums.year_key DESC, albums.title_key DESC, albums.id DESC
 LIMIT sqlc.arg(page_size);
@@ -197,7 +183,6 @@ SELECT sqlc.embed(albums), artists.name AS artist_name
 FROM albums
 JOIN artists ON artists.id = albums.artist_id
 WHERE albums.available = 1
-  AND (CAST(sqlc.narg(artist_id) AS TEXT) IS NULL OR albums.artist_id = CAST(sqlc.narg(artist_id) AS TEXT))
 ORDER BY albums.first_seen_at DESC, albums.id DESC
 LIMIT sqlc.arg(page_size);
 
@@ -208,8 +193,111 @@ SELECT sqlc.embed(albums), artists.name AS artist_name
 FROM albums
 JOIN artists ON artists.id = albums.artist_id
 WHERE albums.available = 1
-  AND (CAST(sqlc.narg(artist_id) AS TEXT) IS NULL OR albums.artist_id = CAST(sqlc.narg(artist_id) AS TEXT))
   AND (albums.first_seen_at, albums.id) < (CAST(sqlc.arg(first_seen_at) AS INTEGER), CAST(sqlc.arg(after_id) AS TEXT))
+ORDER BY albums.first_seen_at DESC, albums.id DESC
+LIMIT sqlc.arg(page_size);
+
+-- The lists of the albums of one artist (DESIGN.md 8.5: artist=<id>), in
+-- the same eight orders. They read the albums of the artist from
+-- albums_artist_id_idx and sort them, a few hundred rows at most, where the
+-- lists above walk the index of their order: with a filter those would skip
+-- the albums of every other artist, up to the whole list for an artist
+-- whose albums come last. One query is both the first page (first_page not
+-- 0: the key of the cursor is not read) and the pages after a key.
+
+-- name: ListArtistAlbumsByTitleAsc :many
+-- ListArtistAlbumsByTitleAsc returns a page of the available albums of an
+-- artist by (title_key, id), ascending.
+SELECT sqlc.embed(albums), artists.name AS artist_name
+FROM albums INDEXED BY albums_artist_id_idx
+JOIN artists ON artists.id = albums.artist_id
+WHERE albums.artist_id = sqlc.arg(artist_id) AND albums.available = 1
+  AND (CAST(sqlc.arg(first_page) AS INTEGER) <> 0
+       OR (albums.title_key, albums.id) > (CAST(sqlc.arg(title_key) AS BLOB), CAST(sqlc.arg(after_id) AS TEXT)))
+ORDER BY albums.title_key, albums.id
+LIMIT sqlc.arg(page_size);
+
+-- name: ListArtistAlbumsByTitleDesc :many
+-- ListArtistAlbumsByTitleDesc returns a page of the available albums of an
+-- artist by (title_key, id), reversed.
+SELECT sqlc.embed(albums), artists.name AS artist_name
+FROM albums INDEXED BY albums_artist_id_idx
+JOIN artists ON artists.id = albums.artist_id
+WHERE albums.artist_id = sqlc.arg(artist_id) AND albums.available = 1
+  AND (CAST(sqlc.arg(first_page) AS INTEGER) <> 0
+       OR (albums.title_key, albums.id) < (CAST(sqlc.arg(title_key) AS BLOB), CAST(sqlc.arg(after_id) AS TEXT)))
+ORDER BY albums.title_key DESC, albums.id DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListArtistAlbumsByArtistAsc :many
+-- ListArtistAlbumsByArtistAsc returns a page of the available albums of an
+-- artist by (artist_key, year_key, title_key, id), ascending.
+SELECT sqlc.embed(albums), artists.name AS artist_name
+FROM albums INDEXED BY albums_artist_id_idx
+JOIN artists ON artists.id = albums.artist_id
+WHERE albums.artist_id = sqlc.arg(artist_id) AND albums.available = 1
+  AND (CAST(sqlc.arg(first_page) AS INTEGER) <> 0
+       OR (albums.artist_key, albums.year_key, albums.title_key, albums.id) > (CAST(sqlc.arg(artist_key) AS BLOB), CAST(sqlc.arg(year_key) AS INTEGER), CAST(sqlc.arg(title_key) AS BLOB), CAST(sqlc.arg(after_id) AS TEXT)))
+ORDER BY albums.artist_key, albums.year_key, albums.title_key, albums.id
+LIMIT sqlc.arg(page_size);
+
+-- name: ListArtistAlbumsByArtistDesc :many
+-- ListArtistAlbumsByArtistDesc returns a page of the available albums of an
+-- artist by (artist_key, year_key, title_key, id), reversed.
+SELECT sqlc.embed(albums), artists.name AS artist_name
+FROM albums INDEXED BY albums_artist_id_idx
+JOIN artists ON artists.id = albums.artist_id
+WHERE albums.artist_id = sqlc.arg(artist_id) AND albums.available = 1
+  AND (CAST(sqlc.arg(first_page) AS INTEGER) <> 0
+       OR (albums.artist_key, albums.year_key, albums.title_key, albums.id) < (CAST(sqlc.arg(artist_key) AS BLOB), CAST(sqlc.arg(year_key) AS INTEGER), CAST(sqlc.arg(title_key) AS BLOB), CAST(sqlc.arg(after_id) AS TEXT)))
+ORDER BY albums.artist_key DESC, albums.year_key DESC, albums.title_key DESC, albums.id DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListArtistAlbumsByYearAsc :many
+-- ListArtistAlbumsByYearAsc returns a page of the available albums of an
+-- artist by (year_key, title_key, id), ascending.
+SELECT sqlc.embed(albums), artists.name AS artist_name
+FROM albums INDEXED BY albums_artist_id_idx
+JOIN artists ON artists.id = albums.artist_id
+WHERE albums.artist_id = sqlc.arg(artist_id) AND albums.available = 1
+  AND (CAST(sqlc.arg(first_page) AS INTEGER) <> 0
+       OR (albums.year_key, albums.title_key, albums.id) > (CAST(sqlc.arg(year_key) AS INTEGER), CAST(sqlc.arg(title_key) AS BLOB), CAST(sqlc.arg(after_id) AS TEXT)))
+ORDER BY albums.year_key, albums.title_key, albums.id
+LIMIT sqlc.arg(page_size);
+
+-- name: ListArtistAlbumsByYearDesc :many
+-- ListArtistAlbumsByYearDesc returns a page of the available albums of an
+-- artist by (year_key, title_key, id), reversed.
+SELECT sqlc.embed(albums), artists.name AS artist_name
+FROM albums INDEXED BY albums_artist_id_idx
+JOIN artists ON artists.id = albums.artist_id
+WHERE albums.artist_id = sqlc.arg(artist_id) AND albums.available = 1
+  AND (CAST(sqlc.arg(first_page) AS INTEGER) <> 0
+       OR (albums.year_key, albums.title_key, albums.id) < (CAST(sqlc.arg(year_key) AS INTEGER), CAST(sqlc.arg(title_key) AS BLOB), CAST(sqlc.arg(after_id) AS TEXT)))
+ORDER BY albums.year_key DESC, albums.title_key DESC, albums.id DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListArtistAlbumsByAddedAsc :many
+-- ListArtistAlbumsByAddedAsc returns a page of the available albums of an
+-- artist by (first_seen_at, id), ascending.
+SELECT sqlc.embed(albums), artists.name AS artist_name
+FROM albums INDEXED BY albums_artist_id_idx
+JOIN artists ON artists.id = albums.artist_id
+WHERE albums.artist_id = sqlc.arg(artist_id) AND albums.available = 1
+  AND (CAST(sqlc.arg(first_page) AS INTEGER) <> 0
+       OR (albums.first_seen_at, albums.id) > (CAST(sqlc.arg(first_seen_at) AS INTEGER), CAST(sqlc.arg(after_id) AS TEXT)))
+ORDER BY albums.first_seen_at, albums.id
+LIMIT sqlc.arg(page_size);
+
+-- name: ListArtistAlbumsByAddedDesc :many
+-- ListArtistAlbumsByAddedDesc returns a page of the available albums of an
+-- artist by (first_seen_at, id), reversed.
+SELECT sqlc.embed(albums), artists.name AS artist_name
+FROM albums INDEXED BY albums_artist_id_idx
+JOIN artists ON artists.id = albums.artist_id
+WHERE albums.artist_id = sqlc.arg(artist_id) AND albums.available = 1
+  AND (CAST(sqlc.arg(first_page) AS INTEGER) <> 0
+       OR (albums.first_seen_at, albums.id) < (CAST(sqlc.arg(first_seen_at) AS INTEGER), CAST(sqlc.arg(after_id) AS TEXT)))
 ORDER BY albums.first_seen_at DESC, albums.id DESC
 LIMIT sqlc.arg(page_size);
 

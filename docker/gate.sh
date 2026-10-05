@@ -45,9 +45,11 @@ step "go build -o /dev/null ${pkgs[*]}"
 go build -o /dev/null "${pkgs[@]}"
 
 # The tag `contract` adds the contract suite of internal/contract, which only
-# scripts/contract.sh runs: vetted here, so that it always builds.
-step "go vet -tags contract ${pkgs[*]}"
-go vet -tags contract "${pkgs[@]}"
+# scripts/contract.sh runs, and the tag `perf` the performance suite of
+# internal/perfgen, which only scripts/perf.sh runs: both are vetted here, so
+# that they always build.
+step "go vet -tags contract,perf ${pkgs[*]}"
+go vet -tags contract,perf "${pkgs[@]}"
 
 step "gofmt -l ${fmt_dirs[*]}"
 unformatted="$(gofmt -l "${fmt_dirs[@]}")"

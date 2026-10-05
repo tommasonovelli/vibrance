@@ -427,7 +427,7 @@ func TestCheckWAL(t *testing.T) {
 func connSettings(t *testing.T, conn *sql.Conn) map[string]string {
 	t.Helper()
 	got := map[string]string{}
-	for _, name := range []string{"foreign_keys", "busy_timeout", "journal_mode", "synchronous", "query_only"} {
+	for _, name := range []string{"foreign_keys", "busy_timeout", "journal_mode", "synchronous", "cache_size", "query_only"} {
 		got[name] = string1(t, conn, `PRAGMA `+name)
 	}
 	return got
@@ -451,8 +451,8 @@ func discard(t *testing.T, conn *sql.Conn) {
 func TestSettingsOnEveryConnection(t *testing.T) {
 	s := newStore(t)
 	ctx := t.Context()
-	wantRead := map[string]string{"foreign_keys": "1", "busy_timeout": "5000", "journal_mode": "wal", "synchronous": "2", "query_only": "1"}
-	wantWrite := map[string]string{"foreign_keys": "1", "busy_timeout": "5000", "journal_mode": "wal", "synchronous": "2", "query_only": "0"}
+	wantRead := map[string]string{"foreign_keys": "1", "busy_timeout": "5000", "journal_mode": "wal", "synchronous": "2", "cache_size": "-2000", "query_only": "1"}
+	wantWrite := map[string]string{"foreign_keys": "1", "busy_timeout": "5000", "journal_mode": "wal", "synchronous": "2", "cache_size": "-8000", "query_only": "0"}
 	check := func(name string, conn *sql.Conn, want map[string]string) {
 		t.Helper()
 		got := connSettings(t, conn)

@@ -126,10 +126,11 @@ type GetPlaylistOfUserRow struct {
 // tracks that are available (DESIGN.md, erratum of 2026-10-04). A playlist
 // that does not exist, or is of another user, is sql.ErrNoRows.
 //
-// A playlist is read and changed only through this query and
-// ListPlaylistsOfUser, which name its owner: the playlist of another user
-// is a row that is not found (DESIGN.md 8.6, I6). The other queries of this
-// file run in the transaction that read the playlist that way.
+// A playlist is read and changed only through this query,
+// GetPlaylistStateOfUser and ListPlaylistsOfUser, which name its owner: the
+// playlist of another user is a row that is not found (DESIGN.md 8.6, I6).
+// The other queries of this file run in the transaction that read the
+// playlist that way.
 func (q *Queries) GetPlaylistOfUser(ctx context.Context, arg GetPlaylistOfUserParams) (GetPlaylistOfUserRow, error) {
 	row := q.db.QueryRowContext(ctx, getPlaylistOfUser, arg.ID, arg.UserID)
 	var i GetPlaylistOfUserRow
@@ -143,6 +144,45 @@ func (q *Queries) GetPlaylistOfUser(ctx context.Context, arg GetPlaylistOfUserPa
 		&i.Playlist.UpdatedAt,
 		&i.ItemCount,
 		&i.DurationMs,
+	)
+	return i, err
+}
+
+const getPlaylistStateOfUser = `-- name: GetPlaylistStateOfUser :one
+SELECT playlists.id, playlists.user_id, playlists.name, playlists.description, playlists.revision, playlists.created_at, playlists.updated_at,
+    (SELECT count(*) FROM playlist_items
+     WHERE playlist_items.playlist_id = playlists.id) AS item_count
+FROM playlists
+WHERE playlists.id = ?1 AND playlists.user_id = ?2
+`
+
+type GetPlaylistStateOfUserParams struct {
+	ID     string
+	UserID string
+}
+
+type GetPlaylistStateOfUserRow struct {
+	Playlist  Playlist
+	ItemCount int64
+}
+
+// GetPlaylistStateOfUser returns a playlist of a user and how many items it
+// has, without the duration of GetPlaylistOfUser, which reads the track of
+// every item: what a change needs of the playlist before it changes it, and
+// what a page of its items needs, the revision. A playlist that does not
+// exist, or is of another user, is sql.ErrNoRows.
+func (q *Queries) GetPlaylistStateOfUser(ctx context.Context, arg GetPlaylistStateOfUserParams) (GetPlaylistStateOfUserRow, error) {
+	row := q.db.QueryRowContext(ctx, getPlaylistStateOfUser, arg.ID, arg.UserID)
+	var i GetPlaylistStateOfUserRow
+	err := row.Scan(
+		&i.Playlist.ID,
+		&i.Playlist.UserID,
+		&i.Playlist.Name,
+		&i.Playlist.Description,
+		&i.Playlist.Revision,
+		&i.Playlist.CreatedAt,
+		&i.Playlist.UpdatedAt,
+		&i.ItemCount,
 	)
 	return i, err
 }
@@ -382,6 +422,9 @@ SELECT items.id, items.playlist_id, items.track_id,
     row_number() OVER (ORDER BY items.position, items.id) - 1, items.added_at
 FROM playlist_items AS items
 WHERE items.playlist_id = ?1
+  AND (SELECT count(*) <> count(DISTINCT placed.position) OR max(placed.position) <> count(*) - 1
+       FROM playlist_items AS placed
+       WHERE placed.playlist_id = ?1)
 ON CONFLICT (id) DO UPDATE SET position = excluded.position
 WHERE playlist_items.position <> excluded.position
 `
@@ -389,7 +432,11 @@ WHERE playlist_items.position <> excluded.position
 // RenumberPlaylistItems makes the positions of the items of a playlist
 // dense again, 0..n-1, in the order (position, id) they have (DESIGN.md
 // 8.6, T5). Every change of the items ends with it, in its transaction. It
-// writes only the rows that are out of place.
+// writes only the rows that are out of place, and looks for them only when
+// the positions are not dense already: they are when no two items have the
+// same one and the highest is the number of the items less one. That is
+// read from the index of the positions alone, while looking at every item
+// costs as much as moving them all.
 //
 // It is an upsert of the items on themselves, because sqlc does not read
 // UPDATE ... FROM: every row conflicts on its id, so nothing is inserted,

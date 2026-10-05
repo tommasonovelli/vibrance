@@ -4,10 +4,11 @@
 -- tracks that are available (DESIGN.md, erratum of 2026-10-04). A playlist
 -- that does not exist, or is of another user, is sql.ErrNoRows.
 --
--- A playlist is read and changed only through this query and
--- ListPlaylistsOfUser, which name its owner: the playlist of another user
--- is a row that is not found (DESIGN.md 8.6, I6). The other queries of this
--- file run in the transaction that read the playlist that way.
+-- A playlist is read and changed only through this query,
+-- GetPlaylistStateOfUser and ListPlaylistsOfUser, which name its owner: the
+-- playlist of another user is a row that is not found (DESIGN.md 8.6, I6).
+-- The other queries of this file run in the transaction that read the
+-- playlist that way.
 SELECT sqlc.embed(playlists),
     (SELECT count(*) FROM playlist_items
      WHERE playlist_items.playlist_id = playlists.id) AS item_count,
@@ -15,6 +16,18 @@ SELECT sqlc.embed(playlists),
           FROM playlist_items
           JOIN tracks ON tracks.id = playlist_items.track_id
           WHERE playlist_items.playlist_id = playlists.id AND tracks.available = 1) AS INTEGER) AS duration_ms
+FROM playlists
+WHERE playlists.id = sqlc.arg(id) AND playlists.user_id = sqlc.arg(user_id);
+
+-- name: GetPlaylistStateOfUser :one
+-- GetPlaylistStateOfUser returns a playlist of a user and how many items it
+-- has, without the duration of GetPlaylistOfUser, which reads the track of
+-- every item: what a change needs of the playlist before it changes it, and
+-- what a page of its items needs, the revision. A playlist that does not
+-- exist, or is of another user, is sql.ErrNoRows.
+SELECT sqlc.embed(playlists),
+    (SELECT count(*) FROM playlist_items
+     WHERE playlist_items.playlist_id = playlists.id) AS item_count
 FROM playlists
 WHERE playlists.id = sqlc.arg(id) AND playlists.user_id = sqlc.arg(user_id);
 
@@ -97,7 +110,11 @@ DELETE FROM playlist_items WHERE id = ?;
 -- RenumberPlaylistItems makes the positions of the items of a playlist
 -- dense again, 0..n-1, in the order (position, id) they have (DESIGN.md
 -- 8.6, T5). Every change of the items ends with it, in its transaction. It
--- writes only the rows that are out of place.
+-- writes only the rows that are out of place, and looks for them only when
+-- the positions are not dense already: they are when no two items have the
+-- same one and the highest is the number of the items less one. That is
+-- read from the index of the positions alone, while looking at every item
+-- costs as much as moving them all.
 --
 -- It is an upsert of the items on themselves, because sqlc does not read
 -- UPDATE ... FROM: every row conflicts on its id, so nothing is inserted,
@@ -110,6 +127,9 @@ SELECT items.id, items.playlist_id, items.track_id,
     row_number() OVER (ORDER BY items.position, items.id) - 1, items.added_at
 FROM playlist_items AS items
 WHERE items.playlist_id = sqlc.arg(playlist_id)
+  AND (SELECT count(*) <> count(DISTINCT placed.position) OR max(placed.position) <> count(*) - 1
+       FROM playlist_items AS placed
+       WHERE placed.playlist_id = sqlc.arg(playlist_id))
 ON CONFLICT (id) DO UPDATE SET position = excluded.position
 WHERE playlist_items.position <> excluded.position;
 

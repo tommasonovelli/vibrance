@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"runtime/debug"
 	"slices"
 	"sync"
 	"time"
@@ -285,6 +286,15 @@ func (s *Scanner) cycle(ctx context.Context, reason Reason) {
 		default:
 		}
 	}
+	// A cycle holds every receipt of the library at once, about 50 MB for
+	// 20,000 albums, and frees them when it ends. Nothing collects that
+	// garbage until the collection the Go runtime forces two minutes later,
+	// and the memory goes back to the system later still: at the default
+	// interval of five minutes the server would be at rest over the 150 MB
+	// of the step S24 most of the time (measured on 20,000 albums: 159 to
+	// 163 MB up to four minutes after a cycle, 64 MB with this call; NOTES.md
+	// N-163). It costs one collection of a heap that is mostly free.
+	debug.FreeOSMemory()
 }
 
 // preconditions is P0: it reads the two markers and records what they say.

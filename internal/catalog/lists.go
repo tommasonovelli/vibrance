@@ -2,7 +2,6 @@ package catalog
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 
 	"vibrance/internal/httpx"
@@ -92,27 +91,27 @@ func (s *Service) ListAlbums(ctx context.Context, aq AlbumQuery) (AlbumPage, err
 		// other value before the operation runs.
 		return AlbumPage{}, fmt.Errorf("catalog: no list of the albums by %q %q", aq.Sort, aq.Order)
 	}
-	artist := sql.NullString{String: aq.ArtistID, Valid: aq.ArtistID != ""}
 	n := int64(aq.Limit) + 1
-	var (
-		rows []albumRow
-		err  error
-	)
-	if aq.After == nil {
-		err = s.store.Read(ctx, func(q *store.Queries) error {
-			rows, err = o.first(ctx, q, artist, n)
-			return err
-		})
-	} else {
-		keys, cerr := httpx.DecodeCursor(*aq.After, aq.Sort, aq.Order, o.kinds...)
-		if cerr != nil {
-			return AlbumPage{}, cerr
+	// keys stays nil for the first page.
+	var keys []httpx.CursorKey
+	if aq.After != nil {
+		var err error
+		if keys, err = httpx.DecodeCursor(*aq.After, aq.Sort, aq.Order, o.kinds...); err != nil {
+			return AlbumPage{}, err
 		}
-		err = s.store.Read(ctx, func(q *store.Queries) error {
-			rows, err = o.after(ctx, q, artist, keys, n)
-			return err
-		})
 	}
+	var rows []albumRow
+	err := s.store.Read(ctx, func(q *store.Queries) (err error) {
+		switch {
+		case aq.ArtistID != "":
+			rows, err = o.ofArtist(ctx, q, aq.ArtistID, keys, n)
+		case keys == nil:
+			rows, err = o.first(ctx, q, n)
+		default:
+			rows, err = o.after(ctx, q, keys, n)
+		}
+		return err
+	})
 	if err != nil {
 		return AlbumPage{}, fmt.Errorf("catalog: listing the albums: %w", err)
 	}
@@ -182,10 +181,14 @@ func artistRows[R ~struct {
 }
 
 // albumOrder is one order of the list of the albums: the kinds of the
-// values of its cursor, the values of a row, and its two queries.
+// values of its cursor, the values of a row, and its three queries. first
+// and after walk the index of the order over every album; ofArtist reads
+// the albums of one artist and sorts them, for the first page (a nil k) and
+// for the others.
 type albumOrder struct {
-	kinds []httpx.CursorKind
-	key   func(store.Album) []httpx.CursorKey
-	first func(ctx context.Context, q *store.Queries, artist sql.NullString, n int64) ([]albumRow, error)
-	after func(ctx context.Context, q *store.Queries, artist sql.NullString, k []httpx.CursorKey, n int64) ([]albumRow, error)
+	kinds    []httpx.CursorKind
+	key      func(store.Album) []httpx.CursorKey
+	first    func(ctx context.Context, q *store.Queries, n int64) ([]albumRow, error)
+	after    func(ctx context.Context, q *store.Queries, k []httpx.CursorKey, n int64) ([]albumRow, error)
+	ofArtist func(ctx context.Context, q *store.Queries, artist string, k []httpx.CursorKey, n int64) ([]albumRow, error)
 }
