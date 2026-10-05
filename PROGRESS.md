@@ -134,6 +134,23 @@ Stati: `todo`, `in-progress`, `done`, `blocked`.
 - (S25) `scripts/lib/common.sh:30` dice «see README.md» per i prerequisiti di sviluppo: ora è `docs/development.md`. N-168: il Dockerfile di MusicLib è scaricato per tag senza hash (si può fissarne lo SHA-256 nel workflow). `tags: ["v*"]` avvia una run anche per tag non semver (la guardia la ferma senza costruire nulla, come in MusicLib). N-169: l'elenco delle librerie dentro il bundle di Scalar non è completo. Il workflow di rilascio non è mai stato eseguito su GitHub: il primo tag è la sua prima prova vera.
 - (S25, prima del tag, spetta all'utente) Aggiornare la data di `CHANGELOG.md` se il tag è di un altro giorno; sostituire il segnaposto del contatto in `SECURITY.md`; eseguire gate e contratto (due volte di seguito) su Linux nativo; verificare che il pacchetto GHCR `ghcr.io/tommasonovelli/vibrance` sia libero o collegato al repository e renderlo pubblico dopo il primo push (procedura in `docs/development.md`, «Publishing a release»).
 
+## Decisioni dell'utente (2026-10-05, dopo S25)
+
+L'utente ha risposto all'elenco delle decisioni aperte. Da realizzare prima del tag `v0.1.0`, con errata e passi dedicati (ingegnere, poi revisore), dopo il parere di un consulente indipendente chiesto dall'utente:
+- N-082 (2): la marca LRC a tre campi `[00:01:23]` è minuti:secondi:centesimi. N-082 (5): le righe vuote dei testi non sincronizzati si tengono. N-082 (1): si ignora una lista chiusa di tag LRC noti.
+- N-078: una cover che non si apre non ferma l'album: album indicizzato senza cover, con avviso.
+- N-107: il cookie di sessione si rinnova con l'uso.
+- N-126: normalizzazione NFC di query e indice di ricerca.
+- N-144: un comando che ripara l'indice di ricerca.
+- N-147: `stop_grace_period: 15s` nel servizio `vibrance`.
+- N-138: l'header `X-Vibrance-Request` dichiarato nella specifica.
+- Header `ETag` anche sulle risposte di modifica delle playlist.
+- N-165: memoria delle miniature di cover enormi (forma da decidere dopo il parere).
+
+Confermate come sono: N-076 (miniature proporzionate), N-040 (bitrate FLAC `null`, salvo parere diverso), N-128 (preferiti su tracce non disponibili: decide l'orchestratore), N-172 (Go 1.25 resta; l'utente aggiornerà in futuro), e tutte le scelte prudenti delle fasi A–D (N-014, N-017, N-027, N-033, N-045, N-059, N-060, N-064, N-087, N-091, N-093, N-099, N-100, N-102, N-106, N-112, N-115, N-122, N-132, N-143, N-150, N-158, N-160, N-161, N-162).
+
+Approvate: l'errata a I7 (istruzioni `PRAGMA` e `VACUUM INTO` costanti in `internal/store`) e le righe nuove di `CLAUDE.md` e `AGENTS.md` (applicate dall'orchestratore).
+
 ## TO CONFIRM aperti (da riportare all'utente a fine fase)
 - N-014 (S1) Dopo un `rebuild` offline di MusicLib `.maintenance` sparisce ma `library/` resta vuota finché l'app non riparte: in quell'intervallo Vibrance vede tutti gli album non disponibili (poi tornano con gli stessi ID). Riportato all'utente a fine fase 0 (2026-10-01).
 - N-017 (S2) È marcato `DECIDED` in NOTES.md ma ha un effetto visibile: dopo la chiusura forzata all'arresto (richieste aperte oltre i 10 s di tolleranza) il processo esce con 0, mentre MusicLib esce con 1. Il revisore ritiene la lettura corretta; da riportare all'utente a fine fase A.

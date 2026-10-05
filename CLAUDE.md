@@ -14,14 +14,18 @@ Vibrance is a read-only listening server over the `library/` folder that Vibranc
 - Record decisions, deviations, risks and questions in [NOTES.md](NOTES.md), one short entry per topic: `DECIDED` when the design is silent or ambiguous without visible effect, `TO CONFIRM` when the ambiguity changes visible behavior. Pick the most conservative option and go on.
 - If the design contradicts itself or rests on a false assumption, stop and report a `BLOCCO:` with evidence (commands and output). Never work around it.
 - Never modify `.ref/`, the read-only clone of MusicLib 1.2.0 kept for reference. It is never committed.
+- Releases are made only by the owner, by pushing a tag `vX.Y.Z` ([docs/development.md](docs/development.md), "Releasing"). Agents never create tags and never publish. The orchestrator pushes `main` only with the owner's consent.
+- `web/` holds the documentation page built into the binary, with the vendored Scalar script (`web/docs/VENDOR.md`). `THIRD_PARTY_NOTICES.md` and `licenses/` change together with every Go module or vendored file.
 
 ## Build, test, run: Docker only
 
 - The host needs only Docker with the Compose v2 plugin. Never install Go, ffmpeg or other tools on the host. On Windows, use Git Bash (the scripts set `MSYS_NO_PATHCONV=1`) and keep LF line endings (`.gitattributes`).
-- `scripts/check.sh [packages]` is the gate. It checks that the generated sqlc code is up to date (`sqlc diff`), then runs `go build`, `go vet`, `gofmt` and `go test -race` on the whole module by default, in a container without network, with `TMPDIR` on a real ext4 volume. It tests a snapshot of the tree taken at build time. It must pass on the whole module before a step is done.
+- `scripts/check.sh [packages]` is the gate. It checks that the generated code is up to date (`sqlc diff` for `internal/store`, `generate.sh diff` for `internal/api`), then runs `go build`, `go vet` (also with the build tags `contract` and `perf`), `gofmt` and `go test -race` on the whole module by default, in a container without network, with `TMPDIR` on a real ext4 volume. It tests a snapshot of the tree taken at build time. It must pass on the whole module before a step is done.
 - `scripts/dev.sh [cmd]` gives a shell, or runs one command, in the toolchain container on the live sources. For example, repeat concurrency tests with `scripts/dev.sh go test -race -count=20 -run TestX ./internal/...`.
 - `scripts/sqlc.sh` regenerates `internal/store` after any change to `sql/` or `migrations/`. Commit the result. `sqlc.yaml` lists the migrations one by one, without the full-text one. Keep `sql/*.sql` in ASCII: sqlc cuts the queries of a file with other characters at the wrong byte.
+- `scripts/generate.sh` regenerates `internal/api/api.gen.go` after any change to `api/openapi.yaml` or `api/oapi-codegen.yaml`. Commit the result. `oapi-codegen` is pinned as a `tool` directive of `go.mod`. Never edit the generated file by hand.
 - `scripts/lint-shell.sh` runs shellcheck, after any change to a shell script.
+- Outside the gate, because they need the network or a quiet machine: `scripts/check-compose-sync.sh` (the stack files against MusicLib's release), `scripts/stack-smoke.sh` and `scripts/contract.sh` (project `vibrance-contract`, no published port; the contract suite is required before a release and after a change of MusicLib's version), `scripts/perf.sh` (about 12 minutes, on an idle machine, project `vibrance-dev`) and `scripts/vulncheck.sh` (pinned `govulncheck`, before a release).
 - The only Compose projects to use are `vibrance-dev` (development), `vibrance-spike` (manual trials) and `vibrance-contract` (contract suite). **Never** use `musiclib`, the user's installation. Never run `docker compose down -v` or `docker volume rm` on anything else.
 
 ## Principles and decisions (DESIGN.md §2.1–§2.2)
@@ -44,13 +48,13 @@ Vibrance is a read-only listening server over the `library/` folder that Vibranc
 - **I4** Every request other than GET and HEAD needs `X-Vibrance-Request: 1`. `Host` must match `VIBRANCE_PUBLIC_ORIGIN` (421), and `Origin`, if present, must equal it (403). No CORS. GET and HEAD have no visible side effects.
 - **I5** Passwords, tokens, cookies and hashes never appear in logs, errors, responses or test messages. Tokens are stored only as SHA-256, and passwords only as PHC argon2id. Comparisons run in constant time.
 - **I6** Every endpoint is in the authorization matrix of the tests. Another user's resource answers `404`, never `403`.
-- **I7** All SQL lives in `sql/*.sql` (sqlc). The only exception is FTS5 in `internal/search`. No SQL string is built from user input.
+- **I7** All SQL lives in `sql/*.sql` (sqlc). The only exceptions are FTS5 in `internal/search` and the constant `PRAGMA` and `VACUUM INTO` statements of `internal/store`, which sqlc drops. No SQL string is built from user input.
 - **I8** No external process runs without a `context`, a timeout, a stderr limit, and files passed by descriptor (never by path).
 - **I9** No error is ignored, especially those of `Close`, `Rollback`, `Commit` and `Rows.Err`.
 - **I10** Every API response conforms to the OpenAPI specification, as the tests verify with `kin-openapi`.
 - **I11** There is one SQLite write connection. Write transactions are short, with no I/O (ffmpeg, disk, network) inside them.
 - **I12** Everything is pinned: images by digest, modules at exact versions, never `latest`.
-- **I13** Migrations only go forward. Once released they are never edited, and a database newer than the binary is refused.
+- **I13** Migrations only go forward. Once released they are never edited, and a database newer than the binary is refused. The first release is 0.1.0: from it on, the existing migrations are closed and every change is a new migration.
 - **I14** Vibrance works without MusicLib and without `library/`.
 - **I15** Only the scanner changes the `available` columns.
 - **I16** No function, dependency, option or step that the design does not ask for.
