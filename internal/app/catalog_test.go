@@ -90,13 +90,11 @@ func (w *world) unavailable(albumID string) {
 	}
 }
 
-// favorite makes a track a favorite of a. The favorites are the business of
-// step S18: the row is written by hand.
+// favorite makes a track a favorite of a, in the database.
 func (w *world) favorite(a *account, trackID string) {
 	w.t.Helper()
 	err := w.store.WithWriteTx(w.t.Context(), func(q *store.Queries) error {
-		_, err := q.Conn().ExecContext(w.t.Context(), `INSERT INTO favorites (user_id, track_id, created_at) VALUES (?, ?, 1)`, a.id, trackID)
-		return err
+		return q.AddFavorite(w.t.Context(), store.AddFavoriteParams{UserID: a.id, TrackID: trackID, CreatedAt: 1})
 	})
 	if err != nil {
 		w.t.Fatal(err)

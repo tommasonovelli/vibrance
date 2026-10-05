@@ -20,15 +20,18 @@ const (
 )
 
 // Service reads the catalog: the artists, albums and tracks the scanner
-// indexed (DESIGN.md §8.3). It only reads, each operation in one read
-// transaction, so what it returns is one state of the index.
+// indexed (DESIGN.md §8.3), each operation in one read transaction, so what
+// it returns is one state of the index. It writes nothing of the index: its
+// only writes are the favorites of the users.
 type Service struct {
 	store *store.Store
+	now   func() time.Time
 }
 
-// New returns the catalog of the index in st.
-func New(st *store.Store) *Service {
-	return &Service{store: st}
+// New returns the catalog of the index in st; now is the clock, which dates
+// the favorites.
+func New(st *store.Store, now func() time.Time) *Service {
+	return &Service{store: st, now: now}
 }
 
 func artistNotFound() *httpx.Error {
@@ -128,9 +131,28 @@ func (s *Service) GetTrack(ctx context.Context, userID, id string) (Track, error
 	case err != nil:
 		return Track{}, fmt.Errorf("catalog: reading a track: %w", err)
 	}
-	ref := AlbumRef{ID: row.Track.AlbumID, Title: row.AlbumTitle, Year: intOf(row.AlbumYear),
-		Artist: ArtistRef{ID: row.AlbumArtistID, Name: row.AlbumArtistName}, CoverHash: row.AlbumCoverSha256.String}
-	return trackOf(row.Track, ref, row.Favorite), nil
+	return trackInAlbum(trackRow(row)), nil
+}
+
+// trackRow is a track with what the API shows of its album and whether it
+// is a favorite of the user it was read for, whichever query read it.
+type trackRow struct {
+	Track            store.Track
+	AlbumTitle       string
+	AlbumYear        sql.NullInt64
+	AlbumCoverSha256 sql.NullString
+	AlbumArtistID    string
+	AlbumArtistName  string
+	Favorite         bool
+}
+
+// trackInAlbum is what the API shows of a track that was read with its
+// album: the one mapping of a track of the details, of the search and of
+// the favorites.
+func trackInAlbum(r trackRow) Track {
+	ref := AlbumRef{ID: r.Track.AlbumID, Title: r.AlbumTitle, Year: intOf(r.AlbumYear),
+		Artist: ArtistRef{ID: r.AlbumArtistID, Name: r.AlbumArtistName}, CoverHash: r.AlbumCoverSha256.String}
+	return trackOf(r.Track, ref, r.Favorite)
 }
 
 // albumOf is what the API shows of an album row.

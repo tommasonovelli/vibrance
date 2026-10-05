@@ -88,7 +88,7 @@ func publishSessions(t *testing.T, s *server) *auth.Service {
 		t.Fatal(err)
 	}
 	publishMedia(t, s, st, t.TempDir())
-	s.catalog.Store(catalog.New(st))
+	s.catalog.Store(catalog.New(st, time.Now))
 	s.sessions.Store(sessions)
 	return sessions
 }

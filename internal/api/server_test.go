@@ -71,7 +71,7 @@ func testHandler(t *testing.T, wrap func(Server) StrictServerInterface) (http.Ha
 	published := &atomic.Pointer[auth.Service]{}
 	published.Store(accounts)
 	index := &atomic.Pointer[catalog.Service]{}
-	index.Store(catalog.New(st))
+	index.Store(catalog.New(st, time.Now))
 	// The files are in a folder without library/: every track is unknown.
 	root, err := library.OpenRoot(t.TempDir())
 	if err != nil {
@@ -111,6 +111,7 @@ var implemented = []string{
 	"listUsers", "createUser", "getUser", "updateUser", "deleteUser", "resetUserPassword",
 	"listArtists", "getArtist", "listAlbums", "getAlbum", "getTrack", "search",
 	"getTrackAudio", "getAlbumCover", "getTrackLyrics",
+	"listFavoriteTracks", "addFavoriteTrack", "removeFavoriteTrack",
 }
 
 // exampleRequest builds a request for one operation of the specification

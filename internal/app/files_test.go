@@ -27,6 +27,7 @@ import (
 
 	"vibrance/internal/api"
 	"vibrance/internal/catalog"
+	"vibrance/internal/httpx"
 	"vibrance/internal/lyrics"
 	"vibrance/internal/media"
 	"vibrance/internal/names"
@@ -51,7 +52,7 @@ func (w *world) fixtureTrack(albumID string, n int) string {
 	if !w.indexed {
 		w.indexFixture()
 	}
-	a, err := catalog.New(w.store).GetAlbum(w.t.Context(), w.admin.id, albumID)
+	a, err := catalog.New(w.store, time.Now).GetAlbum(w.t.Context(), w.admin.id, albumID)
 	if err != nil || len(a.Tracks) < n {
 		w.t.Fatalf("track %d of the album %s: %v", n, albumID, err)
 	}
@@ -915,11 +916,21 @@ func newClient(t *testing.T, r *running) *client {
 // get asks for path, with the headers given ("Name: value").
 func (c *client) get(path string, headers ...string) (*http.Response, []byte) {
 	c.t.Helper()
-	req, err := http.NewRequestWithContext(c.t.Context(), http.MethodGet, c.base+path, nil)
+	return c.send(http.MethodGet, path, headers...)
+}
+
+// send sends a request without a body, with the headers given and, when
+// the method is not GET, the header such a request needs (I4).
+func (c *client) send(method, path string, headers ...string) (*http.Response, []byte) {
+	c.t.Helper()
+	req, err := http.NewRequestWithContext(c.t.Context(), method, c.base+path, nil)
 	if err != nil {
 		c.t.Fatal(err)
 	}
 	req.Header.Set("Authorization", "Bearer "+c.token)
+	if method != http.MethodGet {
+		req.Header.Set(httpx.RequestHeader, "1")
+	}
 	for _, h := range headers {
 		name, value, _ := strings.Cut(h, ": ")
 		req.Header.Set(name, value)

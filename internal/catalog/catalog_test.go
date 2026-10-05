@@ -61,8 +61,8 @@ func putTracks(t *testing.T, st *store.Store, albumID string, tracks ...testTrac
 	}
 }
 
-// putUsers writes two accounts and makes trackID a favorite of the first:
-// the favorites are another step's, so their row is written by hand.
+// putFavorite writes two accounts and makes trackID a favorite of the
+// first.
 func putFavorite(t *testing.T, st *store.Store, trackID string) {
 	t.Helper()
 	ctx := t.Context()
@@ -73,8 +73,7 @@ func putFavorite(t *testing.T, st *store.Store, trackID string) {
 				return err
 			}
 		}
-		_, err := q.Conn().ExecContext(ctx, `INSERT INTO favorites (user_id, track_id, created_at) VALUES (?, ?, 1)`, userA, trackID)
-		return err
+		return q.AddFavorite(ctx, store.AddFavoriteParams{UserID: userA, TrackID: trackID, CreatedAt: 1})
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -98,7 +97,7 @@ func TestGetAlbum(t *testing.T) {
 		testTrack{ids[4], 1, 1, "One", true},
 	)
 	putFavorite(t, st, ids[2])
-	svc := New(st)
+	svc := New(st, time.Now)
 
 	d, err := svc.GetAlbum(t.Context(), userA, album.id)
 	if err != nil {
@@ -152,7 +151,7 @@ func TestGetTrack(t *testing.T) {
 		t.Fatal(err)
 	}
 	putFavorite(t, st, present)
-	svc := New(st)
+	svc := New(st, time.Now)
 
 	tr, err := svc.GetTrack(t.Context(), userA, present)
 	if err != nil {
@@ -200,7 +199,7 @@ func TestGetArtist(t *testing.T) {
 		testAlbum{id: uuid.NewString(), artist: other, title: "Theirs", year: 1995, firstSeen: 1, available: true},
 		testAlbum{id: uuid.NewString(), artist: alone, title: "Gone too", firstSeen: 1, available: false},
 	)
-	svc := New(st)
+	svc := New(st, time.Now)
 	d, err := svc.GetArtist(t.Context(), artist.id)
 	if err != nil {
 		t.Fatal(err)
@@ -224,7 +223,7 @@ func TestGetArtist(t *testing.T) {
 // A read whose context is over is not a missing row: it is the end of the
 // context, and never a 404.
 func TestReadsAfterTheContextEnds(t *testing.T) {
-	svc := New(newStore(t))
+	svc := New(newStore(t), time.Now)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	for name, read := range map[string]func() error{
@@ -255,7 +254,7 @@ func TestPagesWhileTheIndexChanges(t *testing.T) {
 	albums, _ := randomIndex(11, 80)
 	st := newStore(t)
 	putAlbums(t, st, albums...)
-	svc := New(st)
+	svc := New(st, time.Now)
 	byID := map[string]testAlbum{}
 	for _, a := range albums {
 		byID[a.id] = a

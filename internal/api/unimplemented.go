@@ -16,21 +16,6 @@ func (Server) ScanLibrary(context.Context, ScanLibraryRequestObject) (ScanLibrar
 	return nil, errNotImplemented
 }
 
-// ListFavoriteTracks waits for step S18.
-func (Server) ListFavoriteTracks(context.Context, ListFavoriteTracksRequestObject) (ListFavoriteTracksResponseObject, error) {
-	return nil, errNotImplemented
-}
-
-// AddFavoriteTrack waits for step S18.
-func (Server) AddFavoriteTrack(context.Context, AddFavoriteTrackRequestObject) (AddFavoriteTrackResponseObject, error) {
-	return nil, errNotImplemented
-}
-
-// RemoveFavoriteTrack waits for step S18.
-func (Server) RemoveFavoriteTrack(context.Context, RemoveFavoriteTrackRequestObject) (RemoveFavoriteTrackResponseObject, error) {
-	return nil, errNotImplemented
-}
-
 // ListPlaylists waits for step S19.
 func (Server) ListPlaylists(context.Context, ListPlaylistsRequestObject) (ListPlaylistsResponseObject, error) {
 	return nil, errNotImplemented

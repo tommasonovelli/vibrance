@@ -43,9 +43,7 @@ func (s *Service) Search(ctx context.Context, userID, text string, kinds search.
 		res.Albums = append(res.Albums, albumOf(r.Album, r.ArtistName))
 	}
 	for _, r := range found.Tracks {
-		ref := AlbumRef{ID: r.Track.AlbumID, Title: r.AlbumTitle, Year: intOf(r.AlbumYear),
-			Artist: ArtistRef{ID: r.AlbumArtistID, Name: r.AlbumArtistName}, CoverHash: r.AlbumCoverSha256.String}
-		res.Tracks = append(res.Tracks, trackOf(r.Track, ref, r.Favorite))
+		res.Tracks = append(res.Tracks, trackInAlbum(trackRow(r)))
 	}
 	return res, nil
 }

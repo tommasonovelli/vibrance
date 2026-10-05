@@ -87,7 +87,6 @@ var authorizationMatrix = map[string]access{
 // exactly, and expects 501 where it says success or 404.
 var pendingOperations = []string{
 	"getLibraryStatus", "scanLibrary",
-	"listFavoriteTracks", "addFavoriteTrack", "removeFavoriteTrack",
 	"listPlaylists", "createPlaylist", "getPlaylist", "updatePlaylist", "deletePlaylist", "listPlaylistItems",
 	"addPlaylistItems", "removePlaylistItem", "movePlaylistItem",
 }
@@ -162,6 +161,18 @@ var matrixRequests = map[string]matrixRequest{
 	},
 	"getTrackLyrics": func(w *world, _, _ *account) (string, string, any) {
 		return "GET", "/tracks/" + w.fixtureTrack(albumA, 1) + "/lyrics", nil
+	},
+	// The favorites are those of the session: no request names another user,
+	// so the row has no cell for the resource of another (TestFavorites
+	// proves that each user sees and changes only their own).
+	"listFavoriteTracks": func(*world, *account, *account) (string, string, any) { return "GET", "/me/favorites/tracks", nil },
+	"addFavoriteTrack": func(w *world, _, _ *account) (string, string, any) {
+		w.catalogEntry()
+		return "PUT", "/me/favorites/tracks/" + entryTrack, nil
+	},
+	"removeFavoriteTrack": func(w *world, _, _ *account) (string, string, any) {
+		w.catalogEntry()
+		return "DELETE", "/me/favorites/tracks/" + entryTrack, nil
 	},
 }
 

@@ -90,7 +90,7 @@ func newWorld(t *testing.T, origin string) *world {
 	w.bob = w.newNamedAccount("bob", "the password of bob", auth.RoleUser)
 	w.musiclib = t.TempDir()
 	w.rescans = publishMedia(t, s, st, w.musiclib)
-	s.catalog.Store(catalog.New(st))
+	s.catalog.Store(catalog.New(st, time.Now))
 	s.sessions.Store(sessions)
 	s.state.Store(stateReady)
 	return w

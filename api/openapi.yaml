@@ -1309,9 +1309,10 @@ paths:
       tags: [Favorites]
       summary: The favorite tracks, the most recent first
       description: |
-        The favorite tracks of the user of the request. Paginated. A track
-        that is no longer available stays in the list, with
-        `"available": false` and the last data known.
+        The favorite tracks of the user of the request, the one made a
+        favorite last first. Paginated. A track that is no longer available
+        stays in the list, with `"available": false` and the last data
+        known.
 
         A favorite follows the audio: when MusicLib moves the track to
         another album, the favorite passes to the track with the same audio
@@ -1349,7 +1350,9 @@ paths:
       description: |
         Idempotent: a track that is a favorite already stays one, with the
         date it had, and the answer is `204` all the same.
-        `404 track_not_found` when there is no such track.
+        `404 track_not_found` when there is no such track. A track that is
+        not available can be made a favorite: it exists, and is listed with
+        `"available": false`.
       parameters:
         - $ref: "#/components/parameters/PathId"
       responses:

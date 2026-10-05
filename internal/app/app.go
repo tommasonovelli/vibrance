@@ -326,7 +326,7 @@ func (s *server) startup(ctx context.Context) error {
 		return err
 	}
 	s.startCleanup(sessions)
-	s.catalog.Store(catalog.New(s.store))
+	s.catalog.Store(catalog.New(s.store, time.Now))
 	s.sessions.Store(sessions)
 	s.state.Store(stateReady)
 	s.log.Info("ready")

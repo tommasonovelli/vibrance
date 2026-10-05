@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -71,7 +72,7 @@ func TestAlbumPagesAreTheWholeList(t *testing.T) {
 		albums, artists := randomIndex(seed, 130)
 		st := newStore(t)
 		putAlbums(t, st, albums...)
-		svc := New(st)
+		svc := New(st, time.Now)
 		for _, sort := range []string{SortTitle, SortArtist, SortYear, SortAdded} {
 			for _, order := range []string{OrderAsc, OrderDesc} {
 				for _, artist := range []string{"", artists[0].id, artists[len(artists)-1].id, uuid.NewString()} {
@@ -102,7 +103,7 @@ func TestArtistPagesAreTheWholeList(t *testing.T) {
 		albums, artists := randomIndex(seed, 140)
 		st := newStore(t)
 		putAlbums(t, st, albums...)
-		svc := New(st)
+		svc := New(st, time.Now)
 
 		counts := map[string]int{}
 		for _, a := range albums {
@@ -158,7 +159,7 @@ func TestAlbumOrderOfTitles(t *testing.T) {
 			firstSeen: 1, available: true})
 	}
 	putAlbums(t, st, albums...)
-	page, err := New(st).ListAlbums(t.Context(), AlbumQuery{Sort: SortTitle, Order: OrderAsc, Limit: 50})
+	page, err := New(st, time.Now).ListAlbums(t.Context(), AlbumQuery{Sort: SortTitle, Order: OrderAsc, Limit: 50})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,7 +183,7 @@ func TestAlbumsWithoutAYear(t *testing.T) {
 		testAlbum{id: "0199a5c0-0000-7000-8000-000000000002", artist: artist, title: "A", firstSeen: 1, available: true},
 		testAlbum{id: "0199a5c0-0000-7000-8000-000000000003", artist: artist, title: "C", year: 1, firstSeen: 1, available: true},
 	)
-	svc := New(st)
+	svc := New(st, time.Now)
 	for order, want := range map[string][]string{OrderAsc: {"C", "B", "A"}, OrderDesc: {"A", "B", "C"}} {
 		for _, sort := range []string{SortYear, SortArtist} {
 			page, err := svc.ListAlbums(t.Context(), AlbumQuery{Sort: sort, Order: order, Limit: 10})
@@ -210,7 +211,7 @@ func TestCursorsBelongToTheirList(t *testing.T) {
 	albums, _ := randomIndex(7, 30)
 	st := newStore(t)
 	putAlbums(t, st, albums...)
-	svc := New(st)
+	svc := New(st, time.Now)
 	ctx := t.Context()
 
 	cursors := map[[2]string]string{}
@@ -267,7 +268,7 @@ func TestCursorOfARowThatLeftTheList(t *testing.T) {
 	albums, _ := randomIndex(3, 40)
 	st := newStore(t)
 	putAlbums(t, st, albums...)
-	svc := New(st)
+	svc := New(st, time.Now)
 	for _, sort := range []string{SortTitle, SortArtist, SortYear, SortAdded} {
 		for _, order := range []string{OrderAsc, OrderDesc} {
 			want := wantAlbums(albums, sort, order, "")

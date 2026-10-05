@@ -7,6 +7,7 @@ import (
 	"slices"
 	"sync"
 	"testing"
+	"time"
 
 	"vibrance/internal/search"
 	"vibrance/internal/store"
@@ -32,7 +33,7 @@ func syncSearch(ctx context.Context, q *store.Queries, albums ...testAlbum) erro
 
 func TestSearch(t *testing.T) {
 	st := newStore(t)
-	svc := New(st)
+	svc := New(st, time.Now)
 	ctx := t.Context()
 	miles := testArtist{id: "0199a5c0-0000-5000-8000-000000000001", name: "Miles Davis"}
 	evans := testArtist{id: "0199a5c0-0000-5000-8000-000000000002", name: "Bill Evans"}
@@ -121,7 +122,7 @@ func TestSearch(t *testing.T) {
 // is available.
 func TestSearchWhileTheIndexChanges(t *testing.T) {
 	st := newStore(t)
-	svc := New(st)
+	svc := New(st, time.Now)
 	var albums []testAlbum
 	for i := range 12 {
 		albums = append(albums, testAlbum{
