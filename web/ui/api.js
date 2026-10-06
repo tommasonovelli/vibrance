@@ -94,3 +94,7 @@ export function coverUrl(cover, size = 256) {
   if (!cover) return null;
   return cover.url + (cover.url.includes('?') ? '&' : '?') + 'size=' + size;
 }
+
+// The file of a track, as it is: an <audio src> needs nothing else, the
+// session cookie goes with it. `Range` is the browser's business.
+export const audioUrl = track => `${BASE}/tracks/${track.id}/audio`;

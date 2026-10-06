@@ -24,7 +24,8 @@ export async function render(main, params, signal) {
   let total = null, emptied = false;
   let list, run;
   const host = $('.list', view);
-  const context = () => (favorites ? { type: 'favorites', id: null, name: 'Favorites' } : { type: 'library', id: null, name: 'Library', sort, order });
+  // `after` is where the pages loaded so far end: the player asks for the songs that follow when its queue runs low.
+  const context = () => (favorites ? { type: 'favorites', id: null, name: 'Favorites' } : { type: 'library', id: null, name: 'Library', sort, order, after: pg?.next() ?? null });
   const noun = n => (favorites ? (n === 1 ? 'favorite' : 'favorites') : (n === 1 ? 'song' : 'songs'));
 
   // The count: the server's summary if it has one, otherwise nothing.

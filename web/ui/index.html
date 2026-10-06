@@ -92,36 +92,36 @@
 <div class="shell">
 <div class="cols">
 <main id="main" class="page" tabindex="-1"></main>
-<aside id="queue" class="queue" aria-label="Queue" hidden></aside>
+<aside id="queue" class="queue" aria-label="Queue"></aside>
 </div>
 
 <div id="toasts" class="toasts"></div>
 
 <footer id="player" class="player" aria-label="Player" data-state="idle">
 <div class="np">
-<span class="np-cover"><img id="np-cover" alt="" width="56" height="56" hidden></span>
+<a class="np-cover" href="/now-playing" aria-label="Open Now playing"><img id="np-cover" alt="" width="56" height="56" hidden></a>
 <span class="tt"><a class="nm" id="np-title">Nothing playing</a><a class="ar" id="np-artist" hidden></a></span>
-<button class="iconbtn heart" id="np-heart" type="button" aria-label="Add to favorites" aria-pressed="false" hidden><svg class="i" aria-hidden="true"><use href="#i-heart"/></svg></button>
+<button class="iconbtn heart" id="np-heart" type="button" data-act="heart" aria-label="Add to favorites" aria-pressed="false" hidden><svg class="i" aria-hidden="true"><use href="#i-heart"/></svg></button>
 </div>
 <div class="ctl">
 <div class="btns">
-<button class="iconbtn sec" id="btn-shuffle" type="button" aria-label="Shuffle" aria-pressed="false"><svg class="i" aria-hidden="true"><use href="#i-shuffle"/></svg></button>
-<button class="iconbtn skip" id="btn-previous" type="button" aria-label="Previous" disabled><svg class="i f" aria-hidden="true"><use href="#i-previous"/></svg></button>
-<button class="pp" id="btn-play" type="button" aria-label="Play" disabled><svg class="i f is-play" aria-hidden="true"><use href="#i-play"/></svg><svg class="i f is-pause" aria-hidden="true"><use href="#i-pause"/></svg></button>
-<button class="iconbtn skip" id="btn-next" type="button" aria-label="Next" disabled><svg class="i f" aria-hidden="true"><use href="#i-next"/></svg></button>
-<button class="iconbtn sec" id="btn-repeat" type="button" aria-label="Repeat off" aria-pressed="false"><svg class="i" aria-hidden="true"><use href="#i-repeat"/></svg><span class="one" aria-hidden="true" hidden>1</span></button>
+<button class="iconbtn sec" type="button" data-act="shuffle" aria-label="Shuffle" aria-pressed="false"><svg class="i" aria-hidden="true"><use href="#i-shuffle"/></svg></button>
+<button class="iconbtn skip" type="button" data-act="previous" aria-label="Previous" disabled><svg class="i f" aria-hidden="true"><use href="#i-previous"/></svg></button>
+<button class="pp" type="button" data-act="play" aria-label="Play" disabled><svg class="i f is-play" aria-hidden="true"><use href="#i-play"/></svg><svg class="i f is-pause" aria-hidden="true"><use href="#i-pause"/></svg></button>
+<button class="iconbtn skip" type="button" data-act="next" aria-label="Next" disabled><svg class="i f" aria-hidden="true"><use href="#i-next"/></svg></button>
+<button class="iconbtn sec" type="button" data-act="repeat" aria-label="Repeat off" aria-pressed="false"><svg class="i" aria-hidden="true"><use href="#i-repeat"/></svg><span class="one" aria-hidden="true" hidden>1</span></button>
 </div>
 <div class="prog">
-<span id="time-now">0:00</span>
-<span class="bar" id="seek" role="slider" tabindex="-1" aria-label="Seek" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="0:00" aria-disabled="true"><span class="fl"></span><span class="kn"></span><span class="tip">0:00</span></span>
-<span id="time-total">0:00</span>
+<span data-time="now">0:00</span>
+<span class="bar" data-slider="seek" role="slider" tabindex="-1" aria-label="Seek" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="0:00" aria-disabled="true"><span class="fl"></span><span class="kn"></span><span class="tip">0:00</span></span>
+<span data-time="total">0:00</span>
 </div>
 </div>
 <div class="extra">
-<button class="iconbtn" id="btn-lyrics" type="button" aria-label="Lyrics" aria-pressed="false" disabled><svg class="i" aria-hidden="true"><use href="#i-lyrics"/></svg></button>
-<button class="iconbtn" id="btn-queue" type="button" aria-label="Queue" aria-pressed="false" aria-controls="queue"><svg class="i" aria-hidden="true"><use href="#i-queue"/></svg></button>
-<button class="iconbtn" id="btn-mute" type="button" aria-label="Mute"><svg class="i" aria-hidden="true"><use href="#i-volume"/></svg></button>
-<span class="bar vol" id="volume" role="slider" tabindex="0" aria-label="Volume" aria-valuemin="0" aria-valuemax="100" aria-valuenow="70" aria-valuetext="70%"><span class="fl"></span><span class="kn"></span></span>
+<button class="iconbtn" type="button" data-act="lyrics" aria-label="Lyrics" disabled><svg class="i" aria-hidden="true"><use href="#i-lyrics"/></svg></button>
+<button class="iconbtn" id="btn-queue" type="button" data-act="queue" aria-label="Queue" aria-pressed="false" aria-controls="queue"><svg class="i" aria-hidden="true"><use href="#i-queue"/></svg></button>
+<button class="iconbtn" type="button" data-act="mute" aria-label="Mute"><svg class="i" aria-hidden="true"><use href="#i-volume"/></svg></button>
+<span class="bar vol" data-slider="volume" role="slider" tabindex="0" aria-label="Volume" aria-valuemin="0" aria-valuemax="100" aria-valuenow="70" aria-valuetext="70%"><span class="fl"></span><span class="kn"></span></span>
 <a class="iconbtn" id="btn-now" href="/now-playing" aria-label="Now playing, full screen"><svg class="i" aria-hidden="true"><use href="#i-expand"/></svg></a>
 </div>
 </footer>
@@ -302,6 +302,111 @@
 <div class="actions"><button class="btn dl" type="button"><svg class="i" aria-hidden="true"><use href="#i-download"/></svg>Download file</button><button class="btn" type="button" value="close" data-close autofocus>Close</button></div>
 </div></dialog></template>
 
+<!-- Round 3: the queue, Now playing and the shortcuts sheet. -->
+
+<template id="t-queue"><div class="q">
+<div class="qh"><h2 class="q-title">Queue</h2><button class="link q-save" type="button" hidden>Save as playlist</button><button class="iconbtn q-close" type="button" aria-label="Close queue"><svg class="i" aria-hidden="true"><use href="#i-close"/></svg></button></div>
+<div class="q-body"></div>
+<div class="q-drop" aria-hidden="true" hidden></div>
+</div></template>
+
+<template id="t-qcap"><div class="qcap"><span></span><button class="link" type="button">Clear</button></div></template>
+
+<template id="t-qi"><div class="qi" role="listitem">
+<span class="grip" aria-hidden="true" title="Drag to reorder"><svg class="i f sm"><use href="#i-grip"/></svg></span>
+<img class="qcov" alt="" width="40" height="40" loading="lazy" decoding="async" draggable="false">
+<span class="tt"><span class="nm"></span><span class="ar"></span></span>
+<span class="tm"></span>
+<button class="iconbtn x" type="button" aria-label="Remove from the queue"><svg class="i sm" aria-hidden="true"><use href="#i-close"/></svg></button>
+</div></template>
+
+<template id="t-q-end"><div class="qend"><div class="q-notes"></div><button class="btn q-save" type="button" hidden><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>Save queue as playlist</button></div></template>
+
+<template id="t-q-ended"><div class="ended"><h3></h3><p class="q-end-text"></p><div class="actions"><button class="btn q-again" type="button"><svg class="i" aria-hidden="true"><use href="#i-repeat"/></svg>Play again</button><button class="btn q-shuffle" type="button"><svg class="i" aria-hidden="true"><use href="#i-shuffle"/></svg><span>Shuffle</span></button></div></div></template>
+
+<template id="t-now"><div class="now" data-state="idle">
+<div class="now-top">
+<button class="now-close" type="button" aria-label="Close Now playing (Esc)"><svg class="i" aria-hidden="true"><use href="#i-chevron-down"/></svg>Close</button>
+<div class="now-from" hidden><div class="cap">Playing from</div><a></a></div>
+<button class="dots now-dots" type="button" aria-haspopup="menu" aria-label="More actions"></button>
+</div>
+<div class="now-body">
+<section class="now-song" aria-label="Song">
+<img class="now-cover" alt="" width="400" height="400">
+<div class="now-info">
+<div class="now-text">
+<h1 class="now-title"></h1>
+<a class="now-artist"></a>
+<div class="now-album"><a></a><span class="now-year"></span></div>
+<div class="now-badges"></div>
+</div>
+<button class="iconbtn heart" type="button" data-act="heart" aria-label="Add to favorites" aria-pressed="false"><svg class="i" aria-hidden="true"><use href="#i-heart"/></svg></button>
+</div>
+</section>
+<section class="now-lyr" aria-label="Lyrics" hidden>
+<div class="ly-list" tabindex="-1"></div>
+<div class="ly-foot"><button class="now-pill" type="button" hidden><svg class="i sm" aria-hidden="true"><use href="#i-chevron-down"/></svg>Back to current line</button><span class="ly-note"></span></div>
+</section>
+<aside class="now-queue" aria-label="Up next"></aside>
+</div>
+<div class="now-transport">
+<div class="now-prog"><span data-time="now">0:00</span><span class="bar" data-slider="seek" role="slider" tabindex="-1" aria-label="Seek" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="0:00" aria-disabled="true"><span class="fl"></span><span class="kn"></span><span class="tip">0:00</span></span><span data-time="total">0:00</span></div>
+<div class="now-left">
+<button class="iconbtn" type="button" data-act="lyrics" aria-label="Hide lyrics"><svg class="i" aria-hidden="true"><use href="#i-lyrics"/></svg></button>
+<button class="iconbtn" type="button" data-act="queue" aria-label="Hide queue"><svg class="i" aria-hidden="true"><use href="#i-queue"/></svg></button>
+</div>
+<div class="now-btns">
+<button class="iconbtn" type="button" data-act="shuffle" aria-label="Shuffle" aria-pressed="false"><svg class="i" aria-hidden="true"><use href="#i-shuffle"/></svg></button>
+<button class="iconbtn skip" type="button" data-act="previous" aria-label="Previous"><svg class="i f" aria-hidden="true"><use href="#i-previous"/></svg></button>
+<button class="bigplay" type="button" data-act="play" aria-label="Play"><svg class="i f is-play" aria-hidden="true"><use href="#i-play"/></svg><svg class="i f is-pause" aria-hidden="true"><use href="#i-pause"/></svg></button>
+<button class="iconbtn skip" type="button" data-act="next" aria-label="Next"><svg class="i f" aria-hidden="true"><use href="#i-next"/></svg></button>
+<button class="iconbtn" type="button" data-act="repeat" aria-label="Repeat off" aria-pressed="false"><svg class="i" aria-hidden="true"><use href="#i-repeat"/></svg><span class="one" aria-hidden="true" hidden>1</span></button>
+</div>
+<div class="now-right">
+<button class="iconbtn" type="button" data-act="mute" aria-label="Mute"><svg class="i" aria-hidden="true"><use href="#i-volume"/></svg></button>
+<span class="bar vol" data-slider="volume" role="slider" tabindex="0" aria-label="Volume" aria-valuemin="0" aria-valuemax="100" aria-valuenow="70" aria-valuetext="70%"><span class="fl"></span><span class="kn"></span></span>
+<button class="iconbtn" type="button" data-act="fullscreen" aria-label="Use the whole screen" title="Use the whole screen (F)"><svg class="i" aria-hidden="true"><use href="#i-expand"/></svg></button>
+</div>
+</div>
+</div></template>
+
+<template id="t-sheet-keys"><dialog class="sheet sheet-keys"><div class="sheet-form">
+<div class="keys-head"><h2 class="sheet-title">Keyboard shortcuts</h2><button class="btn" type="button" data-close>Close</button></div>
+<div class="kcols">
+<div>
+<h3 class="kh">Playback</h3>
+<div class="krow"><span>Play or pause</span><span class="keys"><kbd>Space</kbd></span></div>
+<div class="krow"><span>Next song</span><span class="keys"><kbd>Ctrl</kbd><kbd>→</kbd></span></div>
+<div class="krow"><span>Previous song</span><span class="keys"><kbd>Ctrl</kbd><kbd>←</kbd></span></div>
+<div class="krow"><span>Back or forward 5 seconds, on the progress bar</span><span class="keys"><kbd>←</kbd><kbd>→</kbd></span></div>
+<div class="krow"><span>Forward or back 30 seconds, on the progress bar</span><span class="keys"><kbd>Page Up</kbd><kbd>Page Down</kbd></span></div>
+<div class="krow"><span>Media keys of the keyboard and headphones</span><span class="keys"><kbd>⏯</kbd><kbd>⏭</kbd></span></div>
+</div>
+<div>
+<h3 class="kh">Moving around</h3>
+<div class="krow"><span>Search</span><span class="keys"><kbd>Ctrl</kbd><kbd>K</kbd></span></div>
+<div class="krow"><span>Play from the selected song</span><span class="keys"><kbd>Enter</kbd></span></div>
+<div class="krow"><span>Select several songs</span><span class="keys"><kbd>Shift</kbd><kbd>Click</kbd></span></div>
+<div class="krow"><span>Close menus, sheets and Now playing</span><span class="keys"><kbd>Esc</kbd></span></div>
+<div class="krow"><span>Show these shortcuts</span><span class="keys"><kbd>?</kbd></span></div>
+<div class="krow"><span id="keys-single">Single-key shortcuts</span><button class="switch" type="button" role="switch" aria-checked="false" aria-labelledby="keys-single"></button></div>
+</div>
+</div>
+<div class="kcols kcols-single off">
+<div>
+<div class="krow"><span>Lyrics</span><span class="keys"><kbd>L</kbd></span></div>
+<div class="krow"><span>Queue</span><span class="keys"><kbd>Q</kbd></span></div>
+<div class="krow"><span>Now playing, whole screen</span><span class="keys"><kbd>F</kbd></span></div>
+</div>
+<div>
+<div class="krow"><span>Shuffle</span><span class="keys"><kbd>S</kbd></span></div>
+<div class="krow"><span>Repeat</span><span class="keys"><kbd>R</kbd></span></div>
+<div class="krow"><span>Mute</span><span class="keys"><kbd>M</kbd></span></div>
+</div>
+</div>
+<p class="note">On a Mac, Cmd takes the place of Ctrl. Single-key shortcuts are off until you turn them on, here or in Account.</p>
+</div></dialog></template>
 
 </body>
 </html>
+

@@ -263,11 +263,14 @@ main:focus { outline: none; }
    background shows between the line and a head's colour field. */
 @media (width > 52rem) { .page { margin-left: -1px; padding-left: calc(var(--gutter) + 1px); } }
 
-/* The queue: a panel beside the page, above the player bar. Round 3. */
+/* The queue: a panel beside the page, above the player bar. It shows when
+   <html data-queue="open"> says so (prefs.js before the first paint, the
+   Queue button after): the page narrows, nothing else moves. §16. */
 .queue {
-  position: sticky; top: 0; flex: 0 0 21.25rem; height: calc(100vh - var(--player)); overflow-y: auto;
+  display: none; position: sticky; top: 0; flex: 0 0 21.25rem; height: calc(100vh - var(--player)); overflow-y: auto;
   padding: 1.25rem var(--s4) var(--s5); border-left: 1px solid var(--hairline); background: var(--paper);
 }
+[data-queue="open"] .queue { display: block; }
 
 /* 5. Controls. At most one filled button per view: .btn-primary. */
 
@@ -292,6 +295,7 @@ main:focus { outline: none; }
 }
 .iconbtn:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 7%, transparent); text-decoration: none; }
 .iconbtn:disabled { opacity: .4; cursor: default; background: none; color: var(--graphite); }
+.iconbtn[aria-disabled="true"] { opacity: .4; cursor: default; background: none; }
 .iconbtn:is(.is-on, [aria-pressed="true"]) { color: var(--accent); }
 .iconbtn .one { position: absolute; right: 3px; bottom: 3px; font: 700 9px/1 var(--family); }
 .heart.is-fav { color: var(--accent); }
@@ -330,16 +334,18 @@ kbd {
 
 /* A slider: the progress and the volume. Four pixels to the eye, a 24px hit
    area (WCAG 2.5.8); the knob appears on hover and focus. --p is its value,
-   0 to 1, set by the player. */
-.bar { --p: 0; position: relative; flex: 1; height: 4px; border-radius: var(--r-pill); background: var(--hairline); cursor: pointer; }
+   0 to 1, set by the player. The fill scales and the knob translates (the bar
+   is a size container: 100cqw is its width), so a tick of the clock moves
+   pixels on the compositor and lays nothing out. --at is the pointer's x. */
+.bar { --p: 0; position: relative; flex: 1; height: 4px; border-radius: var(--r-pill); background: var(--hairline); cursor: pointer; container-type: inline-size; }
 .bar::before { content: ""; position: absolute; inset: -10px 0; }
-.bar .fl { position: absolute; inset: 0 auto 0 0; width: calc(var(--p) * 100%); border-radius: inherit; background: var(--ink); }
+.bar .fl { position: absolute; inset: 0; border-radius: inherit; background: var(--ink); transform: scaleX(var(--p)); transform-origin: left; }
 .bar .kn {
-  position: absolute; top: 50%; left: calc(var(--p) * 100%); width: 12px; height: 12px; margin: -6px 0 0 -6px;
+  position: absolute; top: 50%; left: 0; width: 12px; height: 12px; margin: -6px 0 0 -6px; translate: calc(var(--p) * 100cqw) 0;
   border-radius: var(--r-pill); background: var(--ink); opacity: 0; transition: opacity var(--quick) var(--ease);
 }
 .bar .tip {
-  position: absolute; bottom: 14px; left: var(--at, 0); translate: -50% 0; padding: 2px 6px;
+  position: absolute; bottom: 14px; left: 0; translate: calc(var(--at, 0px) - 50%) 0; padding: 2px 6px;
   border: 1px solid var(--hairline); border-radius: 6px; background: var(--paper); color: var(--ink);
   font: var(--type-note); line-height: 1rem; opacity: 0; pointer-events: none;
 }
@@ -526,6 +532,7 @@ a.ar:where([href]) { color: var(--graphite); }
 .tr:focus-visible { outline-offset: -3px; }
 .tr.is-off { opacity: .55; }
 .tr .no { display: grid; place-items: center; color: var(--graphite); font-variant-numeric: tabular-nums; }
+.tr.is-playing .n { display: none; } /* the bars of the equalizer take the number's place */
 .tr .pl { display: none; color: var(--ink); }
 .tr:not(.hd):hover .n, .tr:not(.hd):focus-visible .n, .tr:not(.hd):hover .eq, .tr:not(.hd):focus-visible .eq { display: none; }
 .tr:not(.hd):hover .pl, .tr:not(.hd):focus-visible .pl { display: block; }
@@ -713,8 +720,10 @@ dl.facts dt { color: var(--graphite); }
 dl.facts dd { margin: 0; font-variant-numeric: tabular-nums; }
 
 /* 12. Player bar: on --surface, as wide as the page beside the sidebar.
-   Round 3 gives it life; with nothing loaded it says so quietly and what
-   cannot work yet is disabled. */
+   With nothing loaded it says so quietly and what cannot work yet is
+   disabled. The cover opens Now playing; on a narrow screen, where the bar
+   keeps only the song and three buttons, a thin line along its top edge is
+   the progress. */
 
 .player {
   position: sticky; bottom: 0; z-index: 10;
@@ -724,6 +733,7 @@ dl.facts dd { margin: 0; font-variant-numeric: tabular-nums; }
 }
 .np { display: flex; align-items: center; gap: var(--s3); min-width: 0; }
 .np-cover { display: block; flex: none; width: 56px; height: 56px; border-radius: var(--r-cover); background: var(--fill-strong); }
+.np-cover:hover { text-decoration: none; }
 .np-cover img { display: block; width: 100%; height: 100%; border-radius: inherit; object-fit: cover; box-shadow: var(--shadow-cover); }
 [data-state="idle"] .np .nm { color: var(--graphite); }
 .np .nm:where([href]):hover, .np .ar:where([href]):hover { text-decoration: underline; }
@@ -787,6 +797,7 @@ dl.facts dd { margin: 0; font-variant-numeric: tabular-nums; }
   .selbar .btn svg { display: none; }
   .player { grid-template-columns: minmax(0, 1fr) auto; gap: var(--s3); padding: var(--s3) var(--s4); }
   .extra, .prog, .ctl .sec { display: none; }
+  .player::before { content: ""; position: absolute; inset: -1px 0 auto; height: 2px; background: var(--ink); transform: scaleX(var(--p, 0)); transform-origin: left; }
 }
 
 /* 14. Motion answers the user; pages change by view transition (router.js),
@@ -807,9 +818,9 @@ dl.facts dd { margin: 0; font-variant-numeric: tabular-nums; }
    controls and panels become superellipses with the radii scaled by 1.6 so
    the corner reads the same size. Pills and circles stay round. */
 @supports (corner-shape: squircle) {
-  .np-cover, .np-cover img, .side-cover, .fav-ic, .tcov-img, .ticon, .mi-cover, .blk, .th, .art img, .cover, .top-art img, .pick img, .pick .new, .sd-cover { corner-shape: squircle; border-radius: calc(var(--r-cover) * 1.6); }
-  .btn, input, textarea, .nav-item, .brand, .mi, .undo, .reveal, .skip-link, kbd, .searchlink, .pick, .tr:not(.hd):hover, .tr.is-sel { corner-shape: squircle; border-radius: calc(var(--r-control) * 1.6); }
-  .menu, .sheet, .toast, .notice, .login-card, .topcard, .selbar, .bigsearch input { corner-shape: squircle; border-radius: calc(var(--r-panel) * 1.6); }
+  .np-cover, .np-cover img, .qcov, .now-cover, .side-cover, .fav-ic, .tcov-img, .ticon, .mi-cover, .blk, .th, .art img, .cover, .top-art img, .pick img, .pick .new, .sd-cover { corner-shape: squircle; border-radius: calc(var(--r-cover) * 1.6); }
+  .btn, input, textarea, .nav-item, .brand, .mi, .undo, .qi:hover, .qi:focus-visible, .reveal, .skip-link, kbd, .searchlink, .pick, .tr:not(.hd):hover, .tr.is-sel { corner-shape: squircle; border-radius: calc(var(--r-control) * 1.6); }
+  .menu, .sheet, .toast, .notice, .login-card, .topcard, .selbar, .bigsearch input, .now-queue { corner-shape: squircle; border-radius: calc(var(--r-panel) * 1.6); }
 }
 
 /* 15. Sign in (login.html): the sidebar's lockup, larger, over a solid card
@@ -847,3 +858,188 @@ dl.facts dd { margin: 0; font-variant-numeric: tabular-nums; }
 @keyframes spin { to { transform: rotate(1turn); } }
 .help { margin-top: 2px; text-align: center; color: var(--graphite); font: var(--type-note); }
 .login-foot { display: flex; justify-content: center; gap: var(--s4); color: var(--graphite); font: var(--type-note); }
+
+/* 16. The queue: Now playing, then what was queued by hand ("Next in queue"),
+   then the rest of the context. The same rows serve the side panel and "Up
+   next" on Now playing. Grip and × show on hover and focus (always where
+   there is no hover); the grip is what a pointer drags, a line shows
+   where the row will land. A row far off screen skips its layout. */
+
+.q { position: relative; }
+.qh { display: flex; align-items: center; gap: var(--s3); padding: 0 var(--s1) var(--s2); }
+.q-title { flex: 1; font: var(--type-head); }
+.qh .link { font-size: .8125rem; }
+.qcap {
+  display: flex; align-items: center; justify-content: space-between; padding: var(--s4) var(--s1) 6px;
+  color: var(--graphite); font: var(--type-caption); letter-spacing: .06em; text-transform: uppercase;
+}
+.qcap .link { text-transform: none; letter-spacing: 0; }
+.q-body > .qcap:first-child { padding-top: var(--s1); }
+.qi {
+  display: grid; grid-template-columns: 16px 40px minmax(0, 1fr) 32px; align-items: center; gap: 10px;
+  min-height: 52px; padding: var(--s1); border-radius: var(--r-control);
+  content-visibility: auto; contain-intrinsic-size: auto 52px;
+}
+.qi:hover { background: var(--hover); }
+.qi:focus-visible { outline-offset: -3px; }
+.qcov { display: block; width: 40px; height: 40px; border-radius: var(--r-cover); object-fit: cover; background: var(--fill-strong); }
+.qi .tm { text-align: right; color: var(--graphite); font: var(--type-note); font-variant-numeric: tabular-nums; }
+.qi.is-now .nm { color: var(--accent); }
+.qi.is-off { opacity: .55; }
+.qi.is-drag { opacity: .45; }
+.qi .grip { display: grid; place-items: center; color: var(--graphite); cursor: grab; touch-action: none; visibility: hidden; }
+.qi.is-now .grip { visibility: hidden !important; }
+.qi .x { visibility: hidden; width: 2rem; height: 2rem; }
+.qi:is(:hover, :focus-within) :is(.grip, .x) { visibility: visible; }
+@media (hover: none) { .qi :is(.grip, .x) { visibility: visible; } }
+.q-drop { position: absolute; inset: 0 0 auto; height: 2px; border-radius: 1px; background: var(--accent); translate: 0 var(--y, 0px); pointer-events: none; }
+.qend { display: flex; flex-direction: column; gap: var(--s3); margin-top: var(--s4); padding: var(--s4) var(--s1) 0; border-top: 1px solid var(--hairline); }
+.q-notes { display: grid; gap: 6px; }
+.qend .btn { align-self: flex-start; }
+.ended { display: grid; gap: var(--s3); padding: var(--s2) var(--s1); }
+.ended h3 { font: var(--type-title); }
+.ended p { color: var(--graphite); }
+.ended .actions { display: flex; flex-wrap: wrap; gap: var(--s2); }
+
+/* 17. Now playing. The page lies on the blurred cover and is always dark,
+   whatever the theme (color-scheme: dark flips every token under it); the
+   field is darkened so white text keeps its contrast, and carries the
+   grain. The sidebar, the queue panel and the bar give way to the controls
+   of this page. Links here are ink. The field is still: nothing animates
+   the blur. */
+
+body[data-now] :is(.sidebar, .player, #queue) { display: none; }
+body[data-now] .app { grid-template-columns: minmax(0, 1fr); }
+body[data-now] .toasts { left: 0; }
+.page[data-glow="now"] { color-scheme: dark; margin-left: 0; padding: 0; min-height: 100vh; min-height: 100dvh; color: var(--ink); }
+.page[data-glow="now"]::before, .page[data-glow="now"]::after { position: fixed; inset: -10%; height: auto; mask: none; }
+.page[data-glow="now"]::before {
+  background: linear-gradient(rgb(0 0 0 / .3), rgb(0 0 0 / .6)), var(--cover, none) center / cover;
+  filter: blur(90px) saturate(1.6); opacity: .8;
+}
+.page[data-glow="now"]::after { inset: 0; opacity: .25; }
+
+.now { display: flex; flex-direction: column; min-height: 100vh; min-height: 100dvh; }
+.now a { color: var(--ink); }
+.now :focus-visible { outline-color: var(--ink); }
+.now .iconbtn, .now .dots { width: 2.5rem; height: 2.5rem; color: var(--ink); }
+.now :is(.iconbtn, .dots):hover { background: rgb(255 255 255 / .1); }
+.now .iconbtn:is(.is-on, [aria-pressed="true"]) { color: var(--accent); }
+.now .iconbtn.is-shown { background: rgb(255 255 255 / .14); }
+.now .iconbtn:disabled, .now .iconbtn[aria-disabled="true"] { opacity: .45; }
+.now .iconbtn .one { right: 6px; bottom: 6px; }
+.now .qi .x { width: 2rem; height: 2rem; }
+
+.now-top { display: flex; align-items: center; justify-content: space-between; gap: var(--s4); padding: 1.25rem 1.75rem 0; }
+.now-close {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 2.5rem; padding: 0 12px 0 var(--s2);
+  border: 0; border-radius: var(--r-pill); background: none; color: var(--ink); font-weight: 500; cursor: pointer;
+}
+.now-close:hover { background: rgb(255 255 255 / .1); }
+.now-close .i { stroke-width: 2; }
+.now-from { text-align: center; }
+.now-from .cap { font: var(--type-caption); letter-spacing: .06em; text-transform: uppercase; opacity: .85; }
+.now-from a { font-weight: 600; }
+
+.now-body {
+  flex: 1; display: grid; grid-template-columns: minmax(300px, 400px) minmax(0, 1fr) minmax(280px, 340px);
+  gap: 3rem; align-items: start; padding: var(--s6) 2.5rem var(--s5);
+}
+.now-body.no-lyrics { grid-template-columns: minmax(320px, 480px) minmax(0, 1fr); }
+.now-body.no-queue { grid-template-columns: minmax(300px, 400px) minmax(0, 1fr); }
+.now-body.no-lyrics.no-queue { grid-template-columns: minmax(320px, 480px); justify-content: center; }
+.now-body.no-lyrics .now-queue { max-width: 40rem; }
+.now-cover {
+  display: block; width: 100%; height: auto; aspect-ratio: 1; border-radius: var(--r-cover); object-fit: cover; background: var(--fill-strong);
+  box-shadow: 0 2px 6px rgb(0 0 0 / .2), 0 24px 64px rgb(0 0 0 / .45);
+}
+.now-info { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--s3); margin-top: var(--s5); }
+.now-text { min-width: 0; }
+.now-title { font: var(--type-display); letter-spacing: -.025em; overflow-wrap: anywhere; }
+.now-artist { font: 500 1.375rem/1.75rem var(--family); }
+.now-album { margin-top: var(--s1); opacity: .85; }
+.now-badges { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: 14px; }
+.now-badges span { padding: 3px 6px; border: 1px solid rgb(255 255 255 / .35); border-radius: 4px; font: var(--type-caption); letter-spacing: .06em; text-transform: uppercase; }
+.now .heart .i { width: 24px; height: 24px; }
+
+/* A scrim under the lyrics keeps 4.5:1 on light covers. The column scrolls
+   without a scroll bar: the music moves it, and the wheel, a touch or a key
+   take over (then the pill brings the music back). */
+.now-lyr { position: relative; isolation: isolate; }
+.now-lyr::before {
+  content: ""; position: absolute; inset: -2rem -2.5rem; z-index: -1; border-radius: 24px; pointer-events: none;
+  background: radial-gradient(closest-side, rgb(0 0 0 / .32), rgb(0 0 0 / 0));
+}
+.ly-list {
+  position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 14px;
+  height: min(34rem, calc(100dvh - 17rem)); overflow-y: auto; scrollbar-width: none; padding: var(--s2) 0 30%;
+  mask: linear-gradient(transparent, #000 12%, #000 80%, transparent);
+}
+.ly { margin: 0; padding: 0; border: 0; background: none; color: rgb(245 245 247 / .6); font: 700 1.875rem/2.375rem var(--family); letter-spacing: -.015em; text-align: left; }
+button.ly { cursor: pointer; }
+button.ly:hover, .ly.is-current { color: var(--ink); }
+.ly-list.is-plain .ly { color: rgb(245 245 247 / .85); font: 600 1.375rem/2rem var(--family); letter-spacing: 0; }
+.ly-gap { flex: none; height: .5rem; }
+.ly-foot { display: flex; align-items: center; gap: var(--s3); margin-top: var(--s3); font-size: .8125rem; }
+.ly-note { opacity: .85; }
+.now-pill {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 2rem; padding: 0 14px; border: 0; border-radius: var(--r-pill);
+  background: var(--ink); color: var(--on-accent); font-weight: 600; cursor: pointer;
+}
+.now-pill .i { stroke-width: 2; }
+
+.now-queue {
+  padding: var(--s4); border: 1px solid rgb(255 255 255 / .14); border-radius: var(--r-panel);
+  background: rgb(0 0 0 / .34); backdrop-filter: blur(20px);
+  max-height: calc(100dvh - 12rem); overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgb(255 255 255 / .3) transparent;
+}
+.now-queue :is(.ar, .qcap, .qi .tm, .note, .ended p) { color: rgb(245 245 247 / .78); }
+.now-queue .qi:hover { background: rgb(255 255 255 / .08); }
+.now-queue .qend, .now-queue .qcap { border-color: rgb(255 255 255 / .14); }
+.now-queue .qh .link { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+.now-queue .qcap .link { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+.now-queue .btn, .now-queue .undo { background: rgb(255 255 255 / .14); }
+.now-queue .btn:hover { background: rgb(255 255 255 / .2); }
+
+.now-transport { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: var(--s5); padding: var(--s3) 2.5rem 1.75rem; }
+.now-prog { grid-column: 1 / -1; display: flex; align-items: center; gap: var(--s3); font-size: .8125rem; font-variant-numeric: tabular-nums; }
+.now .bar { height: 5px; background: rgb(255 255 255 / .22); }
+.now .bar:hover .fl { background: var(--ink); }
+.now .bar .kn { width: 13px; height: 13px; margin: -6.5px 0 0 -6.5px; }
+.now .bar:hover .tip { color: var(--ink); background: rgb(0 0 0 / .6); border-color: rgb(255 255 255 / .2); }
+.now-btns { display: flex; align-items: center; gap: var(--s4); }
+.now-btns .skip .i { width: 26px; height: 26px; }
+.bigplay {
+  display: grid; place-items: center; width: 4rem; height: 4rem; padding: 0; border: 0; border-radius: var(--r-pill);
+  background: var(--accent); color: var(--on-accent); cursor: pointer;
+}
+.bigplay:disabled { opacity: .45; cursor: default; }
+.bigplay .i { width: 28px; height: 28px; }
+.bigplay .is-pause { display: none; }
+[data-state="playing"] .bigplay .is-play { display: none; }
+[data-state="playing"] .bigplay .is-pause { display: block; }
+.now-left, .now-right { display: flex; align-items: center; gap: 6px; }
+.now-right { justify-content: flex-end; }
+.now .vol { width: 7.5rem; }
+
+@media (max-width: 60rem) {
+  .now-body, .now-body.no-lyrics, .now-body.no-queue, .now-body.no-lyrics.no-queue { grid-template-columns: minmax(0, 1fr); gap: var(--s6); padding: var(--s5) var(--s4); }
+  .now-body.no-lyrics .now-queue { max-width: none; }
+  .now-top { padding: var(--s3) var(--s3) 0; }
+  .ly { font-size: 1.375rem; line-height: 1.875rem; }
+  .ly-list { height: min(26rem, 60dvh); }
+  .now-queue { max-height: none; }
+  .now-transport { position: sticky; bottom: 0; grid-template-columns: minmax(0, 1fr); padding: var(--s7) var(--s4) var(--s5); background: linear-gradient(transparent, rgb(0 0 0 / .9) 28%, #000); }
+  .now-left, .now-right { display: none; }
+  .now-btns { justify-content: center; }
+}
+
+/* The keyboard shortcuts sheet (shortcuts.js), opened with ? */
+.sheet-keys { width: min(100% - 2rem, 56rem); }
+.keys-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s4); }
+.kcols { display: grid; grid-template-columns: 1fr 1fr; gap: 0 2.5rem; }
+.kh { margin: var(--s3) 0 var(--s1); color: var(--graphite); font: var(--type-caption); letter-spacing: .06em; text-transform: uppercase; }
+.krow { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--s4); min-height: 2.5rem; border-top: 1px solid var(--hairline); }
+.keys { display: inline-flex; gap: var(--s1); }
+.kcols-single.off { opacity: .5; }
+@media (max-width: 40rem) { .kcols { grid-template-columns: 1fr; } }

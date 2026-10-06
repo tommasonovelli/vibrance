@@ -1,9 +1,14 @@
-// Boot: who is signed in, the sidebar, the page of the address, the keys
-// that work everywhere. Nothing else lives here.
+// Boot: who is signed in, the sidebar, the player bar and its queue, the page
+// of the address, the keys that work everywhere. Nothing else lives here.
 import { api } from './api.js';
 import { $, errorNotice } from './ui.js';
 import * as router from './router.js';
 import * as sidebar from './sidebar.js';
+import * as player from './player.js';
+import { initBar } from './bar.js';
+import { initQueue } from './queue.js';
+import { initShortcuts } from './shortcuts.js';
+import { loadSettings } from './settings.js';
 
 // Each path and the module of its view, loaded when first needed.
 const routes = {
@@ -53,8 +58,15 @@ async function boot() {
     return;
   }
   sidebar.init(me);
+  initBar();
+  initQueue();
   keys();
+  initShortcuts();
   router.start(routes, main);
+  // What was playing comes back paused, and the preferences of this person
+  // arrive; neither holds up the page.
+  player.restore();
+  loadSettings();
 }
 
 boot();

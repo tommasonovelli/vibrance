@@ -92,9 +92,13 @@ export async function reload(isAdmin = !$('#nav-admin').hidden) {
 
 // Opens the sheet and creates the playlist; a new playlist opens on its page,
 // unless the caller says what to do with it (a menu adding songs to it).
-export function newPlaylist(onCreated = playlist => navigate(`/playlists/${playlist.id}`)) {
-  const dialog = openSheet('t-sheet-new-playlist');
+// `name` fills the field in advance (saving the queue).
+export function newPlaylist(onCreated = playlist => navigate(`/playlists/${playlist.id}`), { name = '' } = {}) {
+  const dialog = openSheet('t-sheet-new-playlist', d => {
+    $('input[name="name"]', d).value = name;
+  });
   const form = $('form', dialog);
+  if (name) form.elements.name.select();
   form.addEventListener('submit', async event => {
     if (event.submitter?.value !== 'create') return;
     event.preventDefault();

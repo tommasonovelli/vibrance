@@ -5,9 +5,9 @@
 // playing, and drag to a playlist of the sidebar. Markup lives in the
 // templates of index.html; layout in app.css §10.
 import { api } from './api.js';
-import { $, clone, closeMenu, formatTime, openMenu, pending, setCover, show } from './ui.js';
+import { $, clone, closeMenu, formatTime, openMenu, pending, setCover, setIcon, show } from './ui.js';
 import * as act from './actions.js';
-import { current, isPlaying } from './player.js';
+import * as player from './player.js';
 
 // ---- The head every list page has ----------------------------------------------
 
@@ -59,12 +59,15 @@ function makeRow(track, number) {
 // The song that is playing takes the accent and the bars of an equalizer
 // where its number was; they stand still while it is paused.
 function markPlaying() {
-  const now = current(), playing = isPlaying();
+  const now = player.current(), playing = player.isPlaying();
   for (const row of document.querySelectorAll('.tl .tr:not(.hd)')) {
     const mine = !!now && row.track?.id === now.track.id;
+    if (!mine && !row.classList.contains('is-playing')) continue; // it was not the song, and is not: nothing to change
     row.classList.toggle('is-playing', mine);
     show($('.eq', row), mine);
     $('.eq', row).classList.toggle('is-paused', !playing);
+    // What the row's button does when pressed: pause the song, or play it.
+    setIcon($('.pl', row), mine && playing ? 'pause' : 'play');
   }
 }
 document.addEventListener('player:track', markPlaying);
@@ -177,7 +180,12 @@ export function trackList(kind, label, context, { skip = [], only = null } = {})
     if (target.closest('.heart')) { act.setFavorites([row.track], !row.track.favorite); return; }
     if (target.closest('.dots')) { menuFor(row, target.closest('.dots')); return; }
     if (target.closest('a')) return; // links go where they go
-    if (target.closest('.no') || touch()) { select(row); playRow(row); return; }
+    if (target.closest('.no') || touch()) {
+      select(row);
+      // The number of the song that plays is its pause button.
+      if (player.current()?.track.id === row.track.id) player.toggle(); else playRow(row);
+      return;
+    }
     select(row, event);
   });
   el.addEventListener('dblclick', event => {
@@ -420,5 +428,5 @@ export function pager(host, { key = null, read, add, note, blocks = 't-ph-rows',
   } else {
     first = more();
   }
-  return { first, say, remove: () => { watch.disconnect(); end.remove(); } };
+  return { first, say, next: () => next ?? null, remove: () => { watch.disconnect(); end.remove(); } };
 }
