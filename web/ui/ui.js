@@ -1,6 +1,8 @@
 // Small helpers every view shares: templates, durations, toasts, menus and
 // sheets. The markup of each piece is a <template> in index.html; this file
 // clones it and sets text, href and src, never innerHTML.
+import { coverUrl } from './api.js';
+
 export const $ = (selector, root = document) => root.querySelector(selector);
 
 // A fresh copy of the one element a <template> holds.
@@ -42,6 +44,23 @@ export function announce(text) {
   const live = $('#live');
   live.textContent = '';
   setTimeout(() => { live.textContent = text; }, 50);
+}
+
+// ---- Covers and waiting ----------------------------------------------------
+
+// An album's cover in an <img>. Without one, a quiet disc on the block's
+// own background (an image with no source shows the browser's broken icon).
+export function setCover(img, cover, size = 256) {
+  img.src = coverUrl(cover, size) || '/no-cover.svg';
+}
+
+// What stands in for a list that is loading: nothing during the first
+// second, a quick answer needs no sign; then still blocks, no spinner and no
+// shimmer (proposal 7.3). Returns what removes them.
+export function pending(host, template) {
+  let blocks;
+  const timer = setTimeout(() => host.append(blocks = clone(template)), 1000);
+  return () => { clearTimeout(timer); blocks?.remove(); };
 }
 
 // ---- Page head and states --------------------------------------------------
@@ -151,8 +170,9 @@ export const staleToast = () => toast({ title: 'Playlist changed elsewhere', sub
 
 // ---- Menus -----------------------------------------------------------------
 
-// openMenu(button, items). An item is {label, icon, href, run, danger, checked,
-// cover, disabled}, or {label, icon, items: [...]} for a submenu (one level),
+// openMenu(button, items, at). `at` = {x, y} opens it at the pointer (a
+// right-click) instead of under the button. An item is {label, icon, href, run, danger, checked,
+// cover, disabled, filled}, or {label, icon, items: [...]} for a submenu (one level),
 // or '-' for a line. Keys: ↑ ↓ Home End move, → opens a submenu, ← and Esc
 // close it, Esc closes the menu, Tab leaves. A submenu stays open for 300 ms
 // after the pointer leaves it, so a diagonal move does not lose it.
@@ -162,6 +182,7 @@ function itemElement(spec) {
   let el = clone('t-menu-item');
   $('.mi-label', el).textContent = spec.label;
   if (spec.icon) setIcon($('.mi-icon', el), spec.icon);
+  $('.mi-icon', el).classList.toggle('f', !!spec.filled);
   if (spec.cover) {
     const img = $('.mi-cover', el);
     img.src = spec.cover;
@@ -222,23 +243,26 @@ function closeSub(sub) {
 
 const enabled = list => [...list.querySelectorAll(':scope > .mi:not([aria-disabled]), :scope > .sub > .mi')];
 
-function place(menu, button) {
-  const b = button.getBoundingClientRect(), m = menu.getBoundingClientRect();
-  const left = Math.min(Math.max(8, b.right - m.width), innerWidth - m.width - 8);
+// Under the button, its right edge on the menu's; or, for a right-click,
+// with its corner at the pointer (`at` = {x, y}).
+function place(menu, button, at) {
+  const b = at ? { left: at.x, right: at.x + menu.offsetWidth, top: at.y - 4, bottom: at.y - 4 } : button.getBoundingClientRect();
+  const m = menu.getBoundingClientRect();
+  const left = Math.min(Math.max(8, at ? b.left : b.right - m.width), innerWidth - m.width - 8);
   let top = b.bottom + 4;
   if (top + m.height > innerHeight - 8) top = Math.max(8, b.top - m.height - 4);
   menu.style.setProperty('--x', `${left}px`);
   menu.style.setProperty('--y', `${top}px`);
 }
 
-export function openMenu(button, items) {
+export function openMenu(button, items, at = null) {
   if (open?.button === button) { closeMenu(); return null; }
   closeMenu();
   const menu = clone('t-menu');
   menu.append(...listElements(items, false));
   document.body.append(menu);
   menu.showPopover();
-  place(menu, button);
+  place(menu, button, at);
   button.setAttribute('aria-haspopup', 'menu');
   button.setAttribute('aria-expanded', 'true');
   button.classList.add('is-open');

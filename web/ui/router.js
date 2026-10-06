@@ -39,6 +39,10 @@ async function show(href, restore) {
 
   const run = async () => {
     main.replaceChildren();
+    // The colour field of a head (app.css §11) belongs to the page that set it.
+    main.removeAttribute('data-glow');
+    main.style.removeProperty('--cover');
+    main.style.removeProperty('--cover-b');
     try {
       const view = await (found ? found.route.load() : import('./views/not-found.js'));
       await view.render(main, params, signal);
@@ -49,9 +53,9 @@ async function show(href, restore) {
   };
   let work;
   if (!first && motion() && document.startViewTransition) {
-    // The page cross-fades, waiting for the new view at most 400 ms: a slow
+    // The page cross-fades, waiting for the new view at most 1 s, the old page staying in view meanwhile: a slow
     // answer fills the page after the transition instead of freezing it.
-    const transition = document.startViewTransition(() => Promise.race([work = run(), sleep(400)]));
+    const transition = document.startViewTransition(() => Promise.race([work = run(), sleep(1000)]));
     await transition.updateCallbackDone;
   } else {
     work = run();
@@ -84,6 +88,11 @@ export function start(table, element) {
   addEventListener('scroll', () => {
     clearTimeout(saving);
     saving = setTimeout(() => history.replaceState({ y: scrollY }, ''), 150);
+  }, { passive: true });
+  // A view's module loads while the pointer is still on its link: the click finds it ready.
+  document.addEventListener('pointerover', event => {
+    const link = event.target.closest?.('a[href]');
+    if (link && link.origin === location.origin) match(link.pathname)?.route.load().catch(() => {});
   }, { passive: true });
   addEventListener('popstate', event => show(location.pathname + location.search, event.state));
 

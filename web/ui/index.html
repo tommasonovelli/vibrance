@@ -165,5 +165,143 @@
 <div class="actions"><button class="btn" type="button" value="cancel" data-close autofocus>Cancel</button><button class="btn btn-action" type="submit" value="confirm"></button></div>
 </form></dialog></template>
 
+<!-- Round 2: lists, cards and the pages of the catalog. -->
+
+<template id="t-searchlink"><a class="searchlink" href="/search"><svg class="i" aria-hidden="true"><use href="#i-search"/></svg><span>Search songs, albums, artists</span><kbd>Ctrl K</kbd></a></template>
+
+<template id="t-track"><div class="tr" role="row" tabindex="-1" draggable="true">
+<span class="no" role="cell"><span class="n"></span><span class="eq" role="img" aria-label="Playing" hidden><i></i><i></i><i></i></span><svg class="i f sm pl" aria-hidden="true"><use href="#i-play"/></svg></span>
+<span class="t" role="cell"><img class="th" alt="" width="40" height="40" loading="lazy" decoding="async" draggable="false"><span class="tt"><span class="nm"></span><a class="ar"></a></span></span>
+<a class="c c-artist" role="cell"></a>
+<a class="c c-album" role="cell"></a>
+<span class="c c-genre" role="cell"></span>
+<span class="lyr" role="cell"></span>
+<button class="iconbtn heart" type="button" aria-label="Add to favorites"><svg class="i" aria-hidden="true"><use href="#i-heart"/></svg></button>
+<span class="tm" role="cell"></span>
+<button class="dots" type="button" aria-haspopup="menu" aria-label="More actions"></button>
+</div></template>
+
+<template id="t-track-head"><div class="tr hd" role="row"><span class="no">#</span><span>Title</span><span class="c-album">Album</span><span class="c-genre">Genre</span><span class="heart-col"></span><span class="tm"><svg class="i sm" role="img" aria-label="Duration"><use href="#i-clock"/></svg></span><span></span></div></template>
+
+<template id="t-selbar"><div class="selbar" role="toolbar" aria-label="Selected songs">
+<span class="sel-count"></span>
+<button class="btn" type="button" data-act="next"><svg class="i" aria-hidden="true"><use href="#i-play-next"/></svg>Play next</button>
+<button class="btn" type="button" data-act="queue"><svg class="i" aria-hidden="true"><use href="#i-queue"/></svg>Add to queue</button>
+<button class="btn" type="button" data-act="playlist"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>Add to playlist…</button>
+<button class="btn sel-fav" type="button" data-act="fav"><svg class="i" aria-hidden="true"><use href="#i-heart"/></svg><span>Add to favorites</span></button>
+<button class="iconbtn" type="button" data-act="clear" aria-label="Clear selection"><svg class="i sm" aria-hidden="true"><use href="#i-close"/></svg></button>
+</div></template>
+
+<template id="t-ghost"><span class="ghost" aria-hidden="true"><svg class="i sm"><use href="#i-plus"/></svg><span></span></span></template>
+
+<template id="t-more"><div class="more"><p class="note more-text"></p><button class="link" type="button">Couldn’t load more. Try again</button></div></template>
+
+<template id="t-ph-rows"><div class="ph" aria-hidden="true"><div class="ph-row"><i class="blk"></i><i class="blk"></i><i class="blk"></i></div><div class="ph-row"><i class="blk"></i><i class="blk"></i><i class="blk"></i></div><div class="ph-row"><i class="blk"></i><i class="blk"></i><i class="blk"></i></div></div></template>
+
+<template id="t-ph-grid"><div class="grid ph" aria-hidden="true"><div class="ph-card"><i class="blk"></i><i class="blk"></i><i class="blk"></i></div><div class="ph-card"><i class="blk"></i><i class="blk"></i><i class="blk"></i></div><div class="ph-card"><i class="blk"></i><i class="blk"></i><i class="blk"></i></div><div class="ph-card"><i class="blk"></i><i class="blk"></i><i class="blk"></i></div></div></template>
+
+<template id="t-album-card"><article class="card" role="listitem"><div class="art"><a href="" tabindex="-1" aria-hidden="true"><img class="cover-img" alt="" width="240" height="240" loading="lazy" decoding="async"></a><button class="cplay" type="button" aria-label="Play"><svg class="i f" aria-hidden="true"><use href="#i-play"/></svg></button><button class="dots cdots" type="button" aria-haspopup="menu" aria-label="More actions"></button></div><a class="ct" href=""></a><div class="cm"><a class="cm-a"></a><span class="cm-b"></span></div></article></template>
+
+<template id="t-person"><a class="person" role="listitem"><span class="av" aria-hidden="true"></span><span class="pn"></span><span class="note"></span></a></template>
+
+<template id="t-library"><div>
+<div class="toolbar">
+<button class="play-xl" type="button" aria-label="Play all songs"><svg class="i f" aria-hidden="true"><use href="#i-play"/></svg></button>
+<button class="btn shuffle" type="button"><svg class="i" aria-hidden="true"><use href="#i-shuffle"/></svg>Shuffle</button>
+<nav class="seg" aria-label="Show"><a href="/">All songs</a><a href="/favorites">Favorites</a></nav>
+<span class="spacer"></span>
+<span class="note count" hidden></span>
+<button class="btn sort" type="button" aria-haspopup="menu">Sort: <span></span><svg class="i sm" aria-hidden="true"><use href="#i-chevron-down"/></svg></button>
+</div>
+<div class="list"></div>
+</div></template>
+
+<template id="t-albums"><div>
+<div class="toolbar toolbar-grid">
+<div class="seg" role="radiogroup" aria-label="Sort by"></div>
+<button class="iconbtn order" type="button" aria-label="Ascending order"><svg class="i" aria-hidden="true"><use href="#i-sort"/></svg></button>
+<span class="spacer"></span>
+<span class="note count" hidden></span>
+</div>
+<div class="list"></div>
+</div></template>
+
+<template id="t-album"><div>
+<a class="backlink" href="/albums"><svg class="i sm" aria-hidden="true"><use href="#i-chevron-left"/></svg>Albums</a>
+<div class="album-head">
+<div class="cover-box"><img class="cover" alt="" width="240" height="240" decoding="async"></div>
+<div class="fields">
+<h1 class="album-title"></h1>
+<a class="artist"></a>
+<p class="facts"><span class="f-year"></span><span class="f-genre"></span><span class="f-size"></span></p>
+<div class="fmt"></div>
+<div class="hero-actions">
+<button class="play-xl" type="button"><svg class="i f" aria-hidden="true"><use href="#i-play"/></svg></button>
+<button class="btn shuffle" type="button"><svg class="i" aria-hidden="true"><use href="#i-shuffle"/></svg>Shuffle</button>
+<button class="btn queue-btn" type="button"><svg class="i" aria-hidden="true"><use href="#i-queue"/></svg>Add to queue</button>
+</div>
+</div>
+<button class="dots head-dots" type="button" aria-haspopup="menu" aria-label="More album actions"></button>
+</div>
+<section aria-labelledby="songs-title">
+<div class="section-head"><h2 id="songs-title">Songs</h2><span class="note lyrics-note"></span></div>
+<div class="discs"></div>
+<p class="length"></p>
+</section>
+<section class="more-by" aria-labelledby="more-title" hidden>
+<div class="section-head"><h2 id="more-title"></h2><a class="link" href="">Show all</a></div>
+<div class="list"></div>
+</section>
+</div></template>
+
+<template id="t-artists"><div><div class="toolbar toolbar-grid"><span class="spacer"></span><span class="note count" hidden></span></div><div class="list"></div></div></template>
+
+<template id="t-artist"><div>
+<a class="backlink" href="/artists"><svg class="i sm" aria-hidden="true"><use href="#i-chevron-left"/></svg>Artists</a>
+<div class="hero">
+<div class="avatar" aria-hidden="true"></div>
+<div class="hero-text">
+<div class="kicker">Artist</div>
+<h1 class="artist-name"></h1>
+<p class="summary"></p>
+<div class="hero-actions">
+<button class="play-xl" type="button"><svg class="i f" aria-hidden="true"><use href="#i-play"/></svg></button>
+<button class="btn shuffle" type="button"><svg class="i" aria-hidden="true"><use href="#i-shuffle"/></svg>Shuffle</button>
+<button class="dots head-dots" type="button" aria-haspopup="menu" aria-label="More artist actions"></button>
+</div>
+</div>
+</div>
+<section aria-labelledby="albums-title"><div class="section-head"><h2 id="albums-title">Albums</h2></div><div class="list"></div></section>
+<section class="songs" aria-labelledby="songs-title" hidden><div class="section-head"><h2 id="songs-title">Songs</h2><button class="link show-all" type="button"></button></div><div class="list"></div></section>
+</div></template>
+
+<template id="t-search"><div>
+<h1 class="sr-only">Search</h1>
+<label class="bigsearch"><svg class="i" aria-hidden="true"><use href="#i-search"/></svg><input id="q" type="search" placeholder="Search songs, albums, artists" aria-label="Search artists, albums and songs" autocomplete="off" spellcheck="false" maxlength="100"><button class="iconbtn clear" type="button" aria-label="Clear search" hidden><svg class="i" aria-hidden="true"><use href="#i-close"/></svg></button></label>
+<div class="chips" role="radiogroup" aria-label="Show"></div>
+<div class="results"></div>
+</div></template>
+
+<template id="t-topcard"><div class="topcard"><a class="top-link"><span class="top-art"><img class="cover-img" alt="" width="112" height="112"><span class="av" hidden></span></span><span class="top-text"><h3></h3><span class="top-meta"><span class="pill"></span><span class="top-sub"></span></span></span></a><button class="topplay" type="button"><svg class="i f" aria-hidden="true"><use href="#i-play"/></svg></button></div></template>
+
+<template id="t-section"><section><div class="section-head"><h2></h2><button class="link" type="button" hidden></button><span class="note" hidden></span></div><div class="list"></div></section></template>
+
+<template id="t-pick"><button class="pick" type="button" aria-pressed="false"><img class="pick-cover" alt="" width="40" height="40" loading="lazy"><span><span class="pick-name"></span><span class="sub"></span></span><span class="box"><svg class="i" aria-hidden="true" hidden><use href="#i-check"/></svg></span></button></template>
+
+<template id="t-sheet-add"><dialog class="sheet"><div class="sheet-form">
+<h2 class="sheet-title"></h2>
+<label class="search"><svg class="i" aria-hidden="true"><use href="#i-search"/></svg><input type="search" placeholder="Find a playlist" aria-label="Find a playlist" autocomplete="off"></label>
+<div class="picks"><button class="pick" type="button" data-close value="new"><span class="new"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg></span><span>New playlist…</span><span></span></button></div>
+<div class="picks pick-list"></div>
+<div class="actions"><button class="btn" type="button" value="cancel" data-close>Cancel</button><button class="btn btn-primary" type="button" value="add" data-close>Add</button></div>
+</div></dialog></template>
+
+<template id="t-sheet-song"><dialog class="sheet"><div class="sheet-form">
+<div class="sd-head"><img class="sd-cover" alt="" width="64" height="64"><div><h2 class="sheet-title"></h2><p class="sd-sub"></p></div></div>
+<dl class="facts"></dl>
+<div class="actions"><button class="btn dl" type="button"><svg class="i" aria-hidden="true"><use href="#i-download"/></svg>Download file</button><button class="btn" type="button" value="close" data-close autofocus>Close</button></div>
+</div></dialog></template>
+
+
 </body>
 </html>

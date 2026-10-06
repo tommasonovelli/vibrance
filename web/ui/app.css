@@ -204,6 +204,7 @@ main:focus { outline: none; }
   border: 0; border-radius: var(--r-control); background: none;
   color: var(--ink); font-weight: 500; text-align: left; white-space: nowrap; cursor: pointer;
 }
+.nav-item.drop-target { outline: 1px solid var(--ink); outline-offset: -1px; background: color-mix(in srgb, var(--ink) 8%, transparent); }
 .nav-item:hover { text-decoration: none; background: color-mix(in srgb, var(--ink) 8%, transparent); }
 .nav-item[aria-current="page"] { background: var(--fill-strong); font-weight: 650; }
 .nav-icon { display: grid; place-items: center; color: var(--graphite); }
@@ -304,10 +305,11 @@ main:focus { outline: none; }
 /* Quiet choices: a segmented control (All songs, Favorites), and chips. */
 .seg { display: inline-flex; gap: var(--s1); padding: 3px; border-radius: var(--r-pill); background: var(--fill-strong); }
 .seg > * { min-height: 1.875rem; padding: 0 var(--s3); display: inline-flex; align-items: center; border: 0; border-radius: var(--r-pill); background: none; color: var(--graphite); font-weight: 500; cursor: pointer; }
-.seg > :is(.on, [aria-selected="true"], [aria-current]) { background: var(--paper); color: var(--ink); }
+.seg > a:hover { text-decoration: none; color: var(--ink); }
+.seg > :is(.on, [aria-selected="true"], [aria-checked="true"], [aria-current]) { background: var(--paper); color: var(--ink); }
 .chip { display: inline-flex; align-items: center; min-height: 2rem; padding: 0 14px; border: 1px solid var(--hairline); border-radius: var(--r-pill); background: none; color: var(--ink); font-weight: 500; cursor: pointer; }
 .chip:hover { text-decoration: none; background: var(--fill-strong); }
-.chip:is(.on, [aria-pressed="true"]) { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+.chip:is(.on, [aria-pressed="true"], [aria-checked="true"]) { background: var(--ink); border-color: var(--ink); color: var(--paper); }
 
 .link { padding: 0; border: 0; background: none; color: var(--accent); font: var(--type-note); font-weight: 500; cursor: pointer; }
 .link:hover { text-decoration: underline; }
@@ -472,8 +474,11 @@ input[type="checkbox"] { width: 1rem; height: 1rem; min-height: 0; margin: 0; ac
 
 .blk { border-radius: var(--r-cover); background: var(--fill-strong); }
 
-/* 10. Rows and cards: the two-line text of a song (title over artist), the
-   small cover. Round 2 adds the song row, the album card and the grid. */
+/* 10. Rows and cards. A song is a row of a grid: its columns change with the
+   page (--cols and --areas on .tl), its cells are always the same. Rows and
+   cards skip layout and paint while they are far off screen
+   (content-visibility), with the size they will have, so a list of thousands
+   scrolls like a short one and the scrollbar does not jump. */
 
 .tt { display: flex; flex-direction: column; min-width: 0; }
 .nm, .ar { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -481,8 +486,231 @@ input[type="checkbox"] { width: 1rem; height: 1rem; min-height: 0; margin: 0; ac
 .ar { color: var(--graphite); font: var(--type-note); }
 a.ar:where([href]) { color: var(--graphite); }
 
-/* 11. Cover field: the blurred cover behind the head of an album, a
-   playlist, an artist and Now playing (README: Colore). Rounds 2 and 3. */
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3) var(--s4); padding: var(--s1) 0 var(--s3); }
+.toolbar-grid { padding-bottom: var(--s5); }
+.spacer { flex: 1; }
+.play-xl {
+  display: inline-grid; place-items: center; flex: none; width: 52px; height: 52px; padding: 0; border: 0; border-radius: var(--r-pill);
+  background: var(--accent); color: var(--on-accent); cursor: pointer; transition: background var(--quick) var(--ease);
+}
+.play-xl:hover { background: color-mix(in srgb, var(--accent) 88%, var(--ink)); }
+.play-xl .i { width: 24px; height: 24px; }
+.searchlink {
+  display: flex; align-items: center; gap: 10px; flex: 0 1 420px; height: 36px; padding: 0 var(--s2) 0 10px;
+  border-radius: var(--r-control); background: var(--fill-strong); color: var(--graphite);
+}
+.searchlink:hover { text-decoration: none; color: var(--ink); }
+.searchlink span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.searchlink kbd { min-width: 0; padding: 1px 6px; border-width: 1px; border-radius: 4px; background: none; color: var(--graphite); font: 500 .6875rem/1rem var(--family); }
+
+.tl { --cols: 2.5rem minmax(0, 4fr) minmax(0, 3fr) minmax(0, 1.6fr) 2rem 3.25rem 2rem; --areas: "no t album genre heart tm dots"; margin-top: var(--s2); }
+.tl.is-artist { --cols: 2.5rem minmax(0, 4fr) minmax(0, 3fr) 2rem 3.25rem 2rem; --areas: "no t album heart tm dots"; }
+.tl.is-search { --cols: minmax(0, 1fr) minmax(0, .8fr) 2rem 3.25rem 2rem; --areas: "t album heart tm dots"; margin-top: 0; }
+.tl.is-album { --cols: 2rem minmax(0, 3fr) minmax(0, 2fr) minmax(0, 1.4fr) 3rem 3.25rem 2rem 2rem; --areas: "no t artist genre lyr tm heart dots"; margin-top: 0; }
+.tr {
+  position: relative; display: grid; grid-template-columns: var(--cols); grid-template-areas: var(--areas); align-items: center; gap: var(--s3);
+  min-height: 56px; padding: 0 var(--s2); border-top: 1px solid var(--hairline); user-select: none;
+  content-visibility: auto; contain-intrinsic-size: auto 56px;
+}
+.tr > .no { grid-area: no; } .tr > .t { grid-area: t; } .tr > .c-artist { grid-area: artist; } .tr > .c-album { grid-area: album; }
+.tr > .c-genre { grid-area: genre; } .tr > .lyr { grid-area: lyr; } .tr > .heart, .tr > .heart-col { grid-area: heart; } .tr > .tm { grid-area: tm; } .tr > .dots { grid-area: dots; }
+.is-album .tr { min-height: 44px; padding: 0 var(--s1); contain-intrinsic-size: auto 44px; }
+.is-album .th, .is-album .tt .ar { display: none; }
+.is-album .no { justify-items: end; }
+.tl.is-album .c-album, .tl:not(.is-album) .c-artist, .tl:not(.is-album) .lyr, :is(.is-artist, .is-search) .c-genre, .tl.is-search .no { display: none; }
+.is-album .c-artist:not([href]) { pointer-events: none; }
+.tr.hd { min-height: 36px; border-top: 0; color: var(--graphite); font: 500 .8125rem/1.125rem var(--family); content-visibility: visible; }
+.tr.hd .tm { display: grid; justify-items: end; }
+.tr:not(.hd):hover, .tr.hov { background: var(--hover); border-radius: var(--r-control); }
+.tr.is-sel, .tr.is-sel:hover { background: color-mix(in srgb, var(--ink) 13%, transparent); border-radius: var(--r-control); }
+.tr:focus-visible { outline-offset: -3px; }
+.tr.is-off { opacity: .55; }
+.tr .no { display: grid; place-items: center; color: var(--graphite); font-variant-numeric: tabular-nums; }
+.tr .pl { display: none; color: var(--ink); }
+.tr:not(.hd):hover .n, .tr:not(.hd):focus-visible .n, .tr:not(.hd):hover .eq, .tr:not(.hd):focus-visible .eq { display: none; }
+.tr:not(.hd):hover .pl, .tr:not(.hd):focus-visible .pl { display: block; }
+.tr .no { cursor: pointer; }
+.tr .t { display: flex; align-items: center; gap: var(--s3); min-width: 0; }
+.th { display: block; width: 40px; height: 40px; flex: none; border-radius: var(--r-cover); object-fit: cover; background: var(--fill-strong); }
+.tr.is-playing .nm { color: var(--accent); }
+.tr .c, .tr .lyr { color: var(--graphite); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tr .lyr { font: var(--type-caption); }
+.tr .tm { text-align: right; color: var(--graphite); font-variant-numeric: tabular-nums; }
+.tr .heart:not(.is-fav) { visibility: hidden; }
+.tr:hover .heart, .tr:focus-within .heart, .tr.hov .heart { visibility: visible; }
+@media (hover: none) { .tr .heart { visibility: visible; } }
+.eq { display: inline-flex; align-items: flex-end; gap: 2px; height: 14px; color: var(--accent); }
+.eq i { width: 3px; background: currentColor; border-radius: 1px; }
+.eq i:nth-child(1) { height: 60%; } .eq i:nth-child(2) { height: 100%; } .eq i:nth-child(3) { height: 40%; }
+.eq.is-paused { color: var(--graphite); }
+.eq.is-paused i { height: 30%; }
+a.c:where([href]) { color: var(--graphite); }
+/* A link is its words, not its column: the rest of the row selects it. */
+.tr > a { justify-self: start; max-width: 100%; }
+
+/* What a selection offers, where the pointer is not. It floats above the
+   player bar, out of the flow: it comes and goes with the selection, and a
+   list that moved under a double-click would play the wrong song. */
+.selbar {
+  position: fixed; z-index: 11; bottom: calc(var(--player) + var(--s3)); left: calc(var(--sidebar) + (100vw - var(--sidebar)) / 2); translate: -50% 0;
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); width: max-content; max-width: calc(100vw - var(--sidebar) - 2rem);
+  padding: 6px 6px 6px var(--s4); border: 1px solid var(--hairline); border-radius: var(--r-panel); background: var(--paper);
+}
+body:has(.selbar) .toasts { bottom: calc(var(--player) + 4.75rem); }
+.sel-count { margin-right: var(--s3); font-weight: 600; }
+
+/* The pill that follows the pointer while songs are dragged to the sidebar. */
+.ghost {
+  position: fixed; top: -4rem; left: 0; display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px;
+  border: 1px solid var(--hairline); border-radius: var(--r-pill); background: var(--surface); color: var(--ink); font: var(--type-note);
+}
+
+/* What follows a list: the sentence about the rest, the retry, and the
+   blocks that stand in for a page that is late. */
+.more { padding-top: var(--s3); }
+.more-text { padding: var(--s4) var(--s2) 0; border-top: 1px solid var(--hairline); }
+.more .link { padding: var(--s3) var(--s2); }
+.ph-row { display: grid; grid-template-columns: 40px minmax(0, 1fr) 3rem; align-items: center; gap: var(--s3); min-height: 56px; border-top: 1px solid var(--hairline); }
+.ph-row .blk:first-child { width: 40px; height: 40px; }
+.ph-row .blk:nth-child(2) { height: 12px; width: 60%; }
+.ph-row .blk:nth-child(3) { height: 10px; }
+.ph-card { display: flex; flex-direction: column; gap: var(--s2); }
+.ph-card .blk:first-child { aspect-ratio: 1; }
+.ph-card .blk:nth-child(2) { height: 14px; width: 80%; }
+.ph-card .blk:nth-child(3) { height: 10px; width: 55%; }
+.blk { display: block; }
+
+/* Cards: album covers and round artists in a grid. */
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: var(--s6) var(--s5); }
+.card { position: relative; display: flex; flex-direction: column; gap: var(--s2); min-width: 0; content-visibility: auto; contain-intrinsic-size: auto 15rem; }
+.art { position: relative; }
+.art > a { display: block; }
+.art img { display: block; width: 100%; height: auto; aspect-ratio: 1; border-radius: var(--r-cover); object-fit: cover; box-shadow: var(--shadow-cover); background: var(--fill-strong); }
+.cplay {
+  position: absolute; right: 10px; bottom: 10px; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0;
+  border-radius: var(--r-pill); background: var(--accent); color: var(--on-accent); cursor: pointer;
+  opacity: 0; transform: translateY(6px); transition: opacity var(--quick) var(--ease), transform var(--quick) var(--ease);
+}
+.cdots { position: absolute; right: 8px; top: 8px; background: rgb(0 0 0 / .55); color: #f5f5f7; opacity: 0; transition: opacity var(--quick) var(--ease); }
+.cdots:hover, .cdots.is-open { background: rgb(0 0 0 / .75); color: #f5f5f7; }
+.card:hover :is(.cplay, .cdots), .card:focus-within :is(.cplay, .cdots) { opacity: 1; transform: none; }
+.card:has(.is-open) .cdots { opacity: 1; }
+@media (hover: none) { .cplay, .cdots { opacity: 1; transform: none; } }
+.ct { overflow: hidden; color: var(--ink); font: var(--type-head); text-overflow: ellipsis; white-space: nowrap; }
+.cm { display: flex; justify-content: space-between; gap: var(--s2); margin-top: -6px; color: var(--graphite); font: var(--type-note); font-variant-numeric: tabular-nums; }
+.cm a { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cm .cm-a { color: var(--graphite); }
+
+.person { display: flex; flex-direction: column; align-items: center; gap: var(--s2); min-width: 0; text-align: center; color: var(--ink); content-visibility: auto; contain-intrinsic-size: auto 12rem; }
+.person:hover { text-decoration: none; }
+.person:hover .pn { text-decoration: underline; }
+.av {
+  display: grid; place-items: center; width: 100%; max-width: 150px; aspect-ratio: 1; border-radius: var(--r-pill);
+  background: var(--fill-strong); color: var(--ink); font: 700 2.5rem/1 var(--family);
+}
+.pn { max-width: 100%; overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.person .note { margin-top: -6px; }
+
+.section-head { display: flex; align-items: center; justify-content: space-between; padding: var(--s5) 0 var(--s3); }
+.section-head h2 { font: var(--type-head); }
+.backlink { display: inline-flex; align-items: center; gap: 6px; margin-top: 1.75rem; color: var(--ink); font-weight: 500; }
+.backlink .i { stroke-width: 2; }
+
+/* 11. Cover field: the blurred cover behind the head of an album, an artist,
+   a playlist and Now playing (README: Colore). The page sets data-glow and
+   --cover (the router takes them off again); the layer overhangs the page so
+   the blur has no pale edges, fades into the page in eased steps and carries
+   the sidebar's grain. It is a still background: nothing animates it, only
+   its opacity when it arrives. Links on it are ink: the accent cannot keep
+   its contrast on every cover. An artist has no picture: two covers side
+   by side (--cover, --cover-b). */
+
+.page[data-glow] { overflow-x: clip; }
+.page[data-glow]::before, .page[data-glow]::after {
+  content: ""; position: absolute; inset: -8rem -8rem auto; z-index: -1; height: 38rem; pointer-events: none;
+  mask: linear-gradient(#000 30%, rgb(0 0 0 / .75) 48%, rgb(0 0 0 / .4) 64%, rgb(0 0 0 / .12) 80%, transparent 92%);
+  animation: field-in var(--slow) var(--ease) backwards;
+}
+.page[data-glow]::before { background: var(--cover) center 30% / cover; filter: blur(80px) saturate(1.6); opacity: .55; }
+.page[data-glow="artist"]::before { background: var(--cover) left center / 55% 100% no-repeat, var(--cover-b, var(--cover)) right center / 55% 100% no-repeat; }
+.page[data-glow]::after { background: url(grain.svg); mix-blend-mode: soft-light; opacity: .2; }
+@keyframes field-in { from { opacity: 0; } }
+.page[data-glow] :is(.backlink, .head-dots, .hero .dots, .artist, .fmt) { color: var(--ink); }
+.page[data-glow] :is(.backlink, .album-head, .hero) :focus-visible { outline-color: var(--ink); }
+
+.album-head { display: grid; grid-template-columns: 240px minmax(0, 1fr) auto; gap: var(--s6); align-items: start; padding: var(--s5) 0 var(--s6); }
+.cover { display: block; width: 240px; height: 240px; border-radius: var(--r-cover); object-fit: cover; box-shadow: var(--shadow-cover); background: var(--fill-strong); }
+.fields { display: flex; flex-direction: column; gap: var(--s2); min-width: 0; padding-top: var(--s1); }
+.album-title { font: var(--type-large); letter-spacing: -.022em; overflow-wrap: anywhere; }
+.artist { font: 500 1.375rem/1.75rem var(--family); }
+.facts { display: flex; flex-wrap: wrap; gap: var(--s1) var(--s4); margin: 0; font-variant-numeric: tabular-nums; }
+.fmt { display: flex; flex-wrap: wrap; gap: var(--s2); align-items: center; color: var(--graphite); font: var(--type-caption); letter-spacing: .06em; text-transform: uppercase; }
+.fmt span { padding: 3px 6px; border: 1px solid var(--hairline); border-radius: 4px; }
+.hero-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3); margin-top: var(--s4); }
+.length { margin: 0; padding-top: var(--s3); border-top: 1px solid var(--hairline); color: var(--graphite); font: var(--type-note); font-variant-numeric: tabular-nums; }
+.disc { padding: var(--s4) 0 var(--s2); color: var(--graphite); font: var(--type-caption); letter-spacing: .06em; text-transform: uppercase; }
+.more-by { margin-top: var(--s7); }
+
+.hero { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--s6); padding: var(--s5) 0 var(--s6); }
+.hero-text { flex: 1; min-width: 15rem; }
+.hero .hero-actions { margin-top: 0; padding-bottom: var(--s2); }
+.avatar { display: grid; grid-template-columns: 1fr 1fr; width: 200px; height: 200px; flex: none; overflow: hidden; border-radius: var(--r-pill); background: var(--fill-strong); box-shadow: var(--shadow-cover); }
+.avatar:has(img:only-child) { grid-template-columns: 1fr; }
+.avatar img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.kicker { color: var(--ink); font: var(--type-caption); letter-spacing: .06em; text-transform: uppercase; }
+.artist-name { margin: 6px 0 var(--s2); font: var(--type-display); letter-spacing: -.025em; overflow-wrap: anywhere; }
+.summary { margin: 0 0 1.25rem; font-variant-numeric: tabular-nums; }
+
+/* Search: the big field, what it found by kind, the best match first. */
+.bigsearch { position: relative; display: flex; align-items: center; max-width: 40rem; margin: 2.5rem 0 var(--s4); }
+.bigsearch > .i { position: absolute; left: 14px; width: 22px; height: 22px; color: var(--graphite); pointer-events: none; }
+.bigsearch input { width: 100%; height: 52px; padding: 0 52px 0 48px; border: 1px solid var(--hairline); border-radius: var(--r-panel); background: var(--fill-strong); font: 500 1.0625rem/1.375rem var(--family); }
+.bigsearch input::-webkit-search-cancel-button { display: none; }
+.bigsearch .clear { position: absolute; right: 10px; }
+.chips { display: flex; flex-wrap: wrap; gap: var(--s2); margin-bottom: var(--s2); }
+.results .section-head h2 { font: var(--type-title); }
+.results .section-head { padding-top: var(--s6); }
+.top { display: grid; grid-template-columns: minmax(17.5rem, 1fr) minmax(0, 1.6fr); gap: var(--s5); }
+.top .section-head + * { min-width: 0; }
+.topcard { position: relative; border-radius: var(--r-panel); background: var(--fill-strong); }
+.topcard:hover { background: color-mix(in srgb, var(--ink) 12%, var(--paper)); }
+.top-link { display: flex; flex-direction: column; gap: var(--s4); min-height: 15rem; padding: 1.25rem; color: var(--ink); }
+.top-link:hover { text-decoration: none; }
+.top-link::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
+.top-art img, .top-art .av { display: block; width: 112px; height: 112px; border-radius: var(--r-cover); object-fit: cover; box-shadow: var(--shadow-cover); }
+.top-art .av { display: grid; border-radius: var(--r-pill); box-shadow: none; background: var(--paper); }
+.top-text { padding-right: 3.5rem; }
+.top-text h3 { font: var(--type-large); letter-spacing: -.022em; overflow-wrap: anywhere; }
+.top-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 6px; }
+.top-sub { font: var(--type-note); }
+.pill { display: inline-block; padding: 2px 10px; border-radius: var(--r-pill); background: var(--paper); font: var(--type-note); font-weight: 500; }
+.topplay {
+  position: absolute; z-index: 1; right: 1.25rem; bottom: 1.25rem; display: grid; place-items: center; width: 48px; height: 48px; padding: 0; border: 0;
+  border-radius: var(--r-pill); background: var(--accent); color: var(--on-accent); cursor: pointer;
+}
+mark { background: none; color: inherit; text-decoration: underline; text-decoration-color: var(--accent); text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.people { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--s5); }
+
+/* Sheets of this round: pick playlists for several songs, the details of one. */
+.search { position: relative; display: flex; align-items: center; }
+.search .i { position: absolute; left: 10px; color: var(--graphite); pointer-events: none; }
+.search input { width: 100%; height: 2.25rem; padding: 0 12px 0 38px; border: 0; background: var(--fill-strong); }
+.picks { display: grid; gap: 2px; }
+.pick-list { max-height: 40vh; overflow-y: auto; }
+.pick { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; align-items: center; gap: var(--s3); min-height: 52px; padding: var(--s1) var(--s2); border: 0; border-radius: var(--r-control); background: none; text-align: left; cursor: pointer; }
+.pick:hover { background: var(--fill-strong); }
+.pick img, .pick .new { display: grid; place-items: center; width: 40px; height: 40px; border-radius: var(--r-cover); object-fit: cover; background: var(--fill-strong); }
+.pick .sub { display: block; color: var(--graphite); font: var(--type-note); }
+.box { display: grid; place-items: center; width: 20px; height: 20px; border: 1.5px solid var(--graphite); border-radius: 5px; }
+.box.on { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+.box .i { width: 14px; height: 14px; stroke-width: 2.25; }
+.sd-head { display: flex; gap: 14px; align-items: center; }
+.sd-cover { width: 64px; height: 64px; border-radius: var(--r-cover); object-fit: cover; background: var(--fill-strong); }
+.sd-head .sheet-title { font: var(--type-head); }
+.sd-sub { color: var(--graphite); }
+dl.facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--s2) 1.25rem; margin: 0; }
+dl.facts dt { color: var(--graphite); }
+dl.facts dd { margin: 0; font-variant-numeric: tabular-nums; }
 
 /* 12. Player bar: on --surface, as wide as the page beside the sidebar.
    Round 3 gives it life; with nothing loaded it says so quietly and what
@@ -543,6 +771,20 @@ a.ar:where([href]) { color: var(--graphite); }
   .cols { flex-wrap: wrap; }
   .queue { position: static; flex: 1 1 100%; height: auto; border-left: 0; border-top: 1px solid var(--hairline); }
   .toasts { left: 0; }
+  .tl, .tl.is-artist, .tl.is-search { --cols: 2rem minmax(0, 1fr) 3rem 2rem; --areas: "no t tm dots"; }
+  .tl.is-search { --cols: minmax(0, 1fr) 3rem 2rem; --areas: "t tm dots"; }
+  .tl.is-album { --cols: 1.5rem minmax(0, 1fr) 3.25rem 2rem; --areas: "no t tm dots"; }
+  .tl .c, .tl .lyr, .tl .heart, .tr.hd { display: none; }
+  .tl.is-album .tr { gap: var(--s2); }
+  .grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: var(--s5) var(--s4); }
+  .album-head { grid-template-columns: minmax(0, 1fr) auto; gap: var(--s4); }
+  .cover-box { grid-column: 1 / -1; }
+  .cover { width: min(100%, 240px); height: auto; aspect-ratio: 1; }
+  .avatar { width: 120px; height: 120px; }
+  .artist-name { font: var(--type-large); }
+  .top { grid-template-columns: minmax(0, 1fr); }
+  .selbar { left: 50%; max-width: calc(100vw - 2rem); }
+  .selbar .btn svg { display: none; }
   .player { grid-template-columns: minmax(0, 1fr) auto; gap: var(--s3); padding: var(--s3) var(--s4); }
   .extra, .prog, .ctl .sec { display: none; }
 }
@@ -565,9 +807,9 @@ a.ar:where([href]) { color: var(--graphite); }
    controls and panels become superellipses with the radii scaled by 1.6 so
    the corner reads the same size. Pills and circles stay round. */
 @supports (corner-shape: squircle) {
-  .np-cover, .np-cover img, .side-cover, .fav-ic, .tcov-img, .ticon, .mi-cover, .blk { corner-shape: squircle; border-radius: calc(var(--r-cover) * 1.6); }
-  .btn, input, textarea, .nav-item, .brand, .mi, .undo, .reveal, .skip-link, kbd { corner-shape: squircle; border-radius: calc(var(--r-control) * 1.6); }
-  .menu, .sheet, .toast, .notice, .login-card { corner-shape: squircle; border-radius: calc(var(--r-panel) * 1.6); }
+  .np-cover, .np-cover img, .side-cover, .fav-ic, .tcov-img, .ticon, .mi-cover, .blk, .th, .art img, .cover, .top-art img, .pick img, .pick .new, .sd-cover { corner-shape: squircle; border-radius: calc(var(--r-cover) * 1.6); }
+  .btn, input, textarea, .nav-item, .brand, .mi, .undo, .reveal, .skip-link, kbd, .searchlink, .pick, .tr:not(.hd):hover, .tr.is-sel { corner-shape: squircle; border-radius: calc(var(--r-control) * 1.6); }
+  .menu, .sheet, .toast, .notice, .login-card, .topcard, .selbar, .bigsearch input { corner-shape: squircle; border-radius: calc(var(--r-panel) * 1.6); }
 }
 
 /* 15. Sign in (login.html): the sidebar's lockup, larger, over a solid card

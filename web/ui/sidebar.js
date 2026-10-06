@@ -90,8 +90,9 @@ export async function reload(isAdmin = !$('#nav-admin').hidden) {
 
 // ---- New playlist ----------------------------------------------------------
 
-// Opens the sheet and creates the playlist; a new playlist opens on its page.
-export function newPlaylist() {
+// Opens the sheet and creates the playlist; a new playlist opens on its page,
+// unless the caller says what to do with it (a menu adding songs to it).
+export function newPlaylist(onCreated = playlist => navigate(`/playlists/${playlist.id}`)) {
   const dialog = openSheet('t-sheet-new-playlist');
   const form = $('form', dialog);
   form.addEventListener('submit', async event => {
@@ -106,7 +107,7 @@ export function newPlaylist() {
       const playlist = await api.post('/playlists', { name, description: form.elements.description.value.trim() });
       dialog.close('create');
       await reload();
-      navigate(`/playlists/${playlist.id}`);
+      onCreated(playlist);
     } catch (error) {
       toast({ title: 'Couldn’t create the playlist', sub: error.message, badge: 'alert', error: true });
     }
@@ -137,7 +138,7 @@ export async function init(me) {
   showCollapsed();
   document.addEventListener('route', event => setCurrent(event.detail.path));
 
-  $('#new-playlist').addEventListener('click', newPlaylist);
+  $('#new-playlist').addEventListener('click', () => newPlaylist());
   $('#theme-toggle').addEventListener('click', () => {
     root.dataset.theme = root.dataset.theme === 'light' ? 'dark' : 'light';
     remember('vibrance.theme', root.dataset.theme);
