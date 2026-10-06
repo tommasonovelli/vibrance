@@ -86,8 +86,11 @@ jobs:
             || fail "commit ${GITHUB_SHA} of tag ${tag} is not on main: release only commits of main"
 
           # compose.yaml runs exactly the image this release publishes.
+          # Interpolated with an empty environment: the Compose v2 of the
+          # runner cannot read the short volume syntax `${VAR:-x}:/path`
+          # without interpolating it.
           image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/vibrance"
-          model="$(docker compose -f compose.yaml config --no-interpolate --format json)" \
+          model="$(docker compose --env-file /dev/null -f compose.yaml config --format json)" \
             || fail "compose.yaml does not load (docker compose config)"
           vibrance_image="$(jq -r '.services.vibrance.image' <<<"${model}")"
           [[ "${vibrance_image}" == "${image}:${version}" ]] \
@@ -318,7 +321,7 @@ jobs:
           [[ "$(grep -cFx "${from}" compose.yaml)" == 1 ]] \
             || { printf '::error::compose.yaml has not exactly one line %s\n' "${from}"; exit 1; }
           awk -v from="${from}" -v to="${from}@${DIGEST}" '$0 == from { $0 = to } { print }' compose.yaml >"${assets}/compose.yaml"
-          pinned="$(docker compose -f "${assets}/compose.yaml" config --no-interpolate --format json | jq -r '.services.vibrance.image')"
+          pinned="$(docker compose --env-file /dev/null -f "${assets}/compose.yaml" config --format json | jq -r '.services.vibrance.image')"
           [[ "${pinned}" == "${IMAGE}:${VERSION}@${DIGEST}" ]] \
             || { printf '::error::the vibrance service of the released compose.yaml runs %s\n' "${pinned}"; exit 1; }
           diff compose.yaml "${assets}/compose.yaml" || true
