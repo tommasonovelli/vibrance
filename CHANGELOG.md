@@ -31,6 +31,7 @@ The first release. Vibrance runs next to Vibrance MusicLib 1.2.0 in one Docker C
 - Search does not segment Chinese or Japanese text, and has no tolerance for typing mistakes.
 - In a lyrics file a time tag of three numbers without a point, `[mm:ss:xx]`, is read as minutes, seconds and fraction: a file that writes hours without a fraction, `[hh:mm:ss]`, gets wrong times.
 - Only Linux amd64 with Docker Engine and local ext4 storage is supported, as for MusicLib.
+- This release was tested only on Docker Desktop for Windows, not yet on a native Linux Docker Engine, which is the platform it supports: there the quality gate, the contract suite with the real MusicLib 1.2.0 (twice in a row), the stack smoke test, `govulncheck` and the image build all passed.
 - Vibrance 0.1.0 is built with Go 1.25.14, to stay on the same pinned toolchain as MusicLib 1.2.0. It is the last release of the Go 1.25 series, which the Go project no longer supports. No known vulnerability reaches Vibrance's code at the time of the release (`govulncheck`); a later release moves to a supported Go.
 
 [Unreleased]: https://github.com/tommasonovelli/vibrance/compare/v0.1.0...HEAD

@@ -67,12 +67,15 @@ strip_blocks() {
     }' "$1"
 }
 
-# Prints Compose's model of a Compose file, not interpolated, without the
-# entries of Vibrance: the service `vibrance` and the two volumes. Nothing is
-# created: `config` only reads the files.
+# Prints Compose's model of a Compose file, without the entries of Vibrance:
+# the service `vibrance` and the two volumes. The model is interpolated with
+# an empty environment, so every variable takes its default: older Compose v2
+# releases (v2.33, on GitHub's runners) cannot read the short volume syntax
+# `${VAR:-x}:/path` without interpolating it. Nothing is created: `config`
+# only reads the files.
 model() {
   docker compose --project-name vibrance-dev --project-directory "${work}" \
-    --env-file "${work}/empty.env" -f "$1" config --no-interpolate |
+    --env-file "${work}/empty.env" -f "$1" config |
     awk '
       /^[^ ]/ { section = $0; skip = 0 }
       /^  [^ ]/ {
