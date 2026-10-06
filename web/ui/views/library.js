@@ -1,12 +1,12 @@
 // The Library: every song (GET /tracks, sorted), or the favorites of the
 // person (the tab beside it). The list loads page by page as it is scrolled.
 import { api, optional, walk } from '../api.js';
-import { $, clone, emptyState, errorNotice, openMenu, pageHead, setTitle, show } from '../ui.js';
+import { $, clone, emptyState, errorNotice, number, openMenu, pageHead, setTitle, show } from '../ui.js';
+import { adminLine } from '../status.js';
 import * as act from '../actions.js';
 import { listHead, pager, trackList } from '../list.js';
 
 const SORTS = [['title', 'Title'], ['artist', 'Artist'], ['album', 'Album'], ['added', 'Recently added']];
-const number = new Intl.NumberFormat('en');
 // "Recently added" reads newest first; the others, A to Z.
 const firstOrder = sort => (sort === 'added' ? 'desc' : 'asc');
 
@@ -24,7 +24,8 @@ export async function render(main, params, signal) {
   let total = null, emptied = false;
   let list, run;
   const host = $('.list', view);
-  const context = () => (favorites ? { type: 'favorites', id: null, name: 'Favorites' } : { type: 'library', id: null, name: 'Library', sort, order });
+  // `after` is where the pages loaded so far end: the player asks for the songs that follow when its queue runs low.
+  const context = () => (favorites ? { type: 'favorites', id: null, name: 'Favorites' } : { type: 'library', id: null, name: 'Library', sort, order, after: pg?.next() ?? null });
   const noun = n => (favorites ? (n === 1 ? 'favorite' : 'favorites') : (n === 1 ? 'song' : 'songs'));
 
   // The count: the server's summary if it has one, otherwise nothing.
@@ -82,9 +83,11 @@ export async function render(main, params, signal) {
 
   function empty() {
     emptied = true;
-    host.replaceChildren(favorites
+    const state = favorites
       ? emptyState({ icon: 'heart', title: 'No favorites yet', text: 'Select the heart next to a song to keep it here.', link: { href: '/', label: 'Go to Library' } })
-      : emptyState({ icon: 'library', title: 'The library is empty', text: 'Ask the person who runs this server to add music with MusicLib.' }));
+      : emptyState({ icon: 'library', title: 'The library is empty', text: 'Ask the person who runs this server to add music with MusicLib.' });
+    if (!favorites) adminLine(state); // admins also see the scanner's state
+    host.replaceChildren(state);
     for (const control of view.querySelectorAll('.play-xl, .shuffle, .sort, .count')) show(control, false);
   }
 

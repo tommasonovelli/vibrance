@@ -1,9 +1,9 @@
 // The artists, A to Z: a round monogram and the name, as many as there are.
 import { api, optional } from '../api.js';
-import { $, clone, emptyState, pageHead, show } from '../ui.js';
+import { $, clone, emptyState, pageHead, plural, show } from '../ui.js';
+import { adminLine } from '../status.js';
 import { grid, listHead, pager, personCard } from '../list.js';
 
-const number = new Intl.NumberFormat('en');
 
 export async function render(main, params, signal) {
   listHead(pageHead(main, 'Artists'));
@@ -12,7 +12,7 @@ export async function render(main, params, signal) {
   const count = $('.count', view);
   optional(api.get('/catalog/summary', null, { signal })).then(summary => {
     if (!summary) return;
-    count.textContent = `${number.format(summary.artists)} ${summary.artists === 1 ? 'artist' : 'artists'}`;
+    count.textContent = plural(summary.artists, 'artist');
     show(count, true);
   }).catch(() => {});
 
@@ -32,6 +32,8 @@ export async function render(main, params, signal) {
   });
   await pg.first;
   if (!people.children.length) {
-    $('.list', view).replaceChildren(emptyState({ icon: 'artist', title: 'No artists yet', text: 'Ask the person who runs this server to add music with MusicLib.' }));
+    const state = emptyState({ icon: 'artist', title: 'No artists yet', text: 'Ask the person who runs this server to add music with MusicLib.' });
+    adminLine(state);
+    $('.list', view).replaceChildren(state);
   }
 }

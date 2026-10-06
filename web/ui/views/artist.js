@@ -1,11 +1,10 @@
 // One artist: a circle split between two covers (there are no pictures of
 // artists), its albums, and its songs.
 import { api, optional } from '../api.js';
-import { $, clone, emptyState, formatLength, openMenu, setCover, setTitle, show } from '../ui.js';
+import { $, clone, emptyState, formatLength, openMenu, plural, setCover, setTitle, show } from '../ui.js';
 import * as act from '../actions.js';
 import { albumCard, cardActions, grid, trackList } from '../list.js';
 
-const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const SHOWN = 6; // songs before "Show all"
 
 export async function render(main, params, signal) {

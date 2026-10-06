@@ -1,11 +1,11 @@
 // The albums as a grid of covers, in the order the person picks (the URL
 // keeps it, so Back and a reload come back to the same view).
 import { api, optional } from '../api.js';
-import { $, clone, emptyState, errorNotice, pageHead, show } from '../ui.js';
+import { $, clone, emptyState, errorNotice, pageHead, plural, show } from '../ui.js';
+import { adminLine } from '../status.js';
 import { albumCard, cardActions, grid, listHead, pager } from '../list.js';
 
 const SORTS = [['title', 'Title'], ['artist', 'Artist'], ['year', 'Year'], ['added', 'Recently added']];
-const number = new Intl.NumberFormat('en');
 const firstOrder = sort => (sort === 'added' ? 'desc' : 'asc');
 
 export async function render(main, params, signal) {
@@ -21,7 +21,7 @@ export async function render(main, params, signal) {
   const count = $('.count', view);
   optional(api.get('/catalog/summary', null, { signal })).then(summary => {
     if (!summary) return;
-    count.textContent = `${number.format(summary.albums)} ${summary.albums === 1 ? 'album' : 'albums'} · ${number.format(summary.artists)} ${summary.artists === 1 ? 'artist' : 'artists'}`;
+    count.textContent = `${plural(summary.albums, 'album')} · ${plural(summary.artists, 'artist')}`;
     show(count, true);
   }).catch(() => {});
 
@@ -66,7 +66,9 @@ export async function render(main, params, signal) {
       return;
     }
     if (!stop.aborted && !albums.children.length) {
-      host.replaceChildren(emptyState({ icon: 'album', title: 'No albums yet', text: 'Ask the person who runs this server to add music with MusicLib.' }));
+      const state = emptyState({ icon: 'album', title: 'No albums yet', text: 'Ask the person who runs this server to add music with MusicLib.' });
+      adminLine(state);
+      host.replaceChildren(state);
     }
   }
 

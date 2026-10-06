@@ -1,9 +1,15 @@
-// Boot: who is signed in, the sidebar, the page of the address, the keys
-// that work everywhere. Nothing else lives here.
+// Boot: who is signed in, the sidebar, the player bar and its queue, the page
+// of the address, the keys that work everywhere. Nothing else lives here.
 import { api } from './api.js';
 import { $, errorNotice } from './ui.js';
 import * as router from './router.js';
 import * as sidebar from './sidebar.js';
+import * as player from './player.js';
+import { initBar } from './bar.js';
+import { initQueue } from './queue.js';
+import { initShortcuts } from './shortcuts.js';
+import { loadSettings } from './settings.js';
+import * as status from './status.js';
 
 // Each path and the module of its view, loaded when first needed.
 const routes = {
@@ -45,6 +51,7 @@ function keys() {
 
 async function boot() {
   const main = $('#main');
+  router.warm(routes, location.pathname);
   let me;
   try {
     me = await api.get('/me'); // a 401 sends the browser to /login by itself
@@ -53,7 +60,15 @@ async function boot() {
     return;
   }
   sidebar.init(me);
+  status.init(me); // the library of an admin, and the banner for everyone
+  initBar();
+  initQueue();
   keys();
+  initShortcuts();
+  // What was playing comes back paused, and the preferences of this person
+  // arrive; neither holds up the page (only Now playing waits for the song).
+  player.restore();
+  loadSettings();
   router.start(routes, main);
 }
 

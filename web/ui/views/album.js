@@ -1,11 +1,10 @@
 // One album: its cover as a colour field behind the head, the songs by disc,
 // and what else the artist has.
-import { api, coverUrl } from '../api.js';
-import { $, clone, emptyState, formatLength, openMenu, setCover, setTitle, show } from '../ui.js';
+import { api } from '../api.js';
+import { $, clone, emptyState, formatLength, openMenu, plural, setCover, setTitle, show } from '../ui.js';
 import * as act from '../actions.js';
 import { albumCard, albumContext, cardActions, grid, trackList } from '../list.js';
 
-const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const minutes = ms => {
   const min = Math.round(ms / 60000);
   return min < 60 ? plural(min, 'minute') : formatLength(ms);

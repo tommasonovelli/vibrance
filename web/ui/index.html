@@ -8,6 +8,20 @@
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="preload" href="/fonts/hanken-grotesk-v12-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/app.css">
+<!-- The modules app.js imports, and list.js that most pages import, are asked for
+     now, side by side, not one level of imports at a time. Keep in step with the imports. -->
+<link rel="modulepreload" href="/api.js">
+<link rel="modulepreload" href="/ui.js">
+<link rel="modulepreload" href="/router.js">
+<link rel="modulepreload" href="/sidebar.js">
+<link rel="modulepreload" href="/player.js">
+<link rel="modulepreload" href="/bar.js">
+<link rel="modulepreload" href="/queue.js">
+<link rel="modulepreload" href="/shortcuts.js">
+<link rel="modulepreload" href="/settings.js">
+<link rel="modulepreload" href="/status.js">
+<link rel="modulepreload" href="/actions.js">
+<link rel="modulepreload" href="/list.js">
 <script type="module" src="/app.js"></script>
 </head>
 <body>
@@ -90,38 +104,41 @@
 </nav>
 
 <div class="shell">
+<!-- One banner for what concerns every page: offline, no answer, and (for an
+     admin) the library updating, in maintenance or away. status.js fills it. -->
+<div id="banner" class="banner" hidden><span class="banner-msg"><span class="dot" aria-hidden="true"></span><span class="banner-text"></span></span><a class="banner-link" href="/admin" hidden>Administration</a><button class="btn banner-retry" type="button" hidden>Try now</button></div>
 <div class="cols">
 <main id="main" class="page" tabindex="-1"></main>
-<aside id="queue" class="queue" aria-label="Queue" hidden></aside>
+<aside id="queue" class="queue" aria-label="Queue"></aside>
 </div>
 
 <div id="toasts" class="toasts"></div>
 
 <footer id="player" class="player" aria-label="Player" data-state="idle">
 <div class="np">
-<span class="np-cover"><img id="np-cover" alt="" width="56" height="56" hidden></span>
+<a class="np-cover" href="/now-playing" aria-label="Open Now playing"><img id="np-cover" alt="" width="56" height="56" hidden></a>
 <span class="tt"><a class="nm" id="np-title">Nothing playing</a><a class="ar" id="np-artist" hidden></a></span>
-<button class="iconbtn heart" id="np-heart" type="button" aria-label="Add to favorites" aria-pressed="false" hidden><svg class="i" aria-hidden="true"><use href="#i-heart"/></svg></button>
+<button class="iconbtn heart" id="np-heart" type="button" data-act="heart" aria-label="Add to favorites" aria-pressed="false" hidden><svg class="i" aria-hidden="true"><use href="#i-heart"/></svg></button>
 </div>
 <div class="ctl">
 <div class="btns">
-<button class="iconbtn sec" id="btn-shuffle" type="button" aria-label="Shuffle" aria-pressed="false"><svg class="i" aria-hidden="true"><use href="#i-shuffle"/></svg></button>
-<button class="iconbtn skip" id="btn-previous" type="button" aria-label="Previous" disabled><svg class="i f" aria-hidden="true"><use href="#i-previous"/></svg></button>
-<button class="pp" id="btn-play" type="button" aria-label="Play" disabled><svg class="i f is-play" aria-hidden="true"><use href="#i-play"/></svg><svg class="i f is-pause" aria-hidden="true"><use href="#i-pause"/></svg></button>
-<button class="iconbtn skip" id="btn-next" type="button" aria-label="Next" disabled><svg class="i f" aria-hidden="true"><use href="#i-next"/></svg></button>
-<button class="iconbtn sec" id="btn-repeat" type="button" aria-label="Repeat off" aria-pressed="false"><svg class="i" aria-hidden="true"><use href="#i-repeat"/></svg><span class="one" aria-hidden="true" hidden>1</span></button>
+<button class="iconbtn sec" type="button" data-act="shuffle" aria-label="Shuffle" aria-pressed="false"><svg class="i" aria-hidden="true"><use href="#i-shuffle"/></svg></button>
+<button class="iconbtn skip" type="button" data-act="previous" aria-label="Previous" disabled><svg class="i f" aria-hidden="true"><use href="#i-previous"/></svg></button>
+<button class="pp" type="button" data-act="play" aria-label="Play" disabled><svg class="i f is-play" aria-hidden="true"><use href="#i-play"/></svg><svg class="i f is-pause" aria-hidden="true"><use href="#i-pause"/></svg></button>
+<button class="iconbtn skip" type="button" data-act="next" aria-label="Next" disabled><svg class="i f" aria-hidden="true"><use href="#i-next"/></svg></button>
+<button class="iconbtn sec" type="button" data-act="repeat" aria-label="Repeat off" aria-pressed="false"><svg class="i" aria-hidden="true"><use href="#i-repeat"/></svg><span class="one" aria-hidden="true" hidden>1</span></button>
 </div>
 <div class="prog">
-<span id="time-now">0:00</span>
-<span class="bar" id="seek" role="slider" tabindex="-1" aria-label="Seek" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="0:00" aria-disabled="true"><span class="fl"></span><span class="kn"></span><span class="tip">0:00</span></span>
-<span id="time-total">0:00</span>
+<span data-time="now">0:00</span>
+<span class="bar" data-slider="seek" role="slider" tabindex="-1" aria-label="Seek" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="0:00" aria-disabled="true"><span class="fl"></span><span class="kn"></span><span class="tip">0:00</span></span>
+<span data-time="total">0:00</span>
 </div>
 </div>
 <div class="extra">
-<button class="iconbtn" id="btn-lyrics" type="button" aria-label="Lyrics" aria-pressed="false" disabled><svg class="i" aria-hidden="true"><use href="#i-lyrics"/></svg></button>
-<button class="iconbtn" id="btn-queue" type="button" aria-label="Queue" aria-pressed="false" aria-controls="queue"><svg class="i" aria-hidden="true"><use href="#i-queue"/></svg></button>
-<button class="iconbtn" id="btn-mute" type="button" aria-label="Mute"><svg class="i" aria-hidden="true"><use href="#i-volume"/></svg></button>
-<span class="bar vol" id="volume" role="slider" tabindex="0" aria-label="Volume" aria-valuemin="0" aria-valuemax="100" aria-valuenow="70" aria-valuetext="70%"><span class="fl"></span><span class="kn"></span></span>
+<button class="iconbtn" type="button" data-act="lyrics" aria-label="Lyrics" disabled><svg class="i" aria-hidden="true"><use href="#i-lyrics"/></svg></button>
+<button class="iconbtn" id="btn-queue" type="button" data-act="queue" aria-label="Queue" aria-pressed="false" aria-controls="queue"><svg class="i" aria-hidden="true"><use href="#i-queue"/></svg></button>
+<button class="iconbtn" type="button" data-act="mute" aria-label="Mute"><svg class="i" aria-hidden="true"><use href="#i-volume"/></svg></button>
+<span class="bar vol" data-slider="volume" role="slider" tabindex="0" aria-label="Volume" aria-valuemin="0" aria-valuemax="100" aria-valuenow="70" aria-valuetext="70%"><span class="fl"></span><span class="kn"></span></span>
 <a class="iconbtn" id="btn-now" href="/now-playing" aria-label="Now playing, full screen"><svg class="i" aria-hidden="true"><use href="#i-expand"/></svg></a>
 </div>
 </footer>
@@ -135,7 +152,7 @@
 
 <template id="t-page-head"><header class="head"><h1 class="title"></h1><div class="head-tools"></div></header></template>
 
-<template id="t-empty"><div class="empty"><span class="mark"><svg class="i" aria-hidden="true"><use href="#i-info"/></svg></span><h2 class="empty-title"></h2><p class="empty-text" hidden></p><a class="empty-link" hidden></a></div></template>
+<template id="t-empty"><div class="empty"><span class="mark"><svg class="i" aria-hidden="true"><use href="#i-info"/></svg></span><h2 class="empty-title"></h2><p class="empty-text" hidden></p><a class="empty-link" hidden></a><button class="btn btn-primary empty-action" type="button" hidden></button></div></template>
 
 <template id="t-error"><div class="notice" role="alert"><div class="notice-head"><svg class="i" aria-hidden="true"><use href="#i-alert"/></svg><span class="notice-text"></span></div><details class="details"><summary>Details</summary><pre></pre></details><div><button class="btn notice-retry" type="button">Try now</button></div></div></template>
 
@@ -170,33 +187,38 @@
 <template id="t-searchlink"><a class="searchlink" href="/search"><svg class="i" aria-hidden="true"><use href="#i-search"/></svg><span>Search songs, albums, artists</span><kbd>Ctrl K</kbd></a></template>
 
 <template id="t-track"><div class="tr" role="row" tabindex="-1" draggable="true">
+<span class="grip" aria-hidden="true" title="Drag to reorder"><svg class="i f sm"><use href="#i-grip"/></svg></span>
 <span class="no" role="cell"><span class="n"></span><span class="eq" role="img" aria-label="Playing" hidden><i></i><i></i><i></i></span><svg class="i f sm pl" aria-hidden="true"><use href="#i-play"/></svg></span>
 <span class="t" role="cell"><img class="th" alt="" width="40" height="40" loading="lazy" decoding="async" draggable="false"><span class="tt"><span class="nm"></span><a class="ar"></a></span></span>
 <a class="c c-artist" role="cell"></a>
 <a class="c c-album" role="cell"></a>
 <span class="c c-genre" role="cell"></span>
+<span class="c c-added" role="cell"></span>
 <span class="lyr" role="cell"></span>
 <button class="iconbtn heart" type="button" aria-label="Add to favorites"><svg class="i" aria-hidden="true"><use href="#i-heart"/></svg></button>
 <span class="tm" role="cell"></span>
 <button class="dots" type="button" aria-haspopup="menu" aria-label="More actions"></button>
 </div></template>
 
-<template id="t-track-head"><div class="tr hd" role="row"><span class="no">#</span><span>Title</span><span class="c-album">Album</span><span class="c-genre">Genre</span><span class="heart-col"></span><span class="tm"><svg class="i sm" role="img" aria-label="Duration"><use href="#i-clock"/></svg></span><span></span></div></template>
+<template id="t-track-head"><div class="tr hd" role="row"><span class="grip"></span><span class="no">#</span><span>Title</span><span class="c-album">Album</span><span class="c-genre">Genre</span><span class="c-added">Added</span><span class="heart-col"></span><span class="tm"><svg class="i sm" role="img" aria-label="Duration"><use href="#i-clock"/></svg></span><span></span></div></template>
 
-<template id="t-selbar"><div class="selbar" role="toolbar" aria-label="Selected songs">
+<template id="t-selbar"><x-selbar class="selbar" role="toolbar" aria-label="Selected songs">
 <span class="sel-count"></span>
 <button class="btn" type="button" data-act="next"><svg class="i" aria-hidden="true"><use href="#i-play-next"/></svg>Play next</button>
 <button class="btn" type="button" data-act="queue"><svg class="i" aria-hidden="true"><use href="#i-queue"/></svg>Add to queue</button>
 <button class="btn" type="button" data-act="playlist"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>Add to playlist…</button>
+<button class="btn" type="button" data-act="remove" hidden><svg class="i" aria-hidden="true"><use href="#i-remove"/></svg>Remove from playlist</button>
 <button class="btn sel-fav" type="button" data-act="fav"><svg class="i" aria-hidden="true"><use href="#i-heart"/></svg><span>Add to favorites</span></button>
 <button class="iconbtn" type="button" data-act="clear" aria-label="Clear selection"><svg class="i sm" aria-hidden="true"><use href="#i-close"/></svg></button>
-</div></template>
+</x-selbar></template>
 
 <template id="t-ghost"><span class="ghost" aria-hidden="true"><svg class="i sm"><use href="#i-plus"/></svg><span></span></span></template>
 
 <template id="t-more"><div class="more"><p class="note more-text"></p><button class="link" type="button">Couldn’t load more. Try again</button></div></template>
 
 <template id="t-ph-rows"><div class="ph" aria-hidden="true"><div class="ph-row"><i class="blk"></i><i class="blk"></i><i class="blk"></i></div><div class="ph-row"><i class="blk"></i><i class="blk"></i><i class="blk"></i></div><div class="ph-row"><i class="blk"></i><i class="blk"></i><i class="blk"></i></div></div></template>
+
+<template id="t-ph-page"><div class="ph-page" aria-hidden="true"><i class="blk ph-title"></i><div class="ph"><div class="ph-row"><i class="blk"></i><i class="blk"></i><i class="blk"></i></div><div class="ph-row"><i class="blk"></i><i class="blk"></i><i class="blk"></i></div><div class="ph-row"><i class="blk"></i><i class="blk"></i><i class="blk"></i></div><div class="ph-row"><i class="blk"></i><i class="blk"></i><i class="blk"></i></div></div></div></template>
 
 <template id="t-ph-grid"><div class="grid ph" aria-hidden="true"><div class="ph-card"><i class="blk"></i><i class="blk"></i><i class="blk"></i></div><div class="ph-card"><i class="blk"></i><i class="blk"></i><i class="blk"></i></div><div class="ph-card"><i class="blk"></i><i class="blk"></i><i class="blk"></i></div><div class="ph-card"><i class="blk"></i><i class="blk"></i><i class="blk"></i></div></div></template>
 
@@ -302,6 +324,258 @@
 <div class="actions"><button class="btn dl" type="button"><svg class="i" aria-hidden="true"><use href="#i-download"/></svg>Download file</button><button class="btn" type="button" value="close" data-close autofocus>Close</button></div>
 </div></dialog></template>
 
+<!-- Round 3: the queue, Now playing and the shortcuts sheet. -->
+
+<template id="t-queue"><div class="q">
+<div class="qh"><h2 class="q-title">Queue</h2><button class="link q-save" type="button" hidden>Save as playlist</button><button class="iconbtn q-close" type="button" aria-label="Close queue"><svg class="i" aria-hidden="true"><use href="#i-close"/></svg></button></div>
+<div class="q-body"></div>
+<div class="q-drop" aria-hidden="true" hidden></div>
+</div></template>
+
+<template id="t-qcap"><div class="qcap"><span></span><button class="link" type="button">Clear</button></div></template>
+
+<template id="t-qi"><div class="qi" role="listitem">
+<span class="grip" aria-hidden="true" title="Drag to reorder"><svg class="i f sm"><use href="#i-grip"/></svg></span>
+<img class="qcov" alt="" width="40" height="40" loading="lazy" decoding="async" draggable="false">
+<span class="tt"><span class="nm"></span><span class="ar"></span></span>
+<span class="tm"></span>
+<button class="iconbtn x" type="button" aria-label="Remove from the queue"><svg class="i sm" aria-hidden="true"><use href="#i-close"/></svg></button>
+</div></template>
+
+<template id="t-q-end"><div class="qend"><div class="q-notes"></div><button class="btn q-save" type="button" hidden><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>Save queue as playlist</button></div></template>
+
+<template id="t-q-ended"><div class="ended"><h3></h3><p class="q-end-text"></p><div class="actions"><button class="btn q-again" type="button"><svg class="i" aria-hidden="true"><use href="#i-repeat"/></svg>Play again</button><button class="btn q-shuffle" type="button"><svg class="i" aria-hidden="true"><use href="#i-shuffle"/></svg><span>Shuffle</span></button></div></div></template>
+
+<template id="t-now"><div class="now" data-state="idle">
+<div class="now-top">
+<button class="now-close" type="button" aria-label="Close Now playing (Esc)"><svg class="i" aria-hidden="true"><use href="#i-chevron-down"/></svg>Close</button>
+<div class="now-from" hidden><div class="cap">Playing from</div><a></a></div>
+<button class="dots now-dots" type="button" aria-haspopup="menu" aria-label="More actions"></button>
+</div>
+<div class="now-body">
+<section class="now-song" aria-label="Song">
+<img class="now-cover" alt="" width="400" height="400">
+<div class="now-info">
+<div class="now-text">
+<h1 class="now-title"></h1>
+<a class="now-artist"></a>
+<div class="now-album"><a></a><span class="now-year"></span></div>
+<div class="now-badges"></div>
+</div>
+<button class="iconbtn heart" type="button" data-act="heart" aria-label="Add to favorites" aria-pressed="false"><svg class="i" aria-hidden="true"><use href="#i-heart"/></svg></button>
+</div>
+</section>
+<section class="now-lyr" aria-label="Lyrics" hidden>
+<div class="ly-list" tabindex="-1"></div>
+<div class="ly-foot"><button class="now-pill" type="button" hidden><svg class="i sm" aria-hidden="true"><use href="#i-chevron-down"/></svg>Back to current line</button><span class="ly-note"></span></div>
+</section>
+<aside class="now-queue" aria-label="Up next"></aside>
+</div>
+<div class="now-transport">
+<div class="now-prog"><span data-time="now">0:00</span><span class="bar" data-slider="seek" role="slider" tabindex="-1" aria-label="Seek" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0" aria-valuetext="0:00" aria-disabled="true"><span class="fl"></span><span class="kn"></span><span class="tip">0:00</span></span><span data-time="total">0:00</span></div>
+<div class="now-left">
+<button class="iconbtn" type="button" data-act="lyrics" aria-label="Hide lyrics"><svg class="i" aria-hidden="true"><use href="#i-lyrics"/></svg></button>
+<button class="iconbtn" type="button" data-act="queue" aria-label="Hide queue"><svg class="i" aria-hidden="true"><use href="#i-queue"/></svg></button>
+</div>
+<div class="now-btns">
+<button class="iconbtn" type="button" data-act="shuffle" aria-label="Shuffle" aria-pressed="false"><svg class="i" aria-hidden="true"><use href="#i-shuffle"/></svg></button>
+<button class="iconbtn skip" type="button" data-act="previous" aria-label="Previous"><svg class="i f" aria-hidden="true"><use href="#i-previous"/></svg></button>
+<button class="bigplay" type="button" data-act="play" aria-label="Play"><svg class="i f is-play" aria-hidden="true"><use href="#i-play"/></svg><svg class="i f is-pause" aria-hidden="true"><use href="#i-pause"/></svg></button>
+<button class="iconbtn skip" type="button" data-act="next" aria-label="Next"><svg class="i f" aria-hidden="true"><use href="#i-next"/></svg></button>
+<button class="iconbtn" type="button" data-act="repeat" aria-label="Repeat off" aria-pressed="false"><svg class="i" aria-hidden="true"><use href="#i-repeat"/></svg><span class="one" aria-hidden="true" hidden>1</span></button>
+</div>
+<div class="now-right">
+<button class="iconbtn" type="button" data-act="mute" aria-label="Mute"><svg class="i" aria-hidden="true"><use href="#i-volume"/></svg></button>
+<span class="bar vol" data-slider="volume" role="slider" tabindex="0" aria-label="Volume" aria-valuemin="0" aria-valuemax="100" aria-valuenow="70" aria-valuetext="70%"><span class="fl"></span><span class="kn"></span></span>
+<button class="iconbtn" type="button" data-act="fullscreen" aria-label="Use the whole screen" title="Use the whole screen (F)"><svg class="i" aria-hidden="true"><use href="#i-expand"/></svg></button>
+</div>
+</div>
+</div></template>
+
+<template id="t-sheet-keys"><dialog class="sheet sheet-keys"><div class="sheet-form">
+<div class="keys-head"><h2 class="sheet-title">Keyboard shortcuts</h2><button class="btn" type="button" data-close>Close</button></div>
+<div class="kcols">
+<div>
+<h3 class="kh">Playback</h3>
+<div class="krow"><span>Play or pause</span><span class="keys"><kbd>Space</kbd></span></div>
+<div class="krow"><span>Next song</span><span class="keys"><kbd>Ctrl</kbd><kbd>→</kbd></span></div>
+<div class="krow"><span>Previous song</span><span class="keys"><kbd>Ctrl</kbd><kbd>←</kbd></span></div>
+<div class="krow"><span>Back or forward 5 seconds, on the progress bar</span><span class="keys"><kbd>←</kbd><kbd>→</kbd></span></div>
+<div class="krow"><span>Forward or back 30 seconds, on the progress bar</span><span class="keys"><kbd>Page Up</kbd><kbd>Page Down</kbd></span></div>
+<div class="krow"><span>Media keys of the keyboard and headphones</span><span class="keys"><kbd>⏯</kbd><kbd>⏭</kbd></span></div>
+</div>
+<div>
+<h3 class="kh">Moving around</h3>
+<div class="krow"><span>Search</span><span class="keys"><kbd>Ctrl</kbd><kbd>K</kbd></span></div>
+<div class="krow"><span>Play from the selected song</span><span class="keys"><kbd>Enter</kbd></span></div>
+<div class="krow"><span>Select several songs</span><span class="keys"><kbd>Shift</kbd><kbd>Click</kbd></span></div>
+<div class="krow"><span>Close menus, sheets and Now playing</span><span class="keys"><kbd>Esc</kbd></span></div>
+<div class="krow"><span>Show these shortcuts</span><span class="keys"><kbd>?</kbd></span></div>
+<div class="krow"><span id="keys-single">Single-key shortcuts</span><button class="switch" type="button" role="switch" aria-checked="false" aria-labelledby="keys-single"></button></div>
+</div>
+</div>
+<div class="kcols kcols-single off">
+<div>
+<div class="krow"><span>Lyrics</span><span class="keys"><kbd>L</kbd></span></div>
+<div class="krow"><span>Queue</span><span class="keys"><kbd>Q</kbd></span></div>
+<div class="krow"><span>Now playing, whole screen</span><span class="keys"><kbd>F</kbd></span></div>
+</div>
+<div>
+<div class="krow"><span>Shuffle</span><span class="keys"><kbd>S</kbd></span></div>
+<div class="krow"><span>Repeat</span><span class="keys"><kbd>R</kbd></span></div>
+<div class="krow"><span>Mute</span><span class="keys"><kbd>M</kbd></span></div>
+</div>
+</div>
+<p class="note">On a Mac, Cmd takes the place of Ctrl. Single-key shortcuts are off until you turn them on, here or in Account.</p>
+</div></dialog></template>
+
+<!-- Round 4: playlists. -->
+
+<template id="t-new-playlist"><button class="btn btn-primary" type="button"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>New playlist</button></template>
+
+<template id="t-pl-art"><div><div class="mosaic"><img alt="" width="120" height="120" loading="lazy" decoding="async"><img alt="" width="120" height="120" loading="lazy" decoding="async"><img alt="" width="120" height="120" loading="lazy" decoding="async"><img alt="" width="120" height="120" loading="lazy" decoding="async"></div><img class="pl-cover" alt="" width="240" height="240" loading="lazy" decoding="async"><div class="empty-art"><svg class="i" aria-hidden="true"><use href="#i-playlists"/></svg></div></div></template>
+
+<template id="t-playlists"><div>
+<div class="toolbar toolbar-grid">
+<div class="seg" role="radiogroup" aria-label="Sort by"><button type="button" role="radio" data-sort="updated">Recently updated</button><button type="button" role="radio" data-sort="name">Name</button></div>
+<span class="spacer"></span>
+<span class="note count" hidden></span>
+</div>
+<div class="list"></div>
+</div></template>
+
+<template id="t-fav-tile"><article class="card" role="listitem"><a class="glowtile" href="/favorites" aria-label="Favorites"><svg class="i" aria-hidden="true"><use href="#i-heart"/></svg></a><a class="ct" href="/favorites">Favorites</a><div class="cm"></div></article></template>
+
+<template id="t-playlist-card"><article class="card" role="listitem"><div class="art"><a href="" tabindex="-1" aria-hidden="true"></a><button class="cplay" type="button" aria-label="Play"><svg class="i f" aria-hidden="true"><use href="#i-play"/></svg></button><button class="dots cdots" type="button" aria-haspopup="menu" aria-label="More actions"></button></div><a class="ct" href=""></a><div class="cm"></div></article></template>
+
+<template id="t-playlist"><div>
+<a class="backlink" href="/playlists"><svg class="i sm" aria-hidden="true"><use href="#i-chevron-left"/></svg>Playlists</a>
+<div class="pl-head">
+<div class="cover-box"></div>
+<div class="fields">
+<div class="kicker"><svg class="i sm" aria-hidden="true"><use href="#i-lock"/></svg>Private playlist</div>
+<h1 class="pl-title"></h1>
+<p class="desc" hidden></p>
+<p class="meta"></p>
+<div class="hero-actions">
+<button class="play-xl" type="button"><svg class="i f" aria-hidden="true"><use href="#i-play"/></svg></button>
+<button class="btn shuffle" type="button"><svg class="i" aria-hidden="true"><use href="#i-shuffle"/></svg>Shuffle</button>
+<button class="btn edit" type="button"><svg class="i" aria-hidden="true"><use href="#i-edit"/></svg>Edit details</button>
+</div>
+</div>
+<button class="dots head-dots" type="button" aria-haspopup="menu" aria-label="More playlist actions"></button>
+</div>
+<section aria-label="Songs">
+<div class="songs"></div>
+<div class="pl-empty" hidden></div>
+<p class="length"></p>
+</section>
+<section class="find" aria-labelledby="find-title">
+<h2 id="find-title">Find songs for this playlist</h2>
+<p class="note">Search your library and add songs without leaving the page.</p>
+<label class="search"><svg class="i" aria-hidden="true"><use href="#i-search"/></svg><input type="search" placeholder="Search songs" aria-label="Search songs to add" autocomplete="off" maxlength="100"></label>
+<div class="res-list" role="list" aria-label="Songs found"></div>
+</section>
+</div></template>
+
+<template id="t-find-row"><div class="res" role="listitem"><span class="t"><img class="th" alt="" width="40" height="40" loading="lazy" decoding="async"><span class="tt"><span class="nm"></span><span class="ar"></span></span></span><span class="c note"></span><button class="btn add" type="button">Add</button><span class="note added" hidden><svg class="i sm" aria-hidden="true"><use href="#i-check"/></svg>Added</span></div></template>
+
+<template id="t-sheet-edit-playlist"><dialog class="sheet"><form class="sheet-form" method="dialog">
+<h2 class="sheet-title">Edit details</h2>
+<div class="field"><label for="ep-name">Name</label><input id="ep-name" name="name" type="text" maxlength="200" required autocomplete="off"></div>
+<div class="field"><label for="ep-desc">Description <span class="note">optional</span></label><textarea id="ep-desc" name="description" maxlength="2000" placeholder="What is it for?"></textarea></div>
+<div class="actions"><button class="btn" type="button" value="cancel" data-close>Cancel</button><button class="btn btn-primary" type="submit" value="save">Save</button></div>
+</form></dialog></template>
+
+<!-- Round 5: Account, Administration and the library line of an empty page. -->
+<template id="t-admin-line"><p class="status admin-line"><span class="dot" aria-hidden="true"></span><span class="al-text"></span><button class="link" type="button">Scan library</button></p></template>
+
+<template id="t-account"><div class="acct">
+<div>
+<section aria-labelledby="ac-profile">
+<div class="section-head"><h2 id="ac-profile">Profile</h2></div>
+<div class="who"><span class="who-av" aria-hidden="true"></span><div><div class="who-name"></div><div class="who-meta"><span class="badge"></span><span class="note"></span></div></div></div>
+</section>
+<section aria-labelledby="ac-password">
+<div class="section-head"><h2 id="ac-password">Change password</h2></div>
+<form class="form" novalidate>
+<div class="field"><label for="ac-current">Current password</label><input id="ac-current" name="current" type="password" autocomplete="current-password"><span class="field-error" role="alert" hidden></span></div>
+<div class="field"><label for="ac-new">New password</label><input id="ac-new" name="new" type="password" autocomplete="new-password" aria-describedby="ac-new-help"><span class="note" id="ac-new-help">At least 12 characters. Your other sessions are signed out.</span><span class="field-error" role="alert" hidden></span></div>
+<div class="form-row"><button class="btn btn-primary" type="submit">Change password</button><span class="status pw-done" role="status" hidden><span class="dot ok" aria-hidden="true"></span>Password changed</span></div>
+</form>
+</section>
+<section aria-labelledby="ac-playback">
+<div class="section-head"><h2 id="ac-playback">Playback</h2><span class="note ac-saved"></span></div>
+<div class="opt"><div><div class="opt-name" id="ac-leveling">Volume leveling</div><div class="note">Plays every song at a similar loudness. Songs of an album played in order keep the album’s own dynamics.</div></div>
+<div class="seg" role="radiogroup" aria-labelledby="ac-leveling" data-setting="volume_leveling"><button type="button" role="radio" data-value="automatic">Automatic</button><button type="button" role="radio" data-value="off">Off</button></div></div>
+<div class="opt"><div><div class="opt-name" id="ac-single">Single-key shortcuts</div><div class="note">Space always plays and pauses. Turn this on to also use L for lyrics, Q for the queue, S for shuffle, R for repeat and M to mute.</div></div>
+<button class="switch" type="button" role="switch" aria-checked="false" aria-labelledby="ac-single"></button></div>
+<p class="keys-link"><button class="link" type="button">See every keyboard shortcut</button></p>
+</section>
+<section aria-labelledby="ac-look">
+<div class="section-head"><h2 id="ac-look">Appearance</h2></div>
+<div class="opt"><div><div class="opt-name" id="ac-theme">Theme</div><div class="note">Dark is easier at night, light in a bright room.</div></div>
+<div class="seg" role="radiogroup" aria-labelledby="ac-theme" data-setting="theme"><button type="button" role="radio" data-value="dark">Dark</button><button type="button" role="radio" data-value="light">Light</button></div></div>
+</section>
+</div>
+<section aria-labelledby="ac-sessions">
+<div class="section-head"><h2 id="ac-sessions">Where you’re signed in</h2><button class="link danger ac-others" type="button" hidden>Sign out everywhere else</button></div>
+<div class="sessions"></div>
+<p class="note ac-foot">Browser sessions last 30 days, app sign-ins 90 days. Both renew while you use them.</p>
+</section>
+</div></template>
+
+<template id="t-session"><div class="sess"><span class="dev" aria-hidden="true"><svg class="i"><use href="#i-laptop"/></svg></span><div class="sess-text"><div class="sess-name"></div><div class="sess-meta"><span></span><span></span><span></span></div></div><span class="status sess-here" hidden><span class="dot ok" aria-hidden="true"></span>This device</span><button class="btn sess-out" type="button">Sign out</button></div></template>
+
+<template id="t-admin"><div class="admin">
+<section aria-labelledby="ad-library">
+<div class="section-head"><h2 id="ad-library">Library</h2><span class="note">Reads the MusicLib library folder. Nothing here changes your files.</span></div>
+<div class="band">
+<span class="state" role="status"><span class="dot" aria-hidden="true"></span><span class="band-state"></span></span>
+<span class="scanbar" hidden><span class="bar" role="progressbar" aria-label="Albums indexed" aria-valuemin="0"><span class="fl"></span></span><span class="note scan-count"></span></span>
+<span class="note band-note"></span>
+<button class="btn band-scan" type="button"><svg class="i" aria-hidden="true"><use href="#i-refresh"/></svg>Scan library</button>
+</div>
+<div class="stats">
+<div class="stat"><span class="k">Albums</span><span class="v st-albums"></span><span class="note st-albums-note"></span></div>
+<div class="stat"><span class="k">Songs</span><span class="v st-tracks"></span><span class="note st-tracks-note"></span></div>
+<div class="stat"><span class="k">Last scan</span><span class="v st-scan"></span><span class="note st-scan-note"></span></div>
+<div class="stat"><span class="k">MusicLib</span><span class="v st-ml"></span><span class="note st-ml-note"></span></div>
+</div>
+<div class="attention" hidden>
+<div class="section-head"><h3 class="attention-title">Needs attention <span class="note"></span></h3></div>
+<div class="probs"></div>
+</div>
+</section>
+<section aria-labelledby="ad-users" class="admin-users">
+<div class="section-head"><h2 id="ad-users">Users</h2><button class="btn btn-primary new-user" type="button"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>New user</button></div>
+<div class="users" role="table" aria-label="Users">
+<div class="ur hd" role="row"><span role="columnheader">Username</span><span class="c-role" role="columnheader">Role</span><span role="columnheader">Status</span><span class="c-created" role="columnheader">Created</span><span role="columnheader"><span class="sr-only">Actions</span></span></div>
+</div>
+<p class="note">Disabling an account signs it out everywhere. Its playlists and favorites stay until you delete it.</p>
+</section>
+</div></template>
+
+<template id="t-prob"><div class="prob"><span class="dot err" role="img" aria-label="Problem"></span><span class="mono"></span><span class="prob-msg"></span><span class="code"></span></div></template>
+
+<template id="t-user"><div class="ur" role="row"><span class="u-who" role="cell"><span class="u-av" aria-hidden="true"></span><span class="u-text"><span class="u-name"></span><span class="note u-you"></span></span></span><span class="c-role" role="cell"></span><span class="u-state" role="cell"><span class="dot" aria-hidden="true"></span><span class="u-status"></span></span><span class="c-created note" role="cell"></span><span role="cell"><button class="dots" type="button" aria-haspopup="menu"></button></span></div></template>
+
+<template id="t-sheet-new-user"><dialog class="sheet"><form class="sheet-form" method="dialog" novalidate>
+<h2 class="sheet-title">New user</h2>
+<div class="field"><label for="nu-name">Username</label><input id="nu-name" name="username" type="text" maxlength="32" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="anna" aria-describedby="nu-name-help"><span class="note" id="nu-name-help">3 to 32 characters: a–z, 0–9, dot, dash, underscore.</span><span class="field-error" role="alert" hidden></span></div>
+<div class="field"><label for="nu-pw">Password</label><input id="nu-pw" name="password" type="password" autocomplete="new-password" aria-describedby="nu-pw-help"><span class="note" id="nu-pw-help">At least 12 characters. Share it with them yourself.</span><span class="field-error" role="alert" hidden></span></div>
+<div class="field"><span class="field-label" id="nu-role">Role</span><div class="radios" role="radiogroup" aria-labelledby="nu-role"><button class="radio" type="button" role="radio" data-value="user"><b>User</b><span class="note">Listens, keeps favorites and playlists</span></button><button class="radio" type="button" role="radio" data-value="admin"><b>Admin</b><span class="note">Also manages users and the library</span></button></div></div>
+<p class="field-error form-error" role="alert" hidden></p>
+<div class="actions"><button class="btn" type="button" value="cancel" data-close>Cancel</button><button class="btn btn-primary" type="submit" value="create">Create user</button></div>
+</form></dialog></template>
+
+<template id="t-sheet-user-password"><dialog class="sheet"><form class="sheet-form" method="dialog" novalidate>
+<h2 class="sheet-title">Set a new password</h2>
+<p class="sheet-text"></p>
+<div class="field"><label for="up-pw">New password</label><input id="up-pw" name="password" type="password" autocomplete="new-password" aria-describedby="up-pw-help"><span class="note" id="up-pw-help">At least 12 characters. Share it with them yourself.</span><span class="field-error" role="alert" hidden></span></div>
+<div class="actions"><button class="btn" type="button" value="cancel" data-close>Cancel</button><button class="btn btn-primary" type="submit" value="set">Set password</button></div>
+</form></dialog></template>
 
 </body>
 </html>
+

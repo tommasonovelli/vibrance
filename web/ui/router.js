@@ -3,7 +3,7 @@
 // exports `render(main, params, signal)`, where params holds the parts of the
 // path (`:id`), `path` itself and `query` (URLSearchParams), and `signal` aborts when the
 // reader has already gone elsewhere: pass it to the API and stop writing.
-import { announce, errorNotice } from './ui.js';
+import { announce, clone, errorNotice } from './ui.js';
 
 let routes = [];
 let main;
@@ -42,13 +42,20 @@ async function show(href, restore) {
     // The colour field of a head (app.css §11) belongs to the page that set it.
     main.removeAttribute('data-glow');
     main.style.removeProperty('--cover');
-    main.style.removeProperty('--cover-b');
+    for (const name of ['--cover-b', '--cover-c', '--cover-d']) main.style.removeProperty(name);
+    // A view that has shown nothing after a second (it reads before it draws)
+    // gets still blocks where it will land, no spinner, no shimmer.
+    const late = setTimeout(() => { if (!main.children.length) main.append(clone('t-ph-page')); }, 1000);
     try {
       const view = await (found ? found.route.load() : import('./views/not-found.js'));
+      if (signal.aborted) return; // the reader went elsewhere while the module came: it would draw into the next page
       await view.render(main, params, signal);
     } catch (error) {
       if (signal.aborted || error.name === 'AbortError') return;
       main.append(errorNotice(error, () => show(href)));
+    } finally {
+      clearTimeout(late);
+      if (!signal.aborted) main.querySelector(':scope > .ph-page')?.remove();
     }
   };
   let work;
@@ -65,18 +72,25 @@ async function show(href, restore) {
   main.removeAttribute('aria-busy');
   scrollTo(0, restore ? restore.y : 0);
   if (!first) {
-    main.focus({ preventScroll: true });
+    // A view that put the focus in one of its fields (Search, an empty playlist) keeps it.
+    if (!main.contains(document.activeElement)) main.focus({ preventScroll: true });
     announce(document.title);
   }
   first = false;
+}
+
+// Starts loading the module of a path before the router starts: the code of
+// the first page travels while the session is checked.
+export function warm(table, path) {
+  for (const route of Object.entries(table).map(compile)) {
+    if (route.regex.test(path)) { route.load().catch(() => {}); return; }
+  }
 }
 
 export function navigate(href, { replace = false } = {}) {
   history[replace ? 'replaceState' : 'pushState']({ y: 0 }, '', href);
   return show(href, null);
 }
-
-export const reload = () => show(location.pathname + location.search, null);
 
 export function start(table, element) {
   routes = Object.entries(table).map(compile);

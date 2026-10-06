@@ -5,6 +5,10 @@ import { coverUrl } from './api.js';
 
 export const $ = (selector, root = document) => root.querySelector(selector);
 
+// Counts as they are written everywhere: 1,204 songs, 1 album.
+export const number = new Intl.NumberFormat('en');
+export const plural = (n, word) => `${number.format(n)} ${word}${n === 1 ? '' : 's'}`;
+
 // A fresh copy of the one element a <template> holds.
 export const clone = id => document.getElementById(id).content.firstElementChild.cloneNode(true);
 
@@ -36,6 +40,23 @@ export function formatLength(ms) {
   return m ? `${h} h ${two(m)} min` : `${h} h`;
 }
 
+// A day, as a column of "Added" shows it: Sep 28, with the year only when it is not this one.
+const monthDay = new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' });
+const withYear = new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric' });
+export function formatDate(iso) {
+  const date = new Date(iso);
+  return (date.getFullYear() === new Date().getFullYear() ? monthDay : withYear).format(date);
+}
+
+// How long ago: just now, 5 minutes ago, yesterday, 2 days ago, last month.
+const relative = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+const UNITS = [['year', 31536000], ['month', 2592000], ['week', 604800], ['day', 86400], ['hour', 3600], ['minute', 60]];
+export function formatAgo(iso) {
+  const seconds = (Date.parse(iso) - Date.now()) / 1000;
+  const unit = UNITS.find(([, size]) => -seconds >= size);
+  return unit ? relative.format(Math.trunc(seconds / unit[1]), unit[0]) : 'just now';
+}
+
 // ---- Announcements ---------------------------------------------------------
 
 // Said by screen readers, politely: a new page, a result. Emptied first so
@@ -53,6 +74,14 @@ export function announce(text) {
 export function setCover(img, cover, size = 256) {
   img.src = coverUrl(cover, size) || '/no-cover.svg';
 }
+
+// A cover that cannot be loaded (offline, a file gone) becomes the same quiet
+// disc, not the browser's broken icon. One listener serves every image; an
+// error does not bubble, so it is caught on its way down.
+document.addEventListener('error', event => {
+  const img = event.target;
+  if (img instanceof HTMLImageElement && img.getAttribute('src') !== '/no-cover.svg') img.src = '/no-cover.svg';
+}, true);
 
 // What stands in for a list that is loading: nothing during the first
 // second, a quick answer needs no sign; then still blocks, no spinner and no
@@ -79,7 +108,9 @@ export function pageHead(main, title) {
 }
 
 // A centred state: "No favorites yet", "Page not found.".
-export function emptyState({ icon = 'info', title, text = '', link = null }) {
+// `link` goes elsewhere ({href, label}); `action` is the one filled button that
+// fills the page ({label, run}).
+export function emptyState({ icon = 'info', title, text = '', link = null, action = null }) {
   const el = clone('t-empty');
   setIcon($('.mark', el), icon);
   $('.empty-title', el).textContent = title;
@@ -92,6 +123,12 @@ export function emptyState({ icon = 'info', title, text = '', link = null }) {
     a.href = link.href;
     a.hidden = false;
   }
+  if (action) {
+    const button = $('.empty-action', el);
+    button.textContent = action.label;
+    button.addEventListener('click', action.run);
+    button.hidden = false;
+  }
   return el;
 }
 
@@ -101,14 +138,63 @@ const sentences = {
   library_changing: 'The library is being updated. Try again in a moment.',
   not_ready: 'Vibrance is starting. Try again in a moment.',
 };
+// What to tell a person about an error: the sentence a view has for that code
+// (`table`, by `code`), else the general one for it. Never the server's own
+// words, which are for the Details.
+export function sayError(error, table = {}) {
+  return table[error.code] || sentences[error.code] || (error.status >= 500 ? 'Vibrance had a problem. Try again in a moment.' : 'This didn’t work.');
+}
+
 export function errorNotice(error, retry) {
   const el = clone('t-error');
-  $('.notice-text', el).textContent = sentences[error.code] || (error.status >= 500 ? 'Vibrance had a problem. Try again in a moment.' : 'This didn’t work.');
+  $('.notice-text', el).textContent = sayError(error);
   const lines = [error.request, error.status ? `${error.status} ${error.code}: ${error.message}` : 'Network error, no answer from the server'];
   $('pre', el).textContent = lines.filter(Boolean).join('\n');
   const button = $('.notice-retry', el);
   if (retry) button.addEventListener('click', retry); else button.hidden = true;
   return el;
+}
+
+// ---- Forms -----------------------------------------------------------------
+
+// Says what is wrong beside the field it is about, or takes it away
+// (`text` empty). `where` is the .field, or the error line itself.
+export function fieldError(where, text = '') {
+  const note = where.matches('.field-error') ? where : $('.field-error', where);
+  note.textContent = text;
+  show(note, !!text);
+  const input = $('input', where);
+  if (text) input?.setAttribute('aria-invalid', 'true'); else input?.removeAttribute('aria-invalid');
+}
+
+// A group of buttons with role="radio" (data-value): the checked one is in the
+// tab order, the arrows move and check, as for a radio group. Returns what
+// sets the value from outside; `change(value)` runs on a choice made here.
+export function radioGroup(group, value, change) {
+  const buttons = [...group.querySelectorAll('[role="radio"]')];
+  const set = (next, focus = false) => {
+    for (const button of buttons) {
+      const on = button.dataset.value === next;
+      button.setAttribute('aria-checked', String(on));
+      button.tabIndex = on ? 0 : -1;
+      if (on && focus) button.focus();
+    }
+  };
+  group.addEventListener('click', event => {
+    const button = event.target.closest('[role="radio"]');
+    if (button && button.getAttribute('aria-checked') !== 'true') { set(button.dataset.value); change(button.dataset.value); }
+  });
+  group.addEventListener('keydown', event => {
+    const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
+    if (!step) return;
+    event.preventDefault();
+    const at = buttons.findIndex(button => button.getAttribute('aria-checked') === 'true');
+    const next = buttons[(at + step + buttons.length) % buttons.length].dataset.value;
+    set(next, true);
+    change(next);
+  });
+  set(value);
+  return set;
 }
 
 // ---- Toasts ----------------------------------------------------------------
@@ -172,7 +258,7 @@ export const staleToast = () => toast({ title: 'Playlist changed elsewhere', sub
 
 // openMenu(button, items, at). `at` = {x, y} opens it at the pointer (a
 // right-click) instead of under the button. An item is {label, icon, href, run, danger, checked,
-// cover, disabled, filled}, or {label, icon, items: [...]} for a submenu (one level),
+// cover, disabled, filled, key}, or {label, icon, items: [...]} for a submenu (one level),
 // or '-' for a line. Keys: ↑ ↓ Home End move, → opens a submenu, ← and Esc
 // close it, Esc closes the menu, Tab leaves. A submenu stays open for 300 ms
 // after the pointer leaves it, so a diagonal move does not lose it.
@@ -201,6 +287,7 @@ function itemElement(spec) {
     el = link;
   }
   if (spec.danger) el.classList.add('danger');
+  if (spec.key) el.dataset.key = spec.key; // what a later change to the menu finds the item by
   if (spec.disabled) {
     el.setAttribute('aria-disabled', 'true');
   } else {

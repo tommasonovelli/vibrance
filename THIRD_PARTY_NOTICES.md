@@ -14,6 +14,7 @@ Paths in this file are relative to the root of the source repository. In the ima
 | [Go standard library and runtime](#go) | 1.25.14 | BSD-3-Clause | compiled into `/usr/local/bin/vibrance` |
 | [Go modules](#go) | see the table below | BSD-3-Clause, MIT, Apache-2.0, public domain | compiled into `vibrance` |
 | [Scalar API Reference](#scalar-api-reference) | 1.72.4 | MIT | embedded in `vibrance`, served to the browser at `/api/docs/scalar.js` |
+| [Hanken Grotesk](#hanken-grotesk) | v12 | OFL-1.1 | in the source tree at `web/ui/fonts/`; not in the image yet (the web interface is not embedded) |
 | [Debian packages](#debian-packages) | Debian 13 (trixie) | per package | the base system |
 
 ## FFmpeg
@@ -76,6 +77,14 @@ The sources of these modules are on <https://proxy.golang.org/> at the versions 
 - License: MIT. Text: `licenses/scalar/LICENSE` (the license of Scalar's repository; the npm package declares `MIT` and carries no license file).
 - The file is `web/docs/scalar.js`, the unmodified `package/dist/browser/standalone.js` of the npm package `@scalar/api-reference` 1.72.4; `web/docs/VENDOR.md` records its source and its SHA-256. It is embedded in `vibrance` and sent to the browsers that open `/api/docs`.
 - It is a bundle: it also contains the open-source libraries Scalar is built with, whose license comments it keeps (among them Tailwind CSS, MIT, and focus-trap and tabbable, MIT). The full list of those libraries and their licenses is the dependency tree of `@scalar/api-reference` 1.72.4 on <https://www.npmjs.com/>.
+
+## Hanken Grotesk
+
+- Copyright 2021 The Hanken Grotesk Project Authors (<https://github.com/marcologous/hanken-grotesk>).
+- License: SIL Open Font License 1.1. Text: `licenses/hanken-grotesk/OFL.txt`, a byte copy of `web/ui/fonts/OFL.txt`.
+- The fonts are `web/ui/fonts/hanken-grotesk-v12-latin.woff2` and `web/ui/fonts/hanken-grotesk-v12-latin-ext.woff2`, unmodified, copied from Vibrance MusicLib 1.2.0; `web/ui/VENDOR.md` records their SHA-256.
+- Where it is: in the source tree only. The web interface in `web/ui/` is not embedded in `vibrance` yet (`/` still redirects to `/api/docs`), so the image does not carry the fonts. When it is, they are embedded in `vibrance` and served to the browser next to the interface, and this table's "In the image" cell and this section say so.
+- The "Vibrance" wordmark of the web pages is a drawing made from the letterforms of Bricolage Grotesque (SIL Open Font License 1.1); no font file of it is distributed.
 
 ## Debian packages
 

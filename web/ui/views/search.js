@@ -2,7 +2,7 @@
 // first. It answers while the person types (about 150 ms after the last key)
 // and keeps the old results in view until the new ones arrive.
 import { api } from '../api.js';
-import { $, announce, clone, emptyState, errorNotice, setCover, setTitle, show } from '../ui.js';
+import { $, announce, clone, emptyState, errorNotice, pending, setCover, setTitle, show } from '../ui.js';
 import * as act from '../actions.js';
 import { albumCard, cardActions, grid, personCard, trackList } from '../list.js';
 
@@ -200,12 +200,16 @@ export async function render(main, params, signal) {
     if (!q) { results.replaceChildren(emptyState({ icon: 'search', title: 'Search your music', text: 'Search looks at the names of songs, albums and artists, from the first letters of each word.' })); return; }
     request = new AbortController();
     const stop = AbortSignal.any([signal, request.signal]);
+    // Slow for a second, and nothing to look at: still blocks. Old results stay as they are.
+    const done = results.children.length ? () => {} : pending(results, 't-ph-rows');
     try {
       const types = KINDS.find(([key]) => key === kind)[2];
       draw(await api.get('/search', { q, types, limit: kind === 'songs' ? 50 : 10 }, { signal: stop }), q);
     } catch (error) {
       if (stop.aborted) return;
       results.replaceChildren(errorNotice(error, run));
+    } finally {
+      done();
     }
   }
 
