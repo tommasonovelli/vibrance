@@ -8,9 +8,7 @@ Vibrance 0.1.0 is built with Go 1.25.14, the toolchain Vibrance MusicLib 1.2.0 i
 
 ## Reporting a vulnerability
 
-**Do not open a public issue, and do not publish details, for a vulnerability.** Report it privately to:
-
-> **SECURITY CONTACT: TO BE SET BY THE OWNER** (a private e-mail address, or GitHub's "Report a vulnerability" button under the repository's **Security** tab once private vulnerability reporting is enabled). Until this line is replaced there is no private channel: open an issue that only says you have a security report, with no details, and wait to be contacted.
+**Do not open a public issue, and do not publish details, for a vulnerability.** Report it privately with GitHub's private vulnerability reporting: on the repository, open the **Security** tab and select **Report a vulnerability** (<https://github.com/tommasonovelli/vibrance/security/advisories/new>). Only the maintainer sees the report.
 
 Please include:
 

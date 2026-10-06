@@ -5,7 +5,7 @@ Versions follow [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
-## [0.1.0] - 2026-10-05
+## [0.1.0] - 2026-10-06
 
 The first release. Vibrance runs next to Vibrance MusicLib 1.2.0 in one Docker Compose stack, reads the library MusicLib writes, read-only, and serves it to listen to. To install it, or to add it to an existing MusicLib installation, follow the [operations guide](https://github.com/tommasonovelli/vibrance/blob/v0.1.0/docs/operations.md).
 
