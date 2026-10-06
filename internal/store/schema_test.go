@@ -115,6 +115,13 @@ var wantSchema = []struct {
 		opt("rg_album_peak", "real"),
 		req("available", "integer"),
 		req("updated_at", "integer"),
+		// The sort keys and the moment of the list of the tracks, which
+		// migrations/00003 adds: SQLite adds a NOT NULL column only with a
+		// default.
+		{name: "title_key", typ: "blob", notNull: true, dflt: "x''"},
+		{name: "artist_key", typ: "blob", notNull: true, dflt: "x''"},
+		{name: "album_key", typ: "blob", notNull: true, dflt: "x''"},
+		{name: "first_seen_at", typ: "integer", notNull: true, dflt: "0"},
 	}},
 	{"favorites", []column{
 		{name: "user_id", typ: "text", notNull: true, pk: 1},
@@ -185,7 +192,8 @@ func TestSchemaColumns(t *testing.T) {
 // the erratum "the references follow the audio" adds, and artists(sort_key,
 // id), which the list of the artists needs (DESIGN.md S15), and tracks(id,
 // available, duration_ms), which the duration of a playlist is read from
-// (DESIGN.md S24), and no others.
+// (DESIGN.md S24), and the four orders of the list of the tracks (step W1),
+// and no others.
 func TestSchemaIndexes(t *testing.T) {
 	s := newStore(t)
 	want := []string{
@@ -201,8 +209,12 @@ func TestSchemaIndexes(t *testing.T) {
 		"sessions_user_id_idx ON sessions (user_id)",
 		"tracks_album_disc_no_idx ON tracks (album_id, disc, no)",
 		"UNIQUE tracks_album_fingerprint_occurrence_idx ON tracks (album_id, fingerprint, occurrence)",
+		"tracks_album_idx ON tracks (available, album_key, album_id, disc, no, id)",
+		"tracks_artist_idx ON tracks (available, artist_key, album_key, album_id, disc, no, id)",
 		"tracks_duration_idx ON tracks (id, available, duration_ms)",
 		"tracks_fingerprint_idx ON tracks (fingerprint)",
+		"tracks_first_seen_idx ON tracks (available, first_seen_at, id)",
+		"tracks_title_idx ON tracks (available, title_key, id)",
 	}
 	// Only the indexes the migrations create: those SQLite makes by itself
 	// for PRIMARY KEY and UNIQUE have no SQL text.

@@ -61,7 +61,7 @@ func album(id, artistID, title string) store.UpsertAlbumParams {
 func track(id, albumID, title, artist string, occurrence int64) store.UpsertTrackParams {
 	return store.UpsertTrackParams{ID: id, AlbumID: albumID, Fingerprint: "f", FpVersion: "v", Occurrence: occurrence,
 		Disc: 1, No: occurrence, Title: title, Artist: artist, RelPath: id, FileSize: 1, FileMtimeNs: 1, FileSha256: "s",
-		Codec: "flac", SampleRate: 44100, Channels: 2, UpdatedAt: 1}
+		Codec: "flac", SampleRate: 44100, Channels: 2, UpdatedAt: 1, TitleKey: []byte{3}, ArtistKey: []byte{4}, FirstSeenAt: 1}
 }
 
 // seed writes two artists; album A of the first with two tracks, album B of
@@ -309,5 +309,44 @@ func TestSyncIsPartOfTheTransaction(t *testing.T) {
 	err = s.WithWriteTx(ctx, func(q *store.Queries) error { return SyncAlbum(cancelled, q.Conn(), albumA) })
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("SyncAlbum with a context that ended: %v", err)
+	}
+}
+
+// Without statistics (a first scan) the rows of the tracks of one album are
+// found by their album, not through an index of the list of the tracks,
+// which begins with available and would give every available track.
+func TestSyncAlbumFindsTheTracksByTheirAlbum(t *testing.T) {
+	st := newStore(t)
+	err := st.Read(t.Context(), func(q *store.Queries) error {
+		for _, query := range []string{insertTracks, deleteTracks} {
+			rows, err := q.Conn().QueryContext(t.Context(), "EXPLAIN QUERY PLAN "+query, "0199a5c0-0000-7000-8000-000000000001")
+			if err != nil {
+				return err
+			}
+			found := false
+			for rows.Next() {
+				var id, parent, unused int64
+				var detail string
+				if err := rows.Scan(&id, &parent, &unused, &detail); err != nil {
+					return errors.Join(err, rows.Close())
+				}
+				if strings.Contains(detail, " tracks ") {
+					found = true
+					if !strings.Contains(detail, "SEARCH tracks USING") || !strings.Contains(detail, "(album_id=?") {
+						t.Errorf("%q reads the tracks otherwise than by their album: %s", query, detail)
+					}
+				}
+			}
+			if err := errors.Join(rows.Err(), rows.Close()); err != nil {
+				return err
+			}
+			if !found {
+				t.Errorf("%q: no line of the plan reads the tracks", query)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 }

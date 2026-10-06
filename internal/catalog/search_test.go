@@ -135,7 +135,8 @@ func TestSearchWhileTheIndexChanges(t *testing.T) {
 	track := func(a testAlbum) store.UpsertTrackParams {
 		return store.UpsertTrackParams{ID: "0199a5c0-0000-7000-8000-0000000003" + a.id[len(a.id)-2:], AlbumID: a.id,
 			Fingerprint: "f", FpVersion: "v", Occurrence: 1, Disc: 1, No: 1, Title: "Common Track", Artist: a.artist.name,
-			RelPath: "t.flac", FileSize: 1, FileMtimeNs: 1, FileSha256: "s", Codec: "flac", SampleRate: 44100, Channels: 2, UpdatedAt: 1}
+			RelPath: "t.flac", FileSize: 1, FileMtimeNs: 1, FileSha256: "s", Codec: "flac", SampleRate: 44100, Channels: 2, UpdatedAt: 1,
+			TitleKey: sortKey("Common Track"), ArtistKey: sortKey(a.artist.name), FirstSeenAt: 1}
 	}
 	// set makes an album and its track available or not, with their
 	// full-text rows, in one transaction.

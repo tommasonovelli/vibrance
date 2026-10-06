@@ -5,6 +5,10 @@ Versions follow [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Added
+
+- **Every track in one list.** `GET /api/v1/tracks` lists the available tracks, paged, by title, by artist, album after album, or by when Vibrance first saw them, in either direction, optionally only those of the albums of one artist. A track that MusicLib moves to another album keeps its place among the recently added. The first start after the upgrade computes the sort keys of every track once before it serves.
+
 ## [0.1.0] - 2026-10-06
 
 The first release. Vibrance runs next to Vibrance MusicLib 1.2.0 in one Docker Compose stack, reads the library MusicLib writes, read-only, and serves it to listen to. To install it, or to add it to an existing MusicLib installation, follow the [operations guide](https://github.com/tommasonovelli/vibrance/blob/v0.1.0/docs/operations.md).

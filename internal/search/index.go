@@ -28,16 +28,23 @@ WHERE EXISTS (SELECT 1 FROM albums WHERE albums.artist_id = artists.id AND album
 SELECT albums.seq, albums.title, artists.name
 FROM albums JOIN artists ON artists.id = albums.artist_id
 WHERE albums.available = 1`
-	insertAllTracks = `INSERT INTO search_tracks (rowid, title, artist, album)
+	// The statement of the tracks is in two halves, so that the one of an
+	// album can name its index between them: the indexes of the list of
+	// the tracks begin with available, and without statistics (a first
+	// scan) SQLite would read every available track through one of them
+	// to find those of one album.
+	insertTracksHead = `INSERT INTO search_tracks (rowid, title, artist, album)
 SELECT tracks.seq, tracks.title, tracks.artist, albums.title
-FROM tracks JOIN albums ON albums.id = tracks.album_id
+FROM tracks`
+	insertTracksTail = ` JOIN albums ON albums.id = tracks.album_id
 WHERE tracks.available = 1`
+	insertAllTracks = insertTracksHead + insertTracksTail
 
 	deleteAlbum = `DELETE FROM search_albums WHERE rowid IN (SELECT seq FROM albums WHERE id = ?)`
 	insertAlbum = insertAllAlbums + ` AND albums.id = ?`
 
 	deleteTracks = `DELETE FROM search_tracks WHERE rowid IN (SELECT seq FROM tracks WHERE album_id = ?)`
-	insertTracks = insertAllTracks + ` AND tracks.album_id = ?`
+	insertTracks = insertTracksHead + ` INDEXED BY tracks_album_disc_no_idx` + insertTracksTail + ` AND tracks.album_id = ?`
 
 	deleteArtist = `DELETE FROM search_artists WHERE rowid IN (SELECT seq FROM artists WHERE id = ?)`
 	insertArtist = insertAllArtists + ` AND artists.id = ?`

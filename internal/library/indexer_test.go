@@ -178,6 +178,8 @@ func TestIndexAlbumFixture(t *testing.T) {
 				BitDepth: sql.NullInt64{Int64: w.bitDepth, Valid: w.bitDepth != 0}, Bitrate: sql.NullInt64{Int64: w.bitrate, Valid: w.bitrate != 0},
 				DurationMs: sql.NullInt64{Int64: 2000, Valid: true},
 				Available:  1, UpdatedAt: when,
+				TitleKey: names.SortKey(w.title), ArtistKey: names.SortKey(w.artist), AlbumKey: names.SortKey(want.title),
+				FirstSeenAt: when,
 			}
 			if w.gain != nil {
 				wantRow.RgTrackGain, wantRow.RgTrackPeak, wantRow.RgAlbumGain, wantRow.RgAlbumPeak = nullF(*w.gain), nullF(0.125), nullF(-7.01), nullF(0.125)
@@ -186,7 +188,7 @@ func TestIndexAlbumFixture(t *testing.T) {
 				wantRow.LyricsRel = sql.NullString{String: "01 - First Light.lrc", Valid: true}
 				wantRow.LyricsSha256 = sql.NullString{String: lyricsASHA256, Valid: true}
 			}
-			if file.Size == 0 || r != wantRow {
+			if file.Size == 0 || !reflect.DeepEqual(r, wantRow) {
 				t.Errorf("%s/%s:\n got %+v\nwant %+v", want.rel, w.path, r, wantRow)
 			}
 			// The full-text row of the track has the seq of the track as
@@ -299,7 +301,7 @@ func TestIndexAlbumRenderedAgainWithTheSameBytes(t *testing.T) {
 	for i, row := range e.tracks(id) {
 		wantRow := beforeTracks[i]
 		wantRow.FileMtimeNs, wantRow.UpdatedAt = later.UnixNano(), after.Album.UpdatedAt
-		if row != wantRow {
+		if !reflect.DeepEqual(row, wantRow) {
 			t.Fatalf("track %d:\n got %+v\nwant %+v", i, row, wantRow)
 		}
 	}
@@ -347,7 +349,7 @@ func TestIndexAlbumKeepsTheIDOfARetitledTrack(t *testing.T) {
 			}
 			// The other rows are the rows they were, to the last column.
 			for i := range before {
-				if before[i].ID != old.ID && after[i] != before[i] {
+				if before[i].ID != old.ID && !reflect.DeepEqual(after[i], before[i]) {
 					t.Errorf("a track that did not change:\n got %+v\nwant %+v", after[i], before[i])
 				}
 			}
@@ -412,7 +414,7 @@ func TestIndexAlbumTrackDeletedAndBack(t *testing.T) {
 	gone := e.trackAt(id, file)
 	want := old
 	want.Available, want.UpdatedAt = 0, gone.UpdatedAt
-	if gone != want || gone.UpdatedAt <= old.UpdatedAt {
+	if !reflect.DeepEqual(gone, want) || gone.UpdatedAt <= old.UpdatedAt {
 		t.Fatalf("the row of the deleted track:\n got %+v\nwant %+v", gone, want)
 	}
 	after := e.tracks(id)
@@ -512,7 +514,7 @@ func TestIndexAlbumNewTracks(t *testing.T) {
 	e.index(albumF)
 
 	rows := e.tracks(id)
-	if len(rows) != 4 || rows[0] != before[0] || rows[1] != before[1] {
+	if len(rows) != 4 || !reflect.DeepEqual(rows[0], before[0]) || !reflect.DeepEqual(rows[1], before[1]) {
 		t.Fatalf("the rows there were changed: %+v", rows)
 	}
 	third, guest := e.trackAt(id, "03 - Same Audio.flac"), e.trackAt(id, "04 - Guest.flac")
@@ -584,7 +586,7 @@ func TestIndexAlbumRenamedFolder(t *testing.T) {
 	for i := range before {
 		want := before[i]
 		want.FileMtimeNs = after[i].FileMtimeNs
-		if after[i] != want {
+		if !reflect.DeepEqual(after[i], want) {
 			t.Errorf("a track of the renamed album:\n got %+v\nwant %+v", after[i], want)
 		}
 	}

@@ -623,18 +623,19 @@ feed:
 
 // followAudio is the rule of P6: the playlist items and the favorites of a
 // track that is not available move to an available track with the same
-// audio (commitReferences). It runs at the end of every cycle that went
-// through the library, whether the cycle changed anything or not, so that a
-// stop between the commit of an album and this step is repaired by the next
-// cycle. When there is nothing to move, nothing is written. moved is how
+// audio, and that track keeps the moment the audio was first seen
+// (commitReferences). It runs at the end of every cycle that went through
+// the library, whether the cycle changed anything or not, so that a stop
+// between the commit of an album and this step is repaired by the next
+// cycle. When there is nothing to follow, nothing is written. moved is how
 // many tracks lost their references.
 func (s *Scanner) followAudio(ctx context.Context) (moved int, err error) {
-	var rows []store.ListMovedReferencesRow
+	var rows []store.ListAudioTwinsRow
 	err = s.ix.store.Read(ctx, func(q *store.Queries) (err error) {
-		rows, err = q.ListMovedReferences(ctx)
+		rows, err = q.ListAudioTwins(ctx)
 		return err
 	})
-	if err != nil || len(rows) == 0 {
+	if err != nil || len(followed(rows)) == 0 {
 		return 0, err
 	}
 	now := s.ix.now().UnixMilli()

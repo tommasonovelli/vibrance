@@ -323,11 +323,14 @@ WHERE albums.id = sqlc.arg(id) AND albums.available = 1;
 -- name: ListAvailableTracksOfAlbum :many
 -- ListAvailableTracksOfAlbum returns the available tracks of an album by
 -- (disc, no), then in the order the rows were created, and whether each is
--- a favorite of the user.
+-- a favorite of the user. The index is named, as in every query that reads
+-- the tracks of one album: the indexes of the list of the tracks begin with
+-- available, and without statistics (a first scan) SQLite would read every
+-- available track through one of them.
 SELECT sqlc.embed(tracks),
     EXISTS (SELECT 1 FROM favorites
             WHERE favorites.user_id = sqlc.arg(user_id) AND favorites.track_id = tracks.id) AS favorite
-FROM tracks
+FROM tracks INDEXED BY tracks_album_disc_no_idx
 WHERE tracks.album_id = sqlc.arg(album_id) AND tracks.available = 1
 ORDER BY tracks.disc, tracks."no", tracks.seq;
 
@@ -358,3 +361,454 @@ SELECT tracks.available, tracks.album_id, albums.rel_path AS album_rel_path, tra
 FROM tracks
 JOIN albums ON albums.id = tracks.album_id
 WHERE tracks.id = ?;
+
+-- The list of the tracks (GET /tracks, docs/proposals/web-client-api.md
+-- A1): the available tracks in four orders, each ending with the id so
+-- that it is total, each walking an index of its own (tracks_*_idx), like
+-- the lists of the albums above. Every row has what the API shows of its
+-- album and whether the track is a favorite of the user.
+
+-- name: ListTracksByTitleAsc :many
+-- ListTracksByTitleAsc returns the first page of the available tracks by
+-- (title_key, id), ascending.
+SELECT sqlc.embed(tracks),
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = sqlc.arg(user_id) AND favorites.track_id = tracks.id) AS favorite
+FROM tracks
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.available = 1
+ORDER BY tracks.title_key, tracks.id
+LIMIT sqlc.arg(page_size);
+
+-- name: ListTracksByTitleAscAfter :many
+-- ListTracksByTitleAscAfter returns the page of ListTracksByTitleAsc
+-- after the track with that key.
+SELECT sqlc.embed(tracks),
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = sqlc.arg(user_id) AND favorites.track_id = tracks.id) AS favorite
+FROM tracks
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.available = 1
+  AND (tracks.title_key, tracks.id) > (CAST(sqlc.arg(title_key) AS BLOB), CAST(sqlc.arg(after_id) AS TEXT))
+ORDER BY tracks.title_key, tracks.id
+LIMIT sqlc.arg(page_size);
+
+-- name: ListTracksByArtistAsc :many
+-- ListTracksByArtistAsc returns the first page of the available tracks by
+-- (artist_key, album_key, album_id, disc, no, id), ascending.
+SELECT sqlc.embed(tracks),
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = sqlc.arg(user_id) AND favorites.track_id = tracks.id) AS favorite
+FROM tracks
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.available = 1
+ORDER BY tracks.artist_key, tracks.album_key, tracks.album_id, tracks.disc, tracks."no", tracks.id
+LIMIT sqlc.arg(page_size);
+
+-- name: ListTracksByArtistAscAfter :many
+-- ListTracksByArtistAscAfter returns the page of ListTracksByArtistAsc
+-- after the track with that key.
+SELECT sqlc.embed(tracks),
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = sqlc.arg(user_id) AND favorites.track_id = tracks.id) AS favorite
+FROM tracks
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.available = 1
+  AND (tracks.artist_key, tracks.album_key, tracks.album_id, tracks.disc, tracks."no", tracks.id) > (CAST(sqlc.arg(artist_key) AS BLOB), CAST(sqlc.arg(album_key) AS BLOB), CAST(sqlc.arg(after_album_id) AS TEXT), CAST(sqlc.arg(disc) AS INTEGER), CAST(sqlc.arg(track_no) AS INTEGER), CAST(sqlc.arg(after_id) AS TEXT))
+ORDER BY tracks.artist_key, tracks.album_key, tracks.album_id, tracks.disc, tracks."no", tracks.id
+LIMIT sqlc.arg(page_size);
+
+-- name: ListTracksByAlbumAsc :many
+-- ListTracksByAlbumAsc returns the first page of the available tracks by
+-- (album_key, album_id, disc, no, id), ascending.
+SELECT sqlc.embed(tracks),
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = sqlc.arg(user_id) AND favorites.track_id = tracks.id) AS favorite
+FROM tracks
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.available = 1
+ORDER BY tracks.album_key, tracks.album_id, tracks.disc, tracks."no", tracks.id
+LIMIT sqlc.arg(page_size);
+
+-- name: ListTracksByAlbumAscAfter :many
+-- ListTracksByAlbumAscAfter returns the page of ListTracksByAlbumAsc
+-- after the track with that key.
+SELECT sqlc.embed(tracks),
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = sqlc.arg(user_id) AND favorites.track_id = tracks.id) AS favorite
+FROM tracks
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.available = 1
+  AND (tracks.album_key, tracks.album_id, tracks.disc, tracks."no", tracks.id) > (CAST(sqlc.arg(album_key) AS BLOB), CAST(sqlc.arg(after_album_id) AS TEXT), CAST(sqlc.arg(disc) AS INTEGER), CAST(sqlc.arg(track_no) AS INTEGER), CAST(sqlc.arg(after_id) AS TEXT))
+ORDER BY tracks.album_key, tracks.album_id, tracks.disc, tracks."no", tracks.id
+LIMIT sqlc.arg(page_size);
+
+-- name: ListTracksByAddedAsc :many
+-- ListTracksByAddedAsc returns the first page of the available tracks by
+-- (first_seen_at, id), ascending.
+SELECT sqlc.embed(tracks),
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = sqlc.arg(user_id) AND favorites.track_id = tracks.id) AS favorite
+FROM tracks
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.available = 1
+ORDER BY tracks.first_seen_at, tracks.id
+LIMIT sqlc.arg(page_size);
+
+-- name: ListTracksByAddedAscAfter :many
+-- ListTracksByAddedAscAfter returns the page of ListTracksByAddedAsc
+-- after the track with that key.
+SELECT sqlc.embed(tracks),
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = sqlc.arg(user_id) AND favorites.track_id = tracks.id) AS favorite
+FROM tracks
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.available = 1
+  AND (tracks.first_seen_at, tracks.id) > (CAST(sqlc.arg(first_seen_at) AS INTEGER), CAST(sqlc.arg(after_id) AS TEXT))
+ORDER BY tracks.first_seen_at, tracks.id
+LIMIT sqlc.arg(page_size);
+
+-- name: ListTracksByTitleDesc :many
+-- ListTracksByTitleDesc returns the first page of the available tracks by
+-- (title_key, id), reversed.
+SELECT sqlc.embed(tracks),
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = sqlc.arg(user_id) AND favorites.track_id = tracks.id) AS favorite
+FROM tracks
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.available = 1
+ORDER BY tracks.title_key DESC, tracks.id DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListTracksByTitleDescAfter :many
+-- ListTracksByTitleDescAfter returns the page of ListTracksByTitleDesc
+-- after the track with that key.
+SELECT sqlc.embed(tracks),
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = sqlc.arg(user_id) AND favorites.track_id = tracks.id) AS favorite
+FROM tracks
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.available = 1
+  AND (tracks.title_key, tracks.id) < (CAST(sqlc.arg(title_key) AS BLOB), CAST(sqlc.arg(after_id) AS TEXT))
+ORDER BY tracks.title_key DESC, tracks.id DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListTracksByArtistDesc :many
+-- ListTracksByArtistDesc returns the first page of the available tracks by
+-- (artist_key, album_key, album_id, disc, no, id), reversed.
+SELECT sqlc.embed(tracks),
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = sqlc.arg(user_id) AND favorites.track_id = tracks.id) AS favorite
+FROM tracks
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.available = 1
+ORDER BY tracks.artist_key DESC, tracks.album_key DESC, tracks.album_id DESC, tracks.disc DESC, tracks."no" DESC, tracks.id DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListTracksByArtistDescAfter :many
+-- ListTracksByArtistDescAfter returns the page of ListTracksByArtistDesc
+-- after the track with that key.
+SELECT sqlc.embed(tracks),
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = sqlc.arg(user_id) AND favorites.track_id = tracks.id) AS favorite
+FROM tracks
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.available = 1
+  AND (tracks.artist_key, tracks.album_key, tracks.album_id, tracks.disc, tracks."no", tracks.id) < (CAST(sqlc.arg(artist_key) AS BLOB), CAST(sqlc.arg(album_key) AS BLOB), CAST(sqlc.arg(after_album_id) AS TEXT), CAST(sqlc.arg(disc) AS INTEGER), CAST(sqlc.arg(track_no) AS INTEGER), CAST(sqlc.arg(after_id) AS TEXT))
+ORDER BY tracks.artist_key DESC, tracks.album_key DESC, tracks.album_id DESC, tracks.disc DESC, tracks."no" DESC, tracks.id DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListTracksByAlbumDesc :many
+-- ListTracksByAlbumDesc returns the first page of the available tracks by
+-- (album_key, album_id, disc, no, id), reversed.
+SELECT sqlc.embed(tracks),
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = sqlc.arg(user_id) AND favorites.track_id = tracks.id) AS favorite
+FROM tracks
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.available = 1
+ORDER BY tracks.album_key DESC, tracks.album_id DESC, tracks.disc DESC, tracks."no" DESC, tracks.id DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListTracksByAlbumDescAfter :many
+-- ListTracksByAlbumDescAfter returns the page of ListTracksByAlbumDesc
+-- after the track with that key.
+SELECT sqlc.embed(tracks),
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = sqlc.arg(user_id) AND favorites.track_id = tracks.id) AS favorite
+FROM tracks
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.available = 1
+  AND (tracks.album_key, tracks.album_id, tracks.disc, tracks."no", tracks.id) < (CAST(sqlc.arg(album_key) AS BLOB), CAST(sqlc.arg(after_album_id) AS TEXT), CAST(sqlc.arg(disc) AS INTEGER), CAST(sqlc.arg(track_no) AS INTEGER), CAST(sqlc.arg(after_id) AS TEXT))
+ORDER BY tracks.album_key DESC, tracks.album_id DESC, tracks.disc DESC, tracks."no" DESC, tracks.id DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListTracksByAddedDesc :many
+-- ListTracksByAddedDesc returns the first page of the available tracks by
+-- (first_seen_at, id), reversed.
+SELECT sqlc.embed(tracks),
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = sqlc.arg(user_id) AND favorites.track_id = tracks.id) AS favorite
+FROM tracks
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.available = 1
+ORDER BY tracks.first_seen_at DESC, tracks.id DESC
+LIMIT sqlc.arg(page_size);
+
+-- name: ListTracksByAddedDescAfter :many
+-- ListTracksByAddedDescAfter returns the page of ListTracksByAddedDesc
+-- after the track with that key.
+SELECT sqlc.embed(tracks),
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = sqlc.arg(user_id) AND favorites.track_id = tracks.id) AS favorite
+FROM tracks
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.available = 1
+  AND (tracks.first_seen_at, tracks.id) < (CAST(sqlc.arg(first_seen_at) AS INTEGER), CAST(sqlc.arg(after_id) AS TEXT))
+ORDER BY tracks.first_seen_at DESC, tracks.id DESC
+LIMIT sqlc.arg(page_size);
+
+-- The lists of the tracks of the albums of one artist (artist=<id>: the
+-- artist of the album, as for the albums), in the same eight orders. Like
+-- the lists of the albums of one artist, they read the albums of the
+-- artist from albums_artist_id_idx and their tracks from
+-- tracks_album_disc_no_idx, and sort those, where the lists above walk the
+-- index of their order: with a filter those would skip the tracks of
+-- every other artist. An artist may have thousands of tracks: the inner
+-- query sorts only their keys and keeps the page, and the outer one reads
+-- what the API shows for the rows of the page alone. One query is both the
+-- first page (first_page not 0) and the pages after a key. The rows of the
+-- page are found by their key, seq, and by no index (NOT INDEXED): one of
+-- the order would make SQLite walk every track to look for them.
+
+-- name: ListArtistTracksByTitleAsc :many
+-- ListArtistTracksByTitleAsc returns a page of the available tracks of the
+-- albums of an artist by (title_key, id), ascending.
+SELECT sqlc.embed(tracks),
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = sqlc.arg(user_id) AND favorites.track_id = tracks.id) AS favorite
+FROM tracks NOT INDEXED
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.seq IN (
+    SELECT t.seq
+    FROM albums AS a INDEXED BY albums_artist_id_idx
+    JOIN tracks AS t INDEXED BY tracks_album_disc_no_idx ON t.album_id = a.id
+    WHERE a.artist_id = sqlc.arg(artist_id) AND a.available = 1 AND t.available = 1
+      AND (CAST(sqlc.arg(first_page) AS INTEGER) <> 0
+           OR (t.title_key, t.id) > (CAST(sqlc.arg(title_key) AS BLOB), CAST(sqlc.arg(after_id) AS TEXT)))
+    ORDER BY t.title_key, t.id
+    LIMIT sqlc.arg(page_size)
+)
+ORDER BY tracks.title_key, tracks.id;
+
+-- name: ListArtistTracksByArtistAsc :many
+-- ListArtistTracksByArtistAsc returns a page of the available tracks of the
+-- albums of an artist by (artist_key, album_key, album_id, disc, no, id), ascending.
+SELECT sqlc.embed(tracks),
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = sqlc.arg(user_id) AND favorites.track_id = tracks.id) AS favorite
+FROM tracks NOT INDEXED
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.seq IN (
+    SELECT t.seq
+    FROM albums AS a INDEXED BY albums_artist_id_idx
+    JOIN tracks AS t INDEXED BY tracks_album_disc_no_idx ON t.album_id = a.id
+    WHERE a.artist_id = sqlc.arg(artist_id) AND a.available = 1 AND t.available = 1
+      AND (CAST(sqlc.arg(first_page) AS INTEGER) <> 0
+           OR (t.artist_key, t.album_key, t.album_id, t.disc, t."no", t.id) > (CAST(sqlc.arg(artist_key) AS BLOB), CAST(sqlc.arg(album_key) AS BLOB), CAST(sqlc.arg(after_album_id) AS TEXT), CAST(sqlc.arg(disc) AS INTEGER), CAST(sqlc.arg(track_no) AS INTEGER), CAST(sqlc.arg(after_id) AS TEXT)))
+    ORDER BY t.artist_key, t.album_key, t.album_id, t.disc, t."no", t.id
+    LIMIT sqlc.arg(page_size)
+)
+ORDER BY tracks.artist_key, tracks.album_key, tracks.album_id, tracks.disc, tracks."no", tracks.id;
+
+-- name: ListArtistTracksByAlbumAsc :many
+-- ListArtistTracksByAlbumAsc returns a page of the available tracks of the
+-- albums of an artist by (album_key, album_id, disc, no, id), ascending.
+SELECT sqlc.embed(tracks),
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = sqlc.arg(user_id) AND favorites.track_id = tracks.id) AS favorite
+FROM tracks NOT INDEXED
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.seq IN (
+    SELECT t.seq
+    FROM albums AS a INDEXED BY albums_artist_id_idx
+    JOIN tracks AS t INDEXED BY tracks_album_disc_no_idx ON t.album_id = a.id
+    WHERE a.artist_id = sqlc.arg(artist_id) AND a.available = 1 AND t.available = 1
+      AND (CAST(sqlc.arg(first_page) AS INTEGER) <> 0
+           OR (t.album_key, t.album_id, t.disc, t."no", t.id) > (CAST(sqlc.arg(album_key) AS BLOB), CAST(sqlc.arg(after_album_id) AS TEXT), CAST(sqlc.arg(disc) AS INTEGER), CAST(sqlc.arg(track_no) AS INTEGER), CAST(sqlc.arg(after_id) AS TEXT)))
+    ORDER BY t.album_key, t.album_id, t.disc, t."no", t.id
+    LIMIT sqlc.arg(page_size)
+)
+ORDER BY tracks.album_key, tracks.album_id, tracks.disc, tracks."no", tracks.id;
+
+-- name: ListArtistTracksByAddedAsc :many
+-- ListArtistTracksByAddedAsc returns a page of the available tracks of the
+-- albums of an artist by (first_seen_at, id), ascending.
+SELECT sqlc.embed(tracks),
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = sqlc.arg(user_id) AND favorites.track_id = tracks.id) AS favorite
+FROM tracks NOT INDEXED
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.seq IN (
+    SELECT t.seq
+    FROM albums AS a INDEXED BY albums_artist_id_idx
+    JOIN tracks AS t INDEXED BY tracks_album_disc_no_idx ON t.album_id = a.id
+    WHERE a.artist_id = sqlc.arg(artist_id) AND a.available = 1 AND t.available = 1
+      AND (CAST(sqlc.arg(first_page) AS INTEGER) <> 0
+           OR (t.first_seen_at, t.id) > (CAST(sqlc.arg(first_seen_at) AS INTEGER), CAST(sqlc.arg(after_id) AS TEXT)))
+    ORDER BY t.first_seen_at, t.id
+    LIMIT sqlc.arg(page_size)
+)
+ORDER BY tracks.first_seen_at, tracks.id;
+
+-- name: ListArtistTracksByTitleDesc :many
+-- ListArtistTracksByTitleDesc returns a page of the available tracks of the
+-- albums of an artist by (title_key, id), reversed.
+SELECT sqlc.embed(tracks),
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = sqlc.arg(user_id) AND favorites.track_id = tracks.id) AS favorite
+FROM tracks NOT INDEXED
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.seq IN (
+    SELECT t.seq
+    FROM albums AS a INDEXED BY albums_artist_id_idx
+    JOIN tracks AS t INDEXED BY tracks_album_disc_no_idx ON t.album_id = a.id
+    WHERE a.artist_id = sqlc.arg(artist_id) AND a.available = 1 AND t.available = 1
+      AND (CAST(sqlc.arg(first_page) AS INTEGER) <> 0
+           OR (t.title_key, t.id) < (CAST(sqlc.arg(title_key) AS BLOB), CAST(sqlc.arg(after_id) AS TEXT)))
+    ORDER BY t.title_key DESC, t.id DESC
+    LIMIT sqlc.arg(page_size)
+)
+ORDER BY tracks.title_key DESC, tracks.id DESC;
+
+-- name: ListArtistTracksByArtistDesc :many
+-- ListArtistTracksByArtistDesc returns a page of the available tracks of the
+-- albums of an artist by (artist_key, album_key, album_id, disc, no, id), reversed.
+SELECT sqlc.embed(tracks),
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = sqlc.arg(user_id) AND favorites.track_id = tracks.id) AS favorite
+FROM tracks NOT INDEXED
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.seq IN (
+    SELECT t.seq
+    FROM albums AS a INDEXED BY albums_artist_id_idx
+    JOIN tracks AS t INDEXED BY tracks_album_disc_no_idx ON t.album_id = a.id
+    WHERE a.artist_id = sqlc.arg(artist_id) AND a.available = 1 AND t.available = 1
+      AND (CAST(sqlc.arg(first_page) AS INTEGER) <> 0
+           OR (t.artist_key, t.album_key, t.album_id, t.disc, t."no", t.id) < (CAST(sqlc.arg(artist_key) AS BLOB), CAST(sqlc.arg(album_key) AS BLOB), CAST(sqlc.arg(after_album_id) AS TEXT), CAST(sqlc.arg(disc) AS INTEGER), CAST(sqlc.arg(track_no) AS INTEGER), CAST(sqlc.arg(after_id) AS TEXT)))
+    ORDER BY t.artist_key DESC, t.album_key DESC, t.album_id DESC, t.disc DESC, t."no" DESC, t.id DESC
+    LIMIT sqlc.arg(page_size)
+)
+ORDER BY tracks.artist_key DESC, tracks.album_key DESC, tracks.album_id DESC, tracks.disc DESC, tracks."no" DESC, tracks.id DESC;
+
+-- name: ListArtistTracksByAlbumDesc :many
+-- ListArtistTracksByAlbumDesc returns a page of the available tracks of the
+-- albums of an artist by (album_key, album_id, disc, no, id), reversed.
+SELECT sqlc.embed(tracks),
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = sqlc.arg(user_id) AND favorites.track_id = tracks.id) AS favorite
+FROM tracks NOT INDEXED
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.seq IN (
+    SELECT t.seq
+    FROM albums AS a INDEXED BY albums_artist_id_idx
+    JOIN tracks AS t INDEXED BY tracks_album_disc_no_idx ON t.album_id = a.id
+    WHERE a.artist_id = sqlc.arg(artist_id) AND a.available = 1 AND t.available = 1
+      AND (CAST(sqlc.arg(first_page) AS INTEGER) <> 0
+           OR (t.album_key, t.album_id, t.disc, t."no", t.id) < (CAST(sqlc.arg(album_key) AS BLOB), CAST(sqlc.arg(after_album_id) AS TEXT), CAST(sqlc.arg(disc) AS INTEGER), CAST(sqlc.arg(track_no) AS INTEGER), CAST(sqlc.arg(after_id) AS TEXT)))
+    ORDER BY t.album_key DESC, t.album_id DESC, t.disc DESC, t."no" DESC, t.id DESC
+    LIMIT sqlc.arg(page_size)
+)
+ORDER BY tracks.album_key DESC, tracks.album_id DESC, tracks.disc DESC, tracks."no" DESC, tracks.id DESC;
+
+-- name: ListArtistTracksByAddedDesc :many
+-- ListArtistTracksByAddedDesc returns a page of the available tracks of the
+-- albums of an artist by (first_seen_at, id), reversed.
+SELECT sqlc.embed(tracks),
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = sqlc.arg(user_id) AND favorites.track_id = tracks.id) AS favorite
+FROM tracks NOT INDEXED
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.seq IN (
+    SELECT t.seq
+    FROM albums AS a INDEXED BY albums_artist_id_idx
+    JOIN tracks AS t INDEXED BY tracks_album_disc_no_idx ON t.album_id = a.id
+    WHERE a.artist_id = sqlc.arg(artist_id) AND a.available = 1 AND t.available = 1
+      AND (CAST(sqlc.arg(first_page) AS INTEGER) <> 0
+           OR (t.first_seen_at, t.id) < (CAST(sqlc.arg(first_seen_at) AS INTEGER), CAST(sqlc.arg(after_id) AS TEXT)))
+    ORDER BY t.first_seen_at DESC, t.id DESC
+    LIMIT sqlc.arg(page_size)
+)
+ORDER BY tracks.first_seen_at DESC, tracks.id DESC;

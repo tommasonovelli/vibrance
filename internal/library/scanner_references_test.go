@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"testing"
 	"time"
@@ -137,7 +138,7 @@ func TestReferencesFollowATrackMovedToAnotherAlbum(t *testing.T) {
 			gone := e.track(old.ID)
 			want := old
 			want.Available, want.UpdatedAt = 0, gone.UpdatedAt
-			if gone != want {
+			if !reflect.DeepEqual(gone, want) {
 				t.Fatalf("the row of the old album:\n got %+v\nwant %+v", gone, want)
 			}
 			// The scanner gave the revisions the time of its clock.

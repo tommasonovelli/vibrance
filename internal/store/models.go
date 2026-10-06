@@ -112,6 +112,10 @@ type Track struct {
 	RgAlbumPeak  sql.NullFloat64
 	Available    int64
 	UpdatedAt    int64
+	TitleKey     []byte
+	ArtistKey    []byte
+	AlbumKey     []byte
+	FirstSeenAt  int64
 }
 
 type User struct {

@@ -43,7 +43,7 @@ func putTracks(t *testing.T, st *store.Store, albumID string, tracks ...testTrac
 				Disc: tr.disc, No: tr.no, Title: tr.title, Artist: "Track Artist", RelPath: tr.id + ".flac",
 				FileSize: int64(1000 + i), FileMtimeNs: 1, FileSha256: "s", Codec: "flac", SampleRate: 44100, Channels: 2,
 				BitDepth: sql.NullInt64{Int64: 16, Valid: true}, DurationMs: sql.NullInt64{Int64: 1000, Valid: true},
-				UpdatedAt: 1,
+				UpdatedAt: 1, TitleKey: sortKey(tr.title), ArtistKey: sortKey("Track Artist"), FirstSeenAt: 1,
 			})
 			if err != nil {
 				return err

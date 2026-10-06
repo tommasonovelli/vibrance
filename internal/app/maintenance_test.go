@@ -153,7 +153,7 @@ func TestBackupAndRestoreKeepEverything(t *testing.T) {
 		t.Fatalf("the backup folder has %v: a temporary folder is left", got)
 	}
 	sum, size := fileSHA256(t, filepath.Join(dest, backupDatabase))
-	want := Manifest{AppVersion: buildinfo.Version, SchemaVersion: 2, CreatedAt: "2026-10-05T21:30:00.000Z",
+	want := Manifest{AppVersion: buildinfo.Version, SchemaVersion: 3, CreatedAt: "2026-10-05T21:30:00.000Z",
 		Database: ManifestDatabase{File: backupDatabase, Size: size, SHA256: sum},
 		Counts:   ManifestCounts{Users: 3, Playlists: 1, PlaylistItems: 3, Favorites: 3, Artists: 6, Albums: 6, Tracks: 14}}
 	if m != want || readBackupManifest(t, dest) != want {
@@ -666,7 +666,7 @@ func TestDoctor(t *testing.T) {
 	}
 
 	w.execOn(`UPDATE users SET disabled = 1 WHERE role = 'admin'`)
-	w.execOn(`DELETE FROM search_tracks WHERE rowid = (SELECT seq FROM tracks WHERE album_id = ? LIMIT 1)`, albumA)
+	w.execOn(`DELETE FROM search_tracks WHERE rowid = (SELECT min(seq) FROM tracks WHERE album_id = ?)`, albumA)
 	w.execOn(`UPDATE tracks SET title = 'Renamed' WHERE seq = (SELECT max(seq) FROM tracks WHERE album_id = ?)`, albumA)
 	want := []string{CodeDoctorAlbumCounters, CodeDoctorNoAdmin, CodeDoctorSearchExtra, CodeDoctorSearchMissing, CodeDoctorSearchStale}
 	if codes := findingCodes(doctor()); !slices.Equal(codes, want) {

@@ -203,6 +203,117 @@ func TestListAlbums(t *testing.T) {
 	}
 }
 
+// GET /tracks (docs/proposals/web-client-api.md A1, step W1) over the API:
+// in every order the pages are the whole list; by album it is the order of
+// the album pages, album after album; the default is by title; the filter
+// keeps the tracks of the albums of one artist; favorite is that of the
+// user of the request; a track that is not available is in no list.
+func TestListTracks(t *testing.T) {
+	w := newWorld(t, apiOrigin)
+	w.indexFixture()
+	ids := func(tracks []api.Track) []string {
+		out := make([]string, 0, len(tracks))
+		for _, tr := range tracks {
+			out = append(out, tr.Id)
+		}
+		return out
+	}
+	const total = 14
+	for _, sort := range []string{"title", "artist", "album", "added"} {
+		for _, order := range []string{"asc", "desc"} {
+			query := "?sort=" + sort + "&order=" + order
+			whole := decode[api.TrackList](t, w.get("/tracks"+query+"&limit=200", w.anna))
+			if len(whole.Tracks) != total || whole.Next != nil {
+				t.Fatalf("%s: %d tracks, next %v", query, len(whole.Tracks), whole.Next)
+			}
+			var paged []api.Track
+			path := "/tracks" + query + "&limit=5"
+			for range 4 {
+				page := decode[api.TrackList](t, w.get(path, w.bob))
+				paged = append(paged, page.Tracks...)
+				if page.Next == nil {
+					break
+				}
+				path = "/tracks" + query + "&limit=5&after=" + url.QueryEscape(*page.Next)
+			}
+			if !slices.Equal(ids(paged), ids(whole.Tracks)) {
+				t.Fatalf("%s: pages of 5 differ from the whole list", query)
+			}
+		}
+	}
+	def := decode[api.TrackList](t, w.get("/tracks", w.anna))
+	if byTitle := decode[api.TrackList](t, w.get("/tracks?sort=title&order=asc", w.anna)); !slices.Equal(ids(def.Tracks), ids(byTitle.Tracks)) {
+		t.Fatal("the default order is not by title, ascending")
+	}
+
+	// By album: the tracks of each album page, the albums by title.
+	var want []string
+	for _, a := range decode[api.AlbumList](t, w.get("/albums?sort=title", w.anna)).Albums {
+		want = append(want, ids(decode[api.AlbumDetail](t, w.get("/albums/"+a.Id, w.anna)).Tracks)...)
+	}
+	byAlbum := decode[api.TrackList](t, w.get("/tracks?sort=album", w.anna))
+	if !slices.Equal(ids(byAlbum.Tracks), want) {
+		t.Fatalf("by album:\n got %v\nwant %v", ids(byAlbum.Tracks), want)
+	}
+	// Each is the track of GET /tracks/{id}.
+	for _, tr := range byAlbum.Tracks {
+		if one := decode[api.Track](t, w.get("/tracks/"+tr.Id, w.anna)); !reflect.DeepEqual(one, tr) {
+			t.Fatalf("in the list %+v, alone %+v", tr, one)
+		}
+	}
+
+	// The tracks of the albums of one artist, and of no artist.
+	e := decode[api.AlbumDetail](t, w.get("/albums/"+albumE, w.anna))
+	ofE := decode[api.TrackList](t, w.get("/tracks?sort=album&artist="+e.Artist.Id, w.anna))
+	if !slices.Equal(ids(ofE.Tracks), ids(e.Tracks)) {
+		t.Fatalf("the tracks of %s: %v, want %v", e.Artist.Name, ids(ofE.Tracks), ids(e.Tracks))
+	}
+	if none := decode[api.TrackList](t, w.get("/tracks?artist="+someID, w.anna)); len(none.Tracks) != 0 || none.Next != nil {
+		t.Fatalf("the tracks of no artist: %+v", none)
+	}
+
+	// favorite is that of the user of the request.
+	w.favorite(w.anna, e.Tracks[1].Id)
+	for who, want := range map[*account]bool{w.anna: true, w.bob: false} {
+		for _, tr := range decode[api.TrackList](t, w.get("/tracks?artist="+e.Artist.Id, who)).Tracks {
+			if tr.Favorite != (want && tr.Id == e.Tracks[1].Id) {
+				t.Fatalf("%s: favorite of %s is %t", who.name, tr.Id, tr.Favorite)
+			}
+		}
+	}
+
+	// A track that is not available is in no list.
+	b := decode[api.AlbumDetail](t, w.get("/albums/"+albumB, w.anna)).Tracks
+	w.unavailable(albumB)
+	for _, sort := range []string{"title", "artist", "album", "added"} {
+		list := decode[api.TrackList](t, w.get("/tracks?sort="+sort, w.anna))
+		if len(list.Tracks) != total-len(b) || slices.ContainsFunc(list.Tracks, func(tr api.Track) bool { return !tr.Available || tr.Album.Id == albumB }) {
+			t.Fatalf("%s: %d tracks, those of B among them", sort, len(list.Tracks))
+		}
+	}
+
+	// A cursor belongs to its sort and order, and to its list.
+	title := decode[api.TrackList](t, w.get("/tracks?limit=1", w.anna)).Next
+	albums := decode[api.AlbumList](t, w.get("/albums?limit=1", w.anna)).Next
+	if title == nil || albums == nil {
+		t.Fatal("no cursor")
+	}
+	for _, path := range []string{
+		"/tracks?after=x",
+		"/tracks?after=",
+		"/tracks?sort=added&after=" + url.QueryEscape(*title),
+		"/tracks?order=desc&after=" + url.QueryEscape(*title),
+		"/tracks?after=" + url.QueryEscape(*albums),
+		"/albums?after=" + url.QueryEscape(*title),
+	} {
+		rec := w.get(path, w.anna)
+		wantCode(t, path, rec, http.StatusBadRequest, "invalid_cursor")
+	}
+	for _, path := range []string{"/tracks?sort=year", "/tracks?order=up", "/tracks?limit=0", "/tracks?limit=201", "/tracks?artist=x"} {
+		wantCode(t, path, w.get(path, w.anna), http.StatusBadRequest, "invalid_request")
+	}
+}
+
 // §8.4: a cursor that is not one of the list, with its sort and order, is
 // 400 invalid_cursor, and says nothing of the cursor.
 func TestInvalidCursors(t *testing.T) {
@@ -354,7 +465,8 @@ func (w *world) catalogEntry() {
 		}
 		if err := q.UpsertTrack(ctx, store.UpsertTrackParams{ID: entryTrack, AlbumID: entryAlbum, Fingerprint: "f", FpVersion: "v",
 			Occurrence: 1, Disc: 1, No: 1, Title: "Track", Artist: "Artist", RelPath: "01 - Track.flac", FileSize: 1, FileMtimeNs: 1,
-			FileSha256: "s", Codec: "flac", SampleRate: 44100, Channels: 2, UpdatedAt: 1}); err != nil {
+			FileSha256: "s", Codec: "flac", SampleRate: 44100, Channels: 2, UpdatedAt: 1,
+			TitleKey: names.SortKey("Track"), ArtistKey: key, FirstSeenAt: 1}); err != nil {
 			return err
 		}
 		return q.UpdateAlbumCounters(ctx, entryAlbum)

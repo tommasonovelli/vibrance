@@ -69,7 +69,8 @@ func measureServer(t *testing.T, bin string) {
 
 	admin, user := srv.signIn(Admin), srv.signIn(User)
 	albums := measureAlbumLists(r, admin)
-	measureArtistFilter(r, admin)
+	largest, smallest := measureArtistFilter(r, admin)
+	measureTrackLists(r, admin, largest, smallest)
 	tracks := measureAlbumDetails(r, admin, albums)
 	measureSearch(r, admin)
 	measureFavorites(r, admin)
@@ -161,8 +162,8 @@ func measureAlbumLists(r *report, c *client) []string {
 // measureArtistFilter measures the list of the albums of one artist, in the
 // eight orders: of the artist with the most albums and of artists with one
 // album, which is the worst case of a list that walks the index of its
-// order and skips the albums of the others.
-func measureArtistFilter(r *report, c *client) {
+// order and skips the albums of the others. It returns those artists.
+func measureArtistFilter(r *report, c *client) (largestID string, smallestIDs []string) {
 	r.t.Helper()
 	type artistSummary struct {
 		ID         string `json:"id"`
@@ -223,6 +224,91 @@ func measureArtistFilter(r *report, c *client) {
 		for range 10 {
 			if took := c.get("/api/v1/artists/"+largest.ID, nil); pass == 1 {
 				detail.add(took)
+			}
+		}
+	}
+	for _, a := range smallest {
+		smallestIDs = append(smallestIDs, a.ID)
+	}
+	return largest.ID, smallestIDs
+}
+
+// trackPage is a page of GET /tracks.
+type trackPage struct {
+	Tracks []struct {
+		ID string `json:"id"`
+	} `json:"tracks"`
+	Next *string `json:"next"`
+}
+
+// The orders of GET /tracks (docs/proposals/web-client-api.md A1).
+var trackSorts = []string{"title", "artist", "album", "added"}
+
+// measureTrackLists measures the list of the tracks (step W1), in its eight
+// orders, 50 tracks a page: the first page, and the 40 pages after it
+// (2,000 of the 200,000 tracks; the plans of QueryPlans prove that a page
+// after a cursor costs what the first does, wherever it is). Then the
+// tracks of the albums of one artist, of the artist with the most albums
+// and of artists with one album. Every one has the budget of the lists of
+// DESIGN.md §8.5, the budget of the albums.
+func measureTrackLists(r *report, c *client, largest string, smallest []string) {
+	r.t.Helper()
+	first := r.measure("tracks: the first page of 50, 8 orders", budgetAlbumList)
+	for _, sort := range trackSorts {
+		for _, order := range albumOrders {
+			query := "/api/v1/tracks?limit=50&sort=" + sort + "&order=" + order
+			m := r.measure("tracks: 40 pages of 50 after the first, sort="+sort+" order="+order, budgetAlbumList)
+			for pass := range 2 {
+				var page trackPage
+				took := c.get(query, &page)
+				if pass == 1 {
+					first.add(took)
+				}
+				seen := len(page.Tracks)
+				for range 40 {
+					if page.Next == nil {
+						r.t.Fatalf("%s: no page after %d tracks", query, seen)
+					}
+					after := *page.Next
+					page = trackPage{}
+					took := c.get(query+"&after="+url.QueryEscape(after), &page)
+					if pass == 1 {
+						m.add(took)
+					}
+					seen += len(page.Tracks)
+				}
+				if seen != 41*50 {
+					r.t.Fatalf("%s: %d tracks in 41 pages", query, seen)
+				}
+			}
+		}
+	}
+	of := r.measure("tracks ?artist= of the artist with the most albums, first page of 50, 8 orders", budgetAlbumList)
+	ofOne := r.measure("tracks ?artist= of artists with one album, 8 orders", budgetAlbumList)
+	for pass := range 2 {
+		for _, sort := range trackSorts {
+			for _, order := range albumOrders {
+				query := "/api/v1/tracks?limit=50&sort=" + sort + "&order=" + order + "&artist="
+				for range 3 {
+					var page trackPage
+					took := c.get(query+largest, &page)
+					if len(page.Tracks) != 50 {
+						r.t.Fatalf("%d tracks of the largest artist", len(page.Tracks))
+					}
+					if pass == 1 {
+						of.add(took)
+					}
+				}
+				for _, a := range smallest {
+					var page trackPage
+					took := c.get(query+a, &page)
+					if len(page.Tracks) == 0 || page.Next != nil {
+						r.t.Fatalf("%d tracks of an artist with one album, next %v", len(page.Tracks), page.Next)
+					}
+					if pass == 1 {
+						ofOne.add(took)
+					}
+				}
 			}
 		}
 	}

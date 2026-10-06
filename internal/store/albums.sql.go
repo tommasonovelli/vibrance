@@ -324,16 +324,17 @@ func (q *Queries) SetArtistKeyOfAlbums(ctx context.Context, arg SetArtistKeyOfAl
 const updateAlbumCounters = `-- name: UpdateAlbumCounters :exec
 UPDATE albums SET
     track_count = (
-        SELECT count(*) FROM tracks
+        SELECT count(*) FROM tracks INDEXED BY tracks_album_disc_no_idx
         WHERE tracks.album_id = albums.id AND tracks.available = 1),
     duration_ms = (
-        SELECT coalesce(sum(tracks.duration_ms), 0) FROM tracks
+        SELECT coalesce(sum(tracks.duration_ms), 0) FROM tracks INDEXED BY tracks_album_disc_no_idx
         WHERE tracks.album_id = albums.id AND tracks.available = 1)
 WHERE albums.id = ?
 `
 
 // UpdateAlbumCounters counts the available tracks of an album again, and
-// adds up their known durations (DESIGN.md 5.2).
+// adds up their known durations (DESIGN.md 5.2). The index of the tracks of
+// an album is named: see ListAvailableTracksOfAlbum.
 func (q *Queries) UpdateAlbumCounters(ctx context.Context, id string) error {
 	_, err := q.db.ExecContext(ctx, updateAlbumCounters, id)
 	return err

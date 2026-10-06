@@ -452,7 +452,7 @@ docker compose run --rm --no-deps vibrance version
 - With Caddy, download `compose.caddy.yaml` too when the release notes say it changed, then `docker compose up -d --build --wait`.
 - The last line prints Vibrance's running version.
 
-At its first start the new version applies its database migrations before it is ready. When the new image carries another `ffmpeg`, Vibrance computes the audio fingerprints again in the background, on the same rows; the ids do not change.
+At its first start the new version applies its database migrations before it is ready. A version that adds sort keys computes them for every row then, once: the first start after the upgrade to the version with the list of the tracks takes about 13 seconds for 200,000 tracks before it is ready. When the new image carries another `ffmpeg`, Vibrance computes the audio fingerprints again in the background, on the same rows; the ids do not change.
 
 **Downgrading is not possible**: an older Vibrance refuses a database that a newer one has upgraded (`store_schema_too_new`). To go back, restore the backups made before the upgrade, with the older release's `compose.yaml`.
 

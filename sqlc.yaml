@@ -12,6 +12,7 @@ sql:
   - engine: sqlite
     schema:
       - migrations/00001_schema.sql
+      - migrations/00003_track_lists.sql
     queries: sql
     gen:
       go:

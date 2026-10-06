@@ -41,43 +41,59 @@ func (q *Queries) DeleteFavoritesOfTrack(ctx context.Context, trackID string) er
 	return err
 }
 
-const listMovedReferences = `-- name: ListMovedReferences :many
-SELECT gone.id AS old_id, here.id AS new_id
+const listAudioTwins = `-- name: ListAudioTwins :many
+SELECT gone.id AS old_id, gone.first_seen_at AS old_first_seen_at,
+    CAST(gone.id IN (SELECT track_id FROM playlist_items UNION SELECT track_id FROM favorites) AS INTEGER) AS referenced,
+    here.id AS new_id, here.first_seen_at AS new_first_seen_at
 FROM tracks AS gone
-JOIN tracks AS here ON here.fingerprint = gone.fingerprint AND here.available = 1
+JOIN tracks AS here INDEXED BY tracks_fingerprint_idx ON here.fingerprint = gone.fingerprint AND here.available = 1
 WHERE gone.available = 0
-  AND gone.id IN (SELECT track_id FROM playlist_items UNION SELECT track_id FROM favorites)
 ORDER BY gone.seq, (here.album_id = gone.album_id) DESC, here.seq DESC
 `
 
-type ListMovedReferencesRow struct {
-	OldID string
-	NewID string
+type ListAudioTwinsRow struct {
+	OldID          string
+	OldFirstSeenAt int64
+	Referenced     int64
+	NewID          string
+	NewFirstSeenAt int64
 }
 
-// ListMovedReferences is how the references of the users follow the audio
-// (DESIGN.md, erratum of 2026-10-02): a playlist item or a favorite that
-// points to a track that is no longer available moves to an available track
-// with the same fingerprint. The queries of this file are the only ones
-// with which the scanner writes the tables of the users; none of them
-// deletes or changes a row of tracks (I3).
+// ListAudioTwins is how the references of the users, and the moment the
+// audio was first seen, follow the audio (DESIGN.md, errata of 2026-10-02
+// and of 2026-10-06, W1): a playlist item or a favorite that points to a
+// track that is no longer available moves to an available track with the
+// same fingerprint, and that track keeps the earlier first_seen_at of the
+// two. The queries of this file are the only ones with which the scanner
+// writes the tables of the users; none of them deletes a row of tracks or
+// changes its id or its availability (I3, I15).
 //
-// It returns, for every unavailable track that a playlist item or a
-// favorite points to, the available tracks with its fingerprint, whatever
-// their album and their fp_version. The first row of an old_id is the track
-// its references move to: one of the same album before one of another
-// album, then the row created last (the highest seq), which is the track
-// that was just moved. A track without such a twin is not listed.
-func (q *Queries) ListMovedReferences(ctx context.Context) ([]ListMovedReferencesRow, error) {
-	rows, err := q.db.QueryContext(ctx, listMovedReferences)
+// It returns, for every unavailable track, the available tracks with its
+// fingerprint, whatever their album and their fp_version, with whether a
+// playlist item or a favorite points to the unavailable one and the
+// first_seen_at of both. The first row of an old_id is the track its
+// references move to: one of the same album before one of another album,
+// then the row created last (the highest seq), which is the track that was
+// just moved. A track without such a twin is not listed.
+// The index of the twins is named: without statistics SQLite would look for
+// them among every available track, through an index that begins with
+// available.
+func (q *Queries) ListAudioTwins(ctx context.Context) ([]ListAudioTwinsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAudioTwins)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListMovedReferencesRow
+	var items []ListAudioTwinsRow
 	for rows.Next() {
-		var i ListMovedReferencesRow
-		if err := rows.Scan(&i.OldID, &i.NewID); err != nil {
+		var i ListAudioTwinsRow
+		if err := rows.Scan(
+			&i.OldID,
+			&i.OldFirstSeenAt,
+			&i.Referenced,
+			&i.NewID,
+			&i.NewFirstSeenAt,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -118,6 +134,23 @@ func (q *Queries) ListPlaylistIDsByTrack(ctx context.Context, trackID string) ([
 		return nil, err
 	}
 	return items, nil
+}
+
+const lowerTrackFirstSeen = `-- name: LowerTrackFirstSeen :exec
+UPDATE tracks SET first_seen_at = ?1
+WHERE id = ?2 AND first_seen_at > ?1
+`
+
+type LowerTrackFirstSeenParams struct {
+	FirstSeenAt int64
+	ID          string
+}
+
+// LowerTrackFirstSeen gives a track an earlier first_seen_at: that of a
+// row with the same audio which it replaces. A later one changes nothing.
+func (q *Queries) LowerTrackFirstSeen(ctx context.Context, arg LowerTrackFirstSeenParams) error {
+	_, err := q.db.ExecContext(ctx, lowerTrackFirstSeen, arg.FirstSeenAt, arg.ID)
+	return err
 }
 
 const movePlaylistItems = `-- name: MovePlaylistItems :exec

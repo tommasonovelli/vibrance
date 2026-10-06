@@ -531,6 +531,25 @@ func a17(t *testing.T, w *world) {
 	if !found || vb.track(t, old).Available {
 		t.Errorf("no item follows the moved track to %s, or the old track %s is still available", now, old)
 	}
+	// The moved track keeps the moment Vibrance first saw its audio, and so
+	// its place in GET /tracks?sort=added: newest first, it comes after
+	// every track of epsilon, which a12 added after it
+	// (docs/proposals/web-client-api.md A1).
+	epsilon := w.tracksOf("epsilon")
+	added := vb.tracks(t, "sort=added&order=desc")
+	at := slices.IndexFunc(added, func(tr api.Track) bool { return tr.Id == now })
+	later := 0
+	for i, tr := range added {
+		if slices.Contains(epsilon, tr.Id) {
+			later++
+			if i > at {
+				t.Errorf("by the moment of addition, the moved track %s (at %d) comes before %s of epsilon (at %d)", now, at, tr.Id, i)
+			}
+		}
+	}
+	if at < 0 || later == 0 {
+		t.Errorf("by the moment of addition: the moved track at %d, %d tracks of epsilon", at, later)
+	}
 }
 
 // a18: every track of an album moves to another: each follows, and the

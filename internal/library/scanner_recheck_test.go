@@ -69,7 +69,7 @@ func TestRecheckHealsTheTimesOfAnUnchangedAlbum(t *testing.T) {
 	}
 	// Nothing else of the row changed (I3).
 	now.FileMtimeNs, now.UpdatedAt = was.FileMtimeNs, was.UpdatedAt
-	if now != was {
+	if !reflect.DeepEqual(now, was) {
 		t.Fatalf("the row changed beyond its time:\n got %+v\nwant %+v", now, was)
 	}
 	a := e.album(id).Album

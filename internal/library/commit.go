@@ -87,6 +87,12 @@ func commitAlbum(ctx context.Context, q *store.Queries, w albumWrite) error {
 			return fmt.Errorf("marking the track %s unavailable: %w", t.ID, err)
 		}
 	}
+	// tracks.album_key is a copy of the title_key of the album, in every
+	// row of the album: the new ones, and all of them when the title
+	// changed.
+	if err := q.SetAlbumKeyOfTracks(ctx, store.SetAlbumKeyOfTracksParams{AlbumKey: w.album.TitleKey, AlbumID: id}); err != nil {
+		return fmt.Errorf("giving the tracks of the album %s its sort key: %w", id, err)
+	}
 	if err := q.UpdateAlbumCounters(ctx, id); err != nil {
 		return fmt.Errorf("counting the tracks of the album %s: %w", id, err)
 	}
@@ -175,9 +181,12 @@ func commitAbsent(ctx context.Context, q *store.Queries, albumID, artistID strin
 	return search.SyncArtist(ctx, q.Conn(), artistID)
 }
 
-// commitReferences makes the references of the users follow the audio: the
-// playlist items and the favorites of a track that is not available move
-// to an available track with the same fingerprint, when there is one.
+// commitReferences makes the references of the users, and the moment the
+// audio was first seen, follow the audio: the playlist items and the
+// favorites of a track that is not available move to an available track
+// with the same fingerprint, when there is one, and that track keeps the
+// first_seen_at of the two that is the earlier, so that a track MusicLib
+// moved to another album is not recently added (GET /tracks?sort=added).
 // *moved is how many tracks lost their references this way.
 //
 // The rule reads only the state of the database, so it does not matter in
@@ -186,17 +195,23 @@ func commitAbsent(ctx context.Context, q *store.Queries, albumID, artistID strin
 // added_at, and each playlist that has such an item gets one new revision,
 // as after any change of its items. A favorite keeps its created_at; a user
 // that already has the other track among its favorites keeps that row, and
-// the old one goes. No row of tracks changes (I3, I15).
+// the old one goes. No row of tracks changes but in first_seen_at: no id,
+// no availability (I3, I15).
 func commitReferences(ctx context.Context, q *store.Queries, now int64, moved *int) error {
-	rows, err := q.ListMovedReferences(ctx)
+	rows, err := q.ListAudioTwins(ctx)
 	if err != nil {
-		return fmt.Errorf("listing the references to unavailable tracks: %w", err)
+		return fmt.Errorf("listing the unavailable tracks with the audio of an available one: %w", err)
 	}
 	*moved = 0
 	playlists := map[string]bool{}
-	for i, r := range rows {
-		// The first row of a track is the one its references move to.
-		if i > 0 && rows[i-1].OldID == r.OldID {
+	for _, r := range followed(rows) {
+		if r.OldFirstSeenAt < r.NewFirstSeenAt {
+			err := q.LowerTrackFirstSeen(ctx, store.LowerTrackFirstSeenParams{FirstSeenAt: r.OldFirstSeenAt, ID: r.NewID})
+			if err != nil {
+				return fmt.Errorf("giving the track %s the moment its audio was first seen: %w", r.NewID, err)
+			}
+		}
+		if r.Referenced == 0 {
 			continue
 		}
 		*moved++
@@ -223,6 +238,23 @@ func commitReferences(ctx context.Context, q *store.Queries, now int64, moved *i
 		}
 	}
 	return nil
+}
+
+// followed keeps, of the rows of ListAudioTwins, the pair of each
+// unavailable track with the track that replaces it, which is its first
+// row, and only when something follows: references to move, or an earlier
+// first_seen_at. Once both have followed, the pair stays out.
+func followed(rows []store.ListAudioTwinsRow) []store.ListAudioTwinsRow {
+	var out []store.ListAudioTwinsRow
+	for i, r := range rows {
+		if i > 0 && rows[i-1].OldID == r.OldID {
+			continue
+		}
+		if r.Referenced != 0 || r.OldFirstSeenAt < r.NewFirstSeenAt {
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
 // commitFingerprint gives a row the fingerprint that the current ffmpeg
@@ -263,11 +295,13 @@ func commitMeta(ctx context.Context, q *store.Queries, key, value string) error 
 	return nil
 }
 
-// sortKeys are the sort keys of every artist and of every album title, as
-// the compiled collation computes them.
+// sortKeys are the sort keys of every artist, of every album title and of
+// the title and the artist of every track, as the compiled collation
+// computes them.
 type sortKeys struct {
 	artists []store.SetArtistSortKeyParams
 	albums  []store.SetAlbumTitleKeyParams
+	tracks  []store.SetTrackSortKeysParams
 	// version is the collation they were computed with.
 	version string
 }
@@ -288,6 +322,15 @@ func commitSortKeys(ctx context.Context, q *store.Queries, keys sortKeys) error 
 	for _, a := range keys.albums {
 		if err := q.SetAlbumTitleKey(ctx, a); err != nil {
 			return fmt.Errorf("writing the sort key of the album %s: %w", a.ID, err)
+		}
+		// tracks.album_key is a copy of it.
+		if err := q.SetAlbumKeyOfTracks(ctx, store.SetAlbumKeyOfTracksParams{AlbumKey: a.TitleKey, AlbumID: a.ID}); err != nil {
+			return fmt.Errorf("giving the tracks of the album %s its sort key: %w", a.ID, err)
+		}
+	}
+	for _, t := range keys.tracks {
+		if err := q.SetTrackSortKeys(ctx, t); err != nil {
+			return fmt.Errorf("writing the sort keys of the track %s: %w", t.ID, err)
 		}
 	}
 	return commitMeta(ctx, q, metaCollateVersion, keys.version)

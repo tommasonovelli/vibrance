@@ -61,6 +61,7 @@ var authorizationMatrix = map[string]access{
 	"listArtists":         {s401, s200, s200, 0},
 	"getArtist":           {s401, s200, s200, 0},
 	"listAlbums":          {s401, s200, s200, 0},
+	"listTracks":          {s401, s200, s200, 0},
 	"getAlbum":            {s401, s200, s200, 0},
 	"getTrack":            {s401, s200, s200, 0},
 	"search":              {s401, s200, s200, 0},
@@ -139,6 +140,10 @@ var matrixRequests = map[string]matrixRequest{
 	"listAlbums": func(w *world, _, _ *account) (string, string, any, string) {
 		w.catalogEntry()
 		return "GET", "/albums", nil, ""
+	},
+	"listTracks": func(w *world, _, _ *account) (string, string, any, string) {
+		w.catalogEntry()
+		return "GET", "/tracks", nil, ""
 	},
 	"getAlbum": func(w *world, _, _ *account) (string, string, any, string) {
 		w.catalogEntry()

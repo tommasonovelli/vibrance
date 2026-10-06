@@ -201,11 +201,12 @@ func buildWrite(c Candidate, before snapshot, tracks []trackFile, plan Plan, cov
 		old := before.tracks[m.Old]
 		p := row(m.New, &old)
 		// The id of a row never changes (I3). After F2 and F3 the row has
-		// the fingerprint of the file; after F1 it keeps its own.
-		p.ID, p.Occurrence = old.ID, int64(m.Occurrence)
+		// the fingerprint of the file; after F1 it keeps its own. A row
+		// keeps the moment its audio was first seen.
+		p.ID, p.Occurrence, p.FirstSeenAt = old.ID, int64(m.Occurrence), old.FirstSeenAt
 		was := trackParams(old)
 		was.UpdatedAt = now
-		if old.Available == 1 && p == was {
+		if old.Available == 1 && reflect.DeepEqual(p, was) {
 			continue
 		}
 		w.tracks = append(w.tracks, p)
@@ -217,7 +218,10 @@ func buildWrite(c Candidate, before snapshot, tracks []trackFile, plan Plan, cov
 			return albumWrite{}, "", fmt.Errorf("creating the id of a track: %w", err)
 		}
 		p := row(in.New, nil)
-		p.ID, p.Occurrence = id.String(), int64(in.Occurrence)
+		// A new row is first seen now. If it is a track that MusicLib moved
+		// from another album, the end of the cycle gives it the moment of
+		// the row it replaces (commitReferences).
+		p.ID, p.Occurrence, p.FirstSeenAt = id.String(), int64(in.Occurrence), now
 		w.tracks = append(w.tracks, p)
 	}
 	for _, i := range plan.Gone {
@@ -251,13 +255,17 @@ func lacksTags(t media.Tags) bool {
 func examinedParams(t trackFile, albumArtist string) store.UpsertTrackParams {
 	e := t.examined
 	_, nameTitle := nameParts(t.audio.Path)
+	title := cmp.Or(names.Normalize(e.tags.Title), nameTitle)
+	artist := cmp.Or(names.Normalize(e.tags.Artist), albumArtist)
 	p := store.UpsertTrackParams{
 		Fingerprint: e.fingerprint,
 		FpVersion:   e.fpVersion,
 		Disc:        int64(e.disc),
 		No:          int64(e.no),
-		Title:       cmp.Or(names.Normalize(e.tags.Title), nameTitle),
-		Artist:      cmp.Or(names.Normalize(e.tags.Artist), albumArtist),
+		Title:       title,
+		Artist:      artist,
+		TitleKey:    names.SortKey(title),
+		ArtistKey:   names.SortKey(artist),
 		Genre:       nullString(names.Normalize(e.tags.Genre)),
 		Codec:       e.info.Codec,
 		SampleRate:  int64(e.info.SampleRate),
@@ -284,7 +292,7 @@ func trackParams(t store.Track) store.UpsertTrackParams {
 		Codec: t.Codec, SampleRate: t.SampleRate, Channels: t.Channels, BitDepth: t.BitDepth, Bitrate: t.Bitrate,
 		DurationMs: t.DurationMs, LyricsRel: t.LyricsRel, LyricsSha256: t.LyricsSha256,
 		RgTrackGain: t.RgTrackGain, RgTrackPeak: t.RgTrackPeak, RgAlbumGain: t.RgAlbumGain, RgAlbumPeak: t.RgAlbumPeak,
-		UpdatedAt: t.UpdatedAt,
+		UpdatedAt: t.UpdatedAt, TitleKey: t.TitleKey, ArtistKey: t.ArtistKey, FirstSeenAt: t.FirstSeenAt,
 	}
 }
 

@@ -83,7 +83,7 @@ func TestMethodNotAllowed(t *testing.T) {
 func TestUnknownPaths(t *testing.T) {
 	handler, _ := testHandler(t, nil)
 	for _, target := range []string{"/server", "/api/server", "/api/v2/server", "/api/v1", "/api/v1/", "/api/v1/nothing",
-		"/api/v1/server/", "/api/v1/tracks", "/api/v1/tracks/" + someID + "/audio/x", "/api/v1/Server"} {
+		"/api/v1/server/", "/api/v1/tracks/", "/api/v1/tracks/" + someID + "/audio/x", "/api/v1/Server"} {
 		for _, method := range []string{"GET", "POST", "DELETE"} {
 			rec := httptest.NewRecorder()
 			handler.ServeHTTP(rec, httptest.NewRequest(method, target, nil))
@@ -142,11 +142,13 @@ func TestIdsHaveOneSpelling(t *testing.T) {
 	}
 
 	for spelling, id := range spellings {
-		query := httptest.NewRequest(http.MethodGet, BasePath+"/albums", nil)
-		q := query.URL.Query()
-		q.Set("artist", id)
-		query.URL.RawQuery = q.Encode()
-		check("listAlbums with an artist "+spelling, query, "artist")
+		for _, list := range []string{"/albums", "/tracks"} {
+			query := httptest.NewRequest(http.MethodGet, BasePath+list, nil)
+			q := query.URL.Query()
+			q.Set("artist", id)
+			query.URL.RawQuery = q.Encode()
+			check(list+" with an artist "+spelling, query, "artist")
+		}
 
 		body, err := json.Marshal(map[string]any{"track_ids": []string{someID, id}, "position": nil})
 		if err != nil {

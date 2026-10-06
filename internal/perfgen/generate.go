@@ -314,6 +314,7 @@ func (g *generator) makeAlbum(i int) (album, error) {
 		case rng.IntN(20) == 0:
 			t.Artist += " feat. " + g.artists[rng.IntN(len(g.artists))].row.Name
 		}
+		t.TitleKey, t.ArtistKey, t.FirstSeenAt = names.SortKey(t.Title), names.SortKey(t.Artist), seen
 		duration := int64(90_000 + rng.IntN(390_000))
 		bitrate := int64(900_000)
 		if format.bitDepth != 0 {
@@ -409,6 +410,9 @@ func writeAlbums(ctx context.Context, q *store.Queries, albums []album) error {
 			if err := q.UpsertTrack(ctx, t); err != nil {
 				return err
 			}
+		}
+		if err := q.SetAlbumKeyOfTracks(ctx, store.SetAlbumKeyOfTracksParams{AlbumKey: a.row.TitleKey, AlbumID: a.row.ID}); err != nil {
+			return err
 		}
 		if err := q.UpdateAlbumCounters(ctx, a.row.ID); err != nil {
 			return err

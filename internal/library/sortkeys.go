@@ -54,13 +54,21 @@ func EnsureSortKeys(ctx context.Context, st *store.Store) (recomputed bool, err 
 		for _, a := range albums {
 			keys.albums = append(keys.albums, store.SetAlbumTitleKeyParams{TitleKey: names.SortKey(a.Title), ID: a.ID})
 		}
+		tracks, err := q.ListTrackNames(ctx)
+		if err != nil {
+			return fmt.Errorf("listing the tracks: %w", err)
+		}
+		for _, t := range tracks {
+			keys.tracks = append(keys.tracks, store.SetTrackSortKeysParams{TitleKey: names.SortKey(t.Title),
+				ArtistKey: names.SortKey(t.Artist), ID: t.ID})
+		}
 		return nil
 	})
 	if err != nil || current {
 		return false, wrapSortKeys(err)
 	}
 	err = st.WithWriteTx(ctx, func(q *store.Queries) error { return commitSortKeys(ctx, q, keys) })
-	return err == nil && len(keys.artists)+len(keys.albums) > 0, wrapSortKeys(err)
+	return err == nil && len(keys.artists)+len(keys.albums)+len(keys.tracks) > 0, wrapSortKeys(err)
 }
 
 func wrapSortKeys(err error) error {

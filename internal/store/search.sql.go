@@ -58,7 +58,7 @@ func (q *Queries) GetAvailableAlbumBySeq(ctx context.Context, seq int64) (GetAva
 }
 
 const getAvailableTrackBySeq = `-- name: GetAvailableTrackBySeq :one
-SELECT tracks.seq, tracks.id, tracks.album_id, tracks.fingerprint, tracks.fp_version, tracks.occurrence, tracks.disc, tracks."no", tracks.title, tracks.artist, tracks.genre, tracks.rel_path, tracks.file_size, tracks.file_mtime_ns, tracks.file_sha256, tracks.codec, tracks.sample_rate, tracks.channels, tracks.bit_depth, tracks.bitrate, tracks.duration_ms, tracks.lyrics_rel, tracks.lyrics_sha256, tracks.rg_track_gain, tracks.rg_track_peak, tracks.rg_album_gain, tracks.rg_album_peak, tracks.available, tracks.updated_at,
+SELECT tracks.seq, tracks.id, tracks.album_id, tracks.fingerprint, tracks.fp_version, tracks.occurrence, tracks.disc, tracks."no", tracks.title, tracks.artist, tracks.genre, tracks.rel_path, tracks.file_size, tracks.file_mtime_ns, tracks.file_sha256, tracks.codec, tracks.sample_rate, tracks.channels, tracks.bit_depth, tracks.bitrate, tracks.duration_ms, tracks.lyrics_rel, tracks.lyrics_sha256, tracks.rg_track_gain, tracks.rg_track_peak, tracks.rg_album_gain, tracks.rg_album_peak, tracks.available, tracks.updated_at, tracks.title_key, tracks.artist_key, tracks.album_key, tracks.first_seen_at,
     albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
     albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
     EXISTS (SELECT 1 FROM favorites
@@ -120,6 +120,10 @@ func (q *Queries) GetAvailableTrackBySeq(ctx context.Context, arg GetAvailableTr
 		&i.Track.RgAlbumPeak,
 		&i.Track.Available,
 		&i.Track.UpdatedAt,
+		&i.Track.TitleKey,
+		&i.Track.ArtistKey,
+		&i.Track.AlbumKey,
+		&i.Track.FirstSeenAt,
 		&i.AlbumTitle,
 		&i.AlbumYear,
 		&i.AlbumCoverSha256,

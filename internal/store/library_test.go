@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"slices"
 	"testing"
@@ -40,6 +41,7 @@ func trackRow(id, albumID, fingerprint string, occurrence, durationMS, at int64)
 		Disc: 1, No: 1, Title: "T " + id, Artist: "A", RelPath: id + ".flac", FileSize: 1, FileMtimeNs: 2, FileSha256: "s",
 		Codec: "flac", SampleRate: 44100, Channels: 2,
 		DurationMs: sql.NullInt64{Int64: durationMS, Valid: durationMS > 0}, UpdatedAt: at,
+		TitleKey: []byte{3}, ArtistKey: []byte{4}, FirstSeenAt: at,
 	}
 }
 
@@ -217,7 +219,7 @@ func TestUpsertTrack(t *testing.T) {
 		LyricsRel:  sql.NullString{String: "Disc 2/03 - New.lrc", Valid: true}, LyricsSha256: sql.NullString{String: "l", Valid: true},
 		RgTrackGain: sql.NullFloat64{Float64: -1.5, Valid: true}, RgTrackPeak: sql.NullFloat64{Float64: 0.5, Valid: true},
 		RgAlbumGain: sql.NullFloat64{Float64: -2.5, Valid: true}, RgAlbumPeak: sql.NullFloat64{Float64: 0.75, Valid: true},
-		UpdatedAt: 200,
+		UpdatedAt: 200, TitleKey: []byte{5}, ArtistKey: []byte{6}, FirstSeenAt: 999,
 	}
 	write(t, s, func(q *Queries) error { return q.UpsertTrack(ctx, changed) })
 	got := listTracks(t, s, testAlbum)[1]
@@ -228,8 +230,12 @@ func TestUpsertTrack(t *testing.T) {
 		LyricsRel: changed.LyricsRel, LyricsSha256: changed.LyricsSha256,
 		RgTrackGain: changed.RgTrackGain, RgTrackPeak: changed.RgTrackPeak, RgAlbumGain: changed.RgAlbumGain, RgAlbumPeak: changed.RgAlbumPeak,
 		Available: 1, UpdatedAt: 200,
+		// The keys follow the title and the artist; the copy of the key of
+		// the album is not written here, and the moment the row was first
+		// seen stays.
+		TitleKey: []byte{5}, ArtistKey: []byte{6}, AlbumKey: want.AlbumKey, FirstSeenAt: 100,
 	}
-	if got != want {
+	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("the track written again:\n got %+v\nwant %+v", got, want)
 	}
 
@@ -238,7 +244,7 @@ func TestUpsertTrack(t *testing.T) {
 	moved := changed
 	moved.AlbumID, moved.Title, moved.UpdatedAt = testAlbum2, "Moved", 300
 	write(t, s, func(q *Queries) error { return q.UpsertTrack(ctx, moved) })
-	if after := listTracks(t, s, testAlbum)[1]; after != want {
+	if after := listTracks(t, s, testAlbum)[1]; !reflect.DeepEqual(after, want) {
 		t.Fatalf("a track was written through another album:\n got %+v\nwant %+v", after, want)
 	}
 	if rows := listTracks(t, s, testAlbum2); len(rows) != 0 {

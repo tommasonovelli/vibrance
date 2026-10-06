@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"reflect"
 	"slices"
 	"testing"
 )
@@ -270,7 +271,7 @@ func TestFingerprintQueries(t *testing.T) {
 			t.Errorf("%s: %d rows written", name, n)
 		}
 	}
-	if after := listTracks(t, s, testAlbum)[0]; after != before {
+	if after := listTracks(t, s, testAlbum)[0]; !reflect.DeepEqual(after, before) {
 		t.Fatalf("the row was written: %+v", after)
 	}
 	if n := apply(set); n != 1 {
@@ -278,7 +279,7 @@ func TestFingerprintQueries(t *testing.T) {
 	}
 	want := before
 	want.Fingerprint, want.FpVersion, want.Occurrence, want.UpdatedAt = "new", "v2", 3, 500
-	if after := listTracks(t, s, testAlbum)[0]; after != want {
+	if after := listTracks(t, s, testAlbum)[0]; !reflect.DeepEqual(after, want) {
 		t.Fatalf("the row:\n got %+v\nwant %+v", after, want)
 	}
 	// A row that is not available is not written.
@@ -311,22 +312,34 @@ func userRows(t *testing.T, s *Store) {
 	}
 }
 
-// The references to move are those of the tracks that are not available and
-// have an available track with their fingerprint; the tracks of the same
-// album come first, then the row created last. Moving them keeps what a
-// playlist item and a favorite are, but for their track.
+// The twins of the tracks that are not available are the available tracks
+// with their fingerprint; the tracks of the same album come first, then the
+// row created last, and each row says whether the track that is gone has
+// references and when both were first seen. Moving the references keeps
+// what a playlist item and a favorite are, but for their track.
 func TestReferenceQueries(t *testing.T) {
 	s := newStore(t)
 	ctx := t.Context()
 	seedTwoAlbums(t, s)
 	userRows(t, s)
-	moved := func() (out []ListMovedReferencesRow) {
+	type pair struct {
+		old, new   string
+		referenced bool
+	}
+	twins := func() (out []pair) {
 		t.Helper()
+		var rows []ListAudioTwinsRow
 		if err := s.Read(ctx, func(q *Queries) (err error) {
-			out, err = q.ListMovedReferences(ctx)
+			rows, err = q.ListAudioTwins(ctx)
 			return err
 		}); err != nil {
 			t.Fatal(err)
+		}
+		for _, r := range rows {
+			if r.OldFirstSeenAt != 100 || r.NewFirstSeenAt != 100 {
+				t.Fatalf("first seen at %d and %d, want 100", r.OldFirstSeenAt, r.NewFirstSeenAt)
+			}
+			out = append(out, pair{r.OldID, r.NewID, r.Referenced != 0})
 		}
 		return out
 	}
@@ -337,29 +350,30 @@ func TestReferenceQueries(t *testing.T) {
 		}
 	}
 	// Every track is available.
-	if got := moved(); len(got) != 0 {
-		t.Fatalf("references to move with every track available: %v", got)
+	if got := twins(); len(got) != 0 {
+		t.Fatalf("twins with every track available: %v", got)
 	}
 	// Track 2 has references and no twin; track 1 has references and two
 	// available twins in the other album, of which track 4 is the newer.
 	unavailable(testTrack, testTrack2)
-	want := []ListMovedReferencesRow{{OldID: testTrack, NewID: testTrack4}, {OldID: testTrack, NewID: testTrack3}}
-	if got := moved(); !slices.Equal(got, want) {
-		t.Fatalf("references to move: %v, want %v", got, want)
+	want := []pair{{testTrack, testTrack4, true}, {testTrack, testTrack3, true}}
+	if got := twins(); !slices.Equal(got, want) {
+		t.Fatalf("twins: %v, want %v", got, want)
 	}
 	// A twin in the album of the track comes before a newer one elsewhere.
 	const sameAlbum = "0192a5f0-0000-7000-8000-0000000000c5"
 	write(t, s, func(q *Queries) error { return q.UpsertTrack(ctx, trackRow(sameAlbum, testAlbum, "same", 2, 100, 100)) })
 	mustExec(t, s.write, `UPDATE tracks SET fp_version = 'another ffmpeg' WHERE id = ?`, sameAlbum)
-	want = append([]ListMovedReferencesRow{{OldID: testTrack, NewID: sameAlbum}}, want...)
-	if got := moved(); !slices.Equal(got, want) {
-		t.Fatalf("references to move with a twin in the same album: %v, want %v", got, want)
+	want = append([]pair{{testTrack, sameAlbum, true}}, want...)
+	if got := twins(); !slices.Equal(got, want) {
+		t.Fatalf("twins with a twin in the same album: %v, want %v", got, want)
 	}
 	// Twins that are not available are no place to move to, and a track
-	// without references is not listed.
+	// without references is listed as such.
 	unavailable(sameAlbum, testTrack4)
-	if got := moved(); !slices.Equal(got, []ListMovedReferencesRow{{OldID: testTrack, NewID: testTrack3}}) {
-		t.Fatalf("references to move with one available twin: %v", got)
+	want = []pair{{testTrack, testTrack3, true}, {testTrack4, testTrack3, false}, {sameAlbum, testTrack3, false}}
+	if got := twins(); !slices.Equal(got, want) {
+		t.Fatalf("twins with one available twin: %v, want %v", got, want)
 	}
 
 	var lists, none []string
@@ -400,8 +414,20 @@ func TestReferenceQueries(t *testing.T) {
 	if !slices.Equal(favorites, []string{"ann " + testTrack3 + " 30", "bob " + testTrack3 + " 32"}) {
 		t.Fatalf("the favorites: %v", favorites)
 	}
-	if got := moved(); len(got) != 0 {
-		t.Fatalf("references to move once they moved: %v", got)
+	// Once moved, the track that is gone has no references left.
+	want = []pair{{testTrack, testTrack3, false}, {testTrack4, testTrack3, false}, {sameAlbum, testTrack3, false}}
+	if got := twins(); !slices.Equal(got, want) {
+		t.Fatalf("twins once the references moved: %v, want %v", got, want)
+	}
+	// A track takes an earlier moment it was first seen, never a later one.
+	write(t, s, func(q *Queries) error {
+		return errors.Join(
+			q.LowerTrackFirstSeen(ctx, LowerTrackFirstSeenParams{FirstSeenAt: 50, ID: testTrack3}),
+			q.LowerTrackFirstSeen(ctx, LowerTrackFirstSeenParams{FirstSeenAt: 70, ID: testTrack3}),
+		)
+	})
+	if got := string1(t, s.read, `SELECT first_seen_at FROM tracks WHERE id = ?`, testTrack3); got != "50" {
+		t.Fatalf("first seen at %s, want 50", got)
 	}
 	if got := strings1(t, s.read, `PRAGMA foreign_key_check`); len(got) != 0 {
 		t.Fatalf("foreign_key_check: %v", got)

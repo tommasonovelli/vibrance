@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -199,7 +200,7 @@ func TestRefingerprintTakesAFreeOccurrence(t *testing.T) {
 	if got.ID != second.ID || got.Fingerprint != real || got.FpVersion != media.PinnedVersion || got.Occurrence != 2 || got.UpdatedAt <= second.UpdatedAt {
 		t.Fatalf("the row: %+v, want the fingerprint %s and the occurrence 2", got, real)
 	}
-	if kept := e.trackAt(id, "01 - Same Audio.flac"); kept != first {
+	if kept := e.trackAt(id, "01 - Same Audio.flac"); !reflect.DeepEqual(kept, first) {
 		t.Fatalf("the other row changed: %+v", kept)
 	}
 	if n := len(e.tracks(id)); n != 3 {
@@ -232,7 +233,7 @@ func TestRefingerprintSkipsAFileThatChanged(t *testing.T) {
 	if done, err := e.sc.refingerprint(t.Context(), map[string]string{}); err != nil || done != 10 {
 		t.Fatalf("refingerprint: %d rows, %v; want the 10 others", done, err)
 	}
-	if got := e.track(unavailable.ID); got != unavailable {
+	if got := e.track(unavailable.ID); !reflect.DeepEqual(got, unavailable) {
 		t.Fatalf("the row that is not available was written: %+v", got)
 	}
 	for _, old := range []store.Track{one, two, gone} {
@@ -426,6 +427,7 @@ func TestEnsureSortKeys(t *testing.T) {
 	// The keys as another version of the collation left them.
 	e.write(`UPDATE artists SET sort_key = x'00'`)
 	e.write(`UPDATE albums SET title_key = x'01', artist_key = x'02'`)
+	e.write(`UPDATE tracks SET title_key = x'03', artist_key = x'04', album_key = x'05'`)
 	e.write(`UPDATE meta SET value = 'golang.org/x/text v0.1.0' WHERE "key" = 'collate_version'`)
 	if recomputed, err := EnsureSortKeys(t.Context(), e.store); err != nil || !recomputed {
 		t.Fatalf("EnsureSortKeys after the collation changed: %v, %v", recomputed, err)

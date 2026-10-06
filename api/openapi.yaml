@@ -915,6 +915,76 @@ paths:
           $ref: "#/components/responses/Internal"
         "503":
           $ref: "#/components/responses/Unavailable"
+  /tracks:
+    get:
+      operationId: listTracks
+      tags: [Catalog]
+      summary: The available tracks, in a chosen order
+      description: |
+        The available tracks. Paginated. `sort` chooses the order:
+
+        - `title`: by title;
+        - `artist`: by the artist of the track, then album title, album, disc
+          and number;
+        - `album`: by album title, then album, disc and number;
+        - `added`: by the moment Vibrance first saw the audio of the
+          track; a track that MusicLib moves to another album keeps the
+          moment of the track it replaces.
+
+        `sort=artist` orders by the artist of each track (`artist` of the
+        track), while the parameter `artist` filters by the artist of the
+        album. Titles and names are ordered as for `GET /artists`, and tracks
+        that tie on every key by id, so the order is total. `order=desc`
+        reverses the whole order. `artist` keeps only the tracks of the
+        albums of one artist; an id that is no artist's gives an empty list. A cursor
+        belongs to the `sort` and the `order` it was read with: with others
+        it answers `400 invalid_cursor`.
+      parameters:
+        - name: sort
+          in: query
+          description: The order of the list.
+          schema:
+            type: string
+            enum: [title, artist, album, added]
+            default: title
+        - name: order
+          in: query
+          description: The direction of the order.
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: asc
+        - name: artist
+          in: query
+          description: The id of an artist, to list only the tracks of its albums. An id that no artist has gives an empty list, not an error.
+          schema:
+            type: string
+            format: uuid
+            pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/After"
+      responses:
+        "200":
+          description: One page of tracks.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrackList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/Unavailable"
   /tracks/{id}:
     get:
       operationId: getTrack
@@ -2927,6 +2997,17 @@ components:
           album_peak: 0.997
         available: true
         favorite: false
+    TrackList:
+      type: object
+      description: "One page of tracks."
+      required: [tracks, next]
+      properties:
+        tracks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Track"
+        next:
+          $ref: "#/components/schemas/Cursor"
     SearchResult:
       type: object
       description: "What a search found, the best first in each list. The three lists are always present; a kind that was not asked for is empty."

@@ -98,6 +98,9 @@ var designOperations = []designOperation{
 	{"POST", "/playlists/{id}/items", "addPlaylistItems", "user", 200, []designError{playlistNotFound, preconditionFailed, {422, "too_many_items"}, {422, "unknown_track"}, {422, "track_unavailable"}, {422, "invalid_position"}, preconditionRequired}},
 	{"DELETE", "/playlists/{id}/items/{item_id}", "removePlaylistItem", "user", 200, []designError{{404, "item_not_found"}, preconditionFailed}},
 	{"POST", "/playlists/{id}/items/{item_id}/move", "movePlaylistItem", "user", 200, []designError{playlistNotFound, preconditionFailed, {422, "invalid_position"}, preconditionRequired}},
+	// The operations that the erratum W1-W6 of DESIGN.md adds
+	// (docs/proposals/web-client-api.md), in the order of its steps.
+	{"GET", "/tracks", "listTracks", "user", 200, []designError{{400, "invalid_cursor"}}},
 }
 
 // designErrorCodes is the table of DESIGN.md §8.4, with the `*_not_found`
@@ -854,6 +857,7 @@ func TestSpecLists(t *testing.T) {
 	paginated := map[string]string{
 		"listArtists":        "artists",
 		"listAlbums":         "albums",
+		"listTracks":         "tracks",
 		"listFavoriteTracks": "favorites",
 		"listPlaylistItems":  "items",
 	}

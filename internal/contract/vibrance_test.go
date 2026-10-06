@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -241,7 +242,11 @@ func (v *vibrance) pages(t *testing.T, path string, page func(data []byte) (*str
 	t.Helper()
 	after := ""
 	for {
-		p := path + "?limit=200"
+		sep := "?"
+		if strings.Contains(path, "?") {
+			sep = "&"
+		}
+		p := path + sep + "limit=200"
 		if after != "" {
 			p += "&after=" + url.QueryEscape(after)
 		}
@@ -348,4 +353,18 @@ func (v *vibrance) wantError(t *testing.T, path string, status int, code string)
 	if !isError(err, status, code) {
 		t.Errorf("GET %s: want %d %s, got %v", path, status, code, err)
 	}
+}
+
+// tracks reads every page of GET /tracks with the query given (sort,
+// order).
+func (v *vibrance) tracks(t *testing.T, query string) []api.Track {
+	t.Helper()
+	var all []api.Track
+	v.pages(t, "/api/v1/tracks?"+query, func(data []byte) (*string, error) {
+		var l api.TrackList
+		err := strict(data, &l)
+		all = append(all, l.Tracks...)
+		return l.Next, err
+	})
+	return all
 }

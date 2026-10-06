@@ -126,6 +126,8 @@ func checkQueryPlans(t *testing.T, stateDir string) {
 	track, playlist := tracks[0], playlists[0].Playlist.ID
 
 	cases := append(albumListCases(album, page), artistAlbumCases(album, page)...)
+	cases = append(cases, trackListCases(track, admin.ID, page)...)
+	cases = append(cases, artistTrackCases(track, album.ArtistID, admin.ID, page)...)
 	cases = append(cases, []planCase{
 		{name: "ListArtistsByName", index: "artists_sort_idx", run: func(q *store.Queries) error {
 			_, err := q.ListArtistsByName(ctx, page)
@@ -222,12 +224,13 @@ func checkQueryPlans(t *testing.T, stateDir string) {
 			_, err := q.CountTracks(ctx)
 			return err
 		}},
-		// P6 of every cycle: the references of the users that follow the
-		// audio. With every track available it finds nothing.
-		{name: "ListMovedReferences (P6, once a cycle)", scans: true, sorts: true, run: func(q *store.Queries) error {
-			rows, err := q.ListMovedReferences(ctx)
+		// P6 of every cycle: the references of the users, and the moment
+		// the audio was first seen, that follow the audio. With every track
+		// available it finds nothing.
+		{name: "ListAudioTwins (P6, once a cycle)", scans: true, sorts: true, run: func(q *store.Queries) error {
+			rows, err := q.ListAudioTwins(ctx)
 			if len(rows) != 0 {
-				return fmt.Errorf("%d references to move", len(rows))
+				return fmt.Errorf("%d unavailable tracks with a twin", len(rows))
 			}
 			return err
 		}},
@@ -396,6 +399,125 @@ func artistAlbumCases(album store.Album, page int64) []planCase {
 			}},
 		} {
 			c.name, c.index, c.sorts = c.name+name, "albums_artist_id_idx", true
+			cases = append(cases, c)
+		}
+	}
+	return cases
+}
+
+// trackListCases are the sixteen queries of the list of the tracks, with
+// the key of track as their cursor.
+func trackListCases(track store.Track, user string, page int64) []planCase {
+	ctx := context.Background()
+	none := func(_ any, err error) error { return err }
+	return []planCase{
+		{name: "ListTracksByTitleAsc", index: "tracks_title_idx", run: func(q *store.Queries) error {
+			return none(q.ListTracksByTitleAsc(ctx, store.ListTracksByTitleAscParams{UserID: user, PageSize: page}))
+		}},
+		{name: "ListTracksByTitleAscAfter", index: "tracks_title_idx", run: func(q *store.Queries) error {
+			return none(q.ListTracksByTitleAscAfter(ctx, store.ListTracksByTitleAscAfterParams{UserID: user,
+				TitleKey: track.TitleKey, AfterID: track.ID, PageSize: page}))
+		}},
+		{name: "ListTracksByTitleDesc", index: "tracks_title_idx", run: func(q *store.Queries) error {
+			return none(q.ListTracksByTitleDesc(ctx, store.ListTracksByTitleDescParams{UserID: user, PageSize: page}))
+		}},
+		{name: "ListTracksByTitleDescAfter", index: "tracks_title_idx", run: func(q *store.Queries) error {
+			return none(q.ListTracksByTitleDescAfter(ctx, store.ListTracksByTitleDescAfterParams{UserID: user,
+				TitleKey: track.TitleKey, AfterID: track.ID, PageSize: page}))
+		}},
+		{name: "ListTracksByArtistAsc", index: "tracks_artist_idx", run: func(q *store.Queries) error {
+			return none(q.ListTracksByArtistAsc(ctx, store.ListTracksByArtistAscParams{UserID: user, PageSize: page}))
+		}},
+		{name: "ListTracksByArtistAscAfter", index: "tracks_artist_idx", run: func(q *store.Queries) error {
+			return none(q.ListTracksByArtistAscAfter(ctx, store.ListTracksByArtistAscAfterParams{UserID: user,
+				ArtistKey: track.ArtistKey, AlbumKey: track.AlbumKey, AfterAlbumID: track.AlbumID, Disc: track.Disc, TrackNo: track.No, AfterID: track.ID, PageSize: page}))
+		}},
+		{name: "ListTracksByArtistDesc", index: "tracks_artist_idx", run: func(q *store.Queries) error {
+			return none(q.ListTracksByArtistDesc(ctx, store.ListTracksByArtistDescParams{UserID: user, PageSize: page}))
+		}},
+		{name: "ListTracksByArtistDescAfter", index: "tracks_artist_idx", run: func(q *store.Queries) error {
+			return none(q.ListTracksByArtistDescAfter(ctx, store.ListTracksByArtistDescAfterParams{UserID: user,
+				ArtistKey: track.ArtistKey, AlbumKey: track.AlbumKey, AfterAlbumID: track.AlbumID, Disc: track.Disc, TrackNo: track.No, AfterID: track.ID, PageSize: page}))
+		}},
+		{name: "ListTracksByAlbumAsc", index: "tracks_album_idx", run: func(q *store.Queries) error {
+			return none(q.ListTracksByAlbumAsc(ctx, store.ListTracksByAlbumAscParams{UserID: user, PageSize: page}))
+		}},
+		{name: "ListTracksByAlbumAscAfter", index: "tracks_album_idx", run: func(q *store.Queries) error {
+			return none(q.ListTracksByAlbumAscAfter(ctx, store.ListTracksByAlbumAscAfterParams{UserID: user,
+				AlbumKey: track.AlbumKey, AfterAlbumID: track.AlbumID, Disc: track.Disc, TrackNo: track.No, AfterID: track.ID, PageSize: page}))
+		}},
+		{name: "ListTracksByAlbumDesc", index: "tracks_album_idx", run: func(q *store.Queries) error {
+			return none(q.ListTracksByAlbumDesc(ctx, store.ListTracksByAlbumDescParams{UserID: user, PageSize: page}))
+		}},
+		{name: "ListTracksByAlbumDescAfter", index: "tracks_album_idx", run: func(q *store.Queries) error {
+			return none(q.ListTracksByAlbumDescAfter(ctx, store.ListTracksByAlbumDescAfterParams{UserID: user,
+				AlbumKey: track.AlbumKey, AfterAlbumID: track.AlbumID, Disc: track.Disc, TrackNo: track.No, AfterID: track.ID, PageSize: page}))
+		}},
+		{name: "ListTracksByAddedAsc", index: "tracks_first_seen_idx", run: func(q *store.Queries) error {
+			return none(q.ListTracksByAddedAsc(ctx, store.ListTracksByAddedAscParams{UserID: user, PageSize: page}))
+		}},
+		{name: "ListTracksByAddedAscAfter", index: "tracks_first_seen_idx", run: func(q *store.Queries) error {
+			return none(q.ListTracksByAddedAscAfter(ctx, store.ListTracksByAddedAscAfterParams{UserID: user,
+				FirstSeenAt: track.FirstSeenAt, AfterID: track.ID, PageSize: page}))
+		}},
+		{name: "ListTracksByAddedDesc", index: "tracks_first_seen_idx", run: func(q *store.Queries) error {
+			return none(q.ListTracksByAddedDesc(ctx, store.ListTracksByAddedDescParams{UserID: user, PageSize: page}))
+		}},
+		{name: "ListTracksByAddedDescAfter", index: "tracks_first_seen_idx", run: func(q *store.Queries) error {
+			return none(q.ListTracksByAddedDescAfter(ctx, store.ListTracksByAddedDescAfterParams{UserID: user,
+				FirstSeenAt: track.FirstSeenAt, AfterID: track.ID, PageSize: page}))
+		}},
+	}
+}
+
+// artistTrackCases are the eight queries of the list of the tracks of the
+// albums of one artist, each for its first page and for the page after the
+// key of track: they read the tracks of the albums of the artist, however
+// many the others are, and sort those.
+func artistTrackCases(track store.Track, artist, user string, page int64) []planCase {
+	ctx := context.Background()
+	none := func(_ any, err error) error { return err }
+	var cases []planCase
+	for _, first := range []int64{1, 0} {
+		name := " (first page)"
+		if first == 0 {
+			name = " (after a key)"
+		}
+		for _, c := range []planCase{
+			{name: "ListArtistTracksByTitleAsc", run: func(q *store.Queries) error {
+				return none(q.ListArtistTracksByTitleAsc(ctx, store.ListArtistTracksByTitleAscParams{UserID: user, ArtistID: artist, FirstPage: first,
+					TitleKey: track.TitleKey, AfterID: track.ID, PageSize: page}))
+			}},
+			{name: "ListArtistTracksByTitleDesc", run: func(q *store.Queries) error {
+				return none(q.ListArtistTracksByTitleDesc(ctx, store.ListArtistTracksByTitleDescParams{UserID: user, ArtistID: artist, FirstPage: first,
+					TitleKey: track.TitleKey, AfterID: track.ID, PageSize: page}))
+			}},
+			{name: "ListArtistTracksByArtistAsc", run: func(q *store.Queries) error {
+				return none(q.ListArtistTracksByArtistAsc(ctx, store.ListArtistTracksByArtistAscParams{UserID: user, ArtistID: artist, FirstPage: first,
+					ArtistKey: track.ArtistKey, AlbumKey: track.AlbumKey, AfterAlbumID: track.AlbumID, Disc: track.Disc, TrackNo: track.No, AfterID: track.ID, PageSize: page}))
+			}},
+			{name: "ListArtistTracksByArtistDesc", run: func(q *store.Queries) error {
+				return none(q.ListArtistTracksByArtistDesc(ctx, store.ListArtistTracksByArtistDescParams{UserID: user, ArtistID: artist, FirstPage: first,
+					ArtistKey: track.ArtistKey, AlbumKey: track.AlbumKey, AfterAlbumID: track.AlbumID, Disc: track.Disc, TrackNo: track.No, AfterID: track.ID, PageSize: page}))
+			}},
+			{name: "ListArtistTracksByAlbumAsc", run: func(q *store.Queries) error {
+				return none(q.ListArtistTracksByAlbumAsc(ctx, store.ListArtistTracksByAlbumAscParams{UserID: user, ArtistID: artist, FirstPage: first,
+					AlbumKey: track.AlbumKey, AfterAlbumID: track.AlbumID, Disc: track.Disc, TrackNo: track.No, AfterID: track.ID, PageSize: page}))
+			}},
+			{name: "ListArtistTracksByAlbumDesc", run: func(q *store.Queries) error {
+				return none(q.ListArtistTracksByAlbumDesc(ctx, store.ListArtistTracksByAlbumDescParams{UserID: user, ArtistID: artist, FirstPage: first,
+					AlbumKey: track.AlbumKey, AfterAlbumID: track.AlbumID, Disc: track.Disc, TrackNo: track.No, AfterID: track.ID, PageSize: page}))
+			}},
+			{name: "ListArtistTracksByAddedAsc", run: func(q *store.Queries) error {
+				return none(q.ListArtistTracksByAddedAsc(ctx, store.ListArtistTracksByAddedAscParams{UserID: user, ArtistID: artist, FirstPage: first,
+					FirstSeenAt: track.FirstSeenAt, AfterID: track.ID, PageSize: page}))
+			}},
+			{name: "ListArtistTracksByAddedDesc", run: func(q *store.Queries) error {
+				return none(q.ListArtistTracksByAddedDesc(ctx, store.ListArtistTracksByAddedDescParams{UserID: user, ArtistID: artist, FirstPage: first,
+					FirstSeenAt: track.FirstSeenAt, AfterID: track.ID, PageSize: page}))
+			}},
+		} {
+			c.name, c.index, c.sorts = c.name+name, "tracks_album_disc_no_idx", true
 			cases = append(cases, c)
 		}
 	}

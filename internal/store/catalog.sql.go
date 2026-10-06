@@ -103,7 +103,7 @@ func (q *Queries) GetTrackFile(ctx context.Context, id string) (GetTrackFileRow,
 }
 
 const getTrackWithAlbum = `-- name: GetTrackWithAlbum :one
-SELECT tracks.seq, tracks.id, tracks.album_id, tracks.fingerprint, tracks.fp_version, tracks.occurrence, tracks.disc, tracks."no", tracks.title, tracks.artist, tracks.genre, tracks.rel_path, tracks.file_size, tracks.file_mtime_ns, tracks.file_sha256, tracks.codec, tracks.sample_rate, tracks.channels, tracks.bit_depth, tracks.bitrate, tracks.duration_ms, tracks.lyrics_rel, tracks.lyrics_sha256, tracks.rg_track_gain, tracks.rg_track_peak, tracks.rg_album_gain, tracks.rg_album_peak, tracks.available, tracks.updated_at,
+SELECT tracks.seq, tracks.id, tracks.album_id, tracks.fingerprint, tracks.fp_version, tracks.occurrence, tracks.disc, tracks."no", tracks.title, tracks.artist, tracks.genre, tracks.rel_path, tracks.file_size, tracks.file_mtime_ns, tracks.file_sha256, tracks.codec, tracks.sample_rate, tracks.channels, tracks.bit_depth, tracks.bitrate, tracks.duration_ms, tracks.lyrics_rel, tracks.lyrics_sha256, tracks.rg_track_gain, tracks.rg_track_peak, tracks.rg_album_gain, tracks.rg_album_peak, tracks.available, tracks.updated_at, tracks.title_key, tracks.artist_key, tracks.album_key, tracks.first_seen_at,
     albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
     albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
     EXISTS (SELECT 1 FROM favorites
@@ -166,6 +166,10 @@ func (q *Queries) GetTrackWithAlbum(ctx context.Context, arg GetTrackWithAlbumPa
 		&i.Track.RgAlbumPeak,
 		&i.Track.Available,
 		&i.Track.UpdatedAt,
+		&i.Track.TitleKey,
+		&i.Track.ArtistKey,
+		&i.Track.AlbumKey,
+		&i.Track.FirstSeenAt,
 		&i.AlbumTitle,
 		&i.AlbumYear,
 		&i.AlbumCoverSha256,
@@ -2036,6 +2040,951 @@ func (q *Queries) ListArtistAlbumsByYearDesc(ctx context.Context, arg ListArtist
 	return items, nil
 }
 
+const listArtistTracksByAddedAsc = `-- name: ListArtistTracksByAddedAsc :many
+SELECT tracks.seq, tracks.id, tracks.album_id, tracks.fingerprint, tracks.fp_version, tracks.occurrence, tracks.disc, tracks."no", tracks.title, tracks.artist, tracks.genre, tracks.rel_path, tracks.file_size, tracks.file_mtime_ns, tracks.file_sha256, tracks.codec, tracks.sample_rate, tracks.channels, tracks.bit_depth, tracks.bitrate, tracks.duration_ms, tracks.lyrics_rel, tracks.lyrics_sha256, tracks.rg_track_gain, tracks.rg_track_peak, tracks.rg_album_gain, tracks.rg_album_peak, tracks.available, tracks.updated_at, tracks.title_key, tracks.artist_key, tracks.album_key, tracks.first_seen_at,
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = ?1 AND favorites.track_id = tracks.id) AS favorite
+FROM tracks NOT INDEXED
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.seq IN (
+    SELECT t.seq
+    FROM albums AS a INDEXED BY albums_artist_id_idx
+    JOIN tracks AS t INDEXED BY tracks_album_disc_no_idx ON t.album_id = a.id
+    WHERE a.artist_id = ?2 AND a.available = 1 AND t.available = 1
+      AND (CAST(?3 AS INTEGER) <> 0
+           OR (t.first_seen_at, t.id) > (CAST(?4 AS INTEGER), CAST(?5 AS TEXT)))
+    ORDER BY t.first_seen_at, t.id
+    LIMIT ?6
+)
+ORDER BY tracks.first_seen_at, tracks.id
+`
+
+type ListArtistTracksByAddedAscParams struct {
+	UserID      string
+	ArtistID    string
+	FirstPage   int64
+	FirstSeenAt int64
+	AfterID     string
+	PageSize    int64
+}
+
+type ListArtistTracksByAddedAscRow struct {
+	Track            Track
+	AlbumTitle       string
+	AlbumYear        sql.NullInt64
+	AlbumCoverSha256 sql.NullString
+	AlbumArtistID    string
+	AlbumArtistName  string
+	Favorite         bool
+}
+
+// ListArtistTracksByAddedAsc returns a page of the available tracks of the
+// albums of an artist by (first_seen_at, id), ascending.
+func (q *Queries) ListArtistTracksByAddedAsc(ctx context.Context, arg ListArtistTracksByAddedAscParams) ([]ListArtistTracksByAddedAscRow, error) {
+	rows, err := q.db.QueryContext(ctx, listArtistTracksByAddedAsc,
+		arg.UserID,
+		arg.ArtistID,
+		arg.FirstPage,
+		arg.FirstSeenAt,
+		arg.AfterID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListArtistTracksByAddedAscRow
+	for rows.Next() {
+		var i ListArtistTracksByAddedAscRow
+		if err := rows.Scan(
+			&i.Track.Seq,
+			&i.Track.ID,
+			&i.Track.AlbumID,
+			&i.Track.Fingerprint,
+			&i.Track.FpVersion,
+			&i.Track.Occurrence,
+			&i.Track.Disc,
+			&i.Track.No,
+			&i.Track.Title,
+			&i.Track.Artist,
+			&i.Track.Genre,
+			&i.Track.RelPath,
+			&i.Track.FileSize,
+			&i.Track.FileMtimeNs,
+			&i.Track.FileSha256,
+			&i.Track.Codec,
+			&i.Track.SampleRate,
+			&i.Track.Channels,
+			&i.Track.BitDepth,
+			&i.Track.Bitrate,
+			&i.Track.DurationMs,
+			&i.Track.LyricsRel,
+			&i.Track.LyricsSha256,
+			&i.Track.RgTrackGain,
+			&i.Track.RgTrackPeak,
+			&i.Track.RgAlbumGain,
+			&i.Track.RgAlbumPeak,
+			&i.Track.Available,
+			&i.Track.UpdatedAt,
+			&i.Track.TitleKey,
+			&i.Track.ArtistKey,
+			&i.Track.AlbumKey,
+			&i.Track.FirstSeenAt,
+			&i.AlbumTitle,
+			&i.AlbumYear,
+			&i.AlbumCoverSha256,
+			&i.AlbumArtistID,
+			&i.AlbumArtistName,
+			&i.Favorite,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listArtistTracksByAddedDesc = `-- name: ListArtistTracksByAddedDesc :many
+SELECT tracks.seq, tracks.id, tracks.album_id, tracks.fingerprint, tracks.fp_version, tracks.occurrence, tracks.disc, tracks."no", tracks.title, tracks.artist, tracks.genre, tracks.rel_path, tracks.file_size, tracks.file_mtime_ns, tracks.file_sha256, tracks.codec, tracks.sample_rate, tracks.channels, tracks.bit_depth, tracks.bitrate, tracks.duration_ms, tracks.lyrics_rel, tracks.lyrics_sha256, tracks.rg_track_gain, tracks.rg_track_peak, tracks.rg_album_gain, tracks.rg_album_peak, tracks.available, tracks.updated_at, tracks.title_key, tracks.artist_key, tracks.album_key, tracks.first_seen_at,
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = ?1 AND favorites.track_id = tracks.id) AS favorite
+FROM tracks NOT INDEXED
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.seq IN (
+    SELECT t.seq
+    FROM albums AS a INDEXED BY albums_artist_id_idx
+    JOIN tracks AS t INDEXED BY tracks_album_disc_no_idx ON t.album_id = a.id
+    WHERE a.artist_id = ?2 AND a.available = 1 AND t.available = 1
+      AND (CAST(?3 AS INTEGER) <> 0
+           OR (t.first_seen_at, t.id) < (CAST(?4 AS INTEGER), CAST(?5 AS TEXT)))
+    ORDER BY t.first_seen_at DESC, t.id DESC
+    LIMIT ?6
+)
+ORDER BY tracks.first_seen_at DESC, tracks.id DESC
+`
+
+type ListArtistTracksByAddedDescParams struct {
+	UserID      string
+	ArtistID    string
+	FirstPage   int64
+	FirstSeenAt int64
+	AfterID     string
+	PageSize    int64
+}
+
+type ListArtistTracksByAddedDescRow struct {
+	Track            Track
+	AlbumTitle       string
+	AlbumYear        sql.NullInt64
+	AlbumCoverSha256 sql.NullString
+	AlbumArtistID    string
+	AlbumArtistName  string
+	Favorite         bool
+}
+
+// ListArtistTracksByAddedDesc returns a page of the available tracks of the
+// albums of an artist by (first_seen_at, id), reversed.
+func (q *Queries) ListArtistTracksByAddedDesc(ctx context.Context, arg ListArtistTracksByAddedDescParams) ([]ListArtistTracksByAddedDescRow, error) {
+	rows, err := q.db.QueryContext(ctx, listArtistTracksByAddedDesc,
+		arg.UserID,
+		arg.ArtistID,
+		arg.FirstPage,
+		arg.FirstSeenAt,
+		arg.AfterID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListArtistTracksByAddedDescRow
+	for rows.Next() {
+		var i ListArtistTracksByAddedDescRow
+		if err := rows.Scan(
+			&i.Track.Seq,
+			&i.Track.ID,
+			&i.Track.AlbumID,
+			&i.Track.Fingerprint,
+			&i.Track.FpVersion,
+			&i.Track.Occurrence,
+			&i.Track.Disc,
+			&i.Track.No,
+			&i.Track.Title,
+			&i.Track.Artist,
+			&i.Track.Genre,
+			&i.Track.RelPath,
+			&i.Track.FileSize,
+			&i.Track.FileMtimeNs,
+			&i.Track.FileSha256,
+			&i.Track.Codec,
+			&i.Track.SampleRate,
+			&i.Track.Channels,
+			&i.Track.BitDepth,
+			&i.Track.Bitrate,
+			&i.Track.DurationMs,
+			&i.Track.LyricsRel,
+			&i.Track.LyricsSha256,
+			&i.Track.RgTrackGain,
+			&i.Track.RgTrackPeak,
+			&i.Track.RgAlbumGain,
+			&i.Track.RgAlbumPeak,
+			&i.Track.Available,
+			&i.Track.UpdatedAt,
+			&i.Track.TitleKey,
+			&i.Track.ArtistKey,
+			&i.Track.AlbumKey,
+			&i.Track.FirstSeenAt,
+			&i.AlbumTitle,
+			&i.AlbumYear,
+			&i.AlbumCoverSha256,
+			&i.AlbumArtistID,
+			&i.AlbumArtistName,
+			&i.Favorite,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listArtistTracksByAlbumAsc = `-- name: ListArtistTracksByAlbumAsc :many
+SELECT tracks.seq, tracks.id, tracks.album_id, tracks.fingerprint, tracks.fp_version, tracks.occurrence, tracks.disc, tracks."no", tracks.title, tracks.artist, tracks.genre, tracks.rel_path, tracks.file_size, tracks.file_mtime_ns, tracks.file_sha256, tracks.codec, tracks.sample_rate, tracks.channels, tracks.bit_depth, tracks.bitrate, tracks.duration_ms, tracks.lyrics_rel, tracks.lyrics_sha256, tracks.rg_track_gain, tracks.rg_track_peak, tracks.rg_album_gain, tracks.rg_album_peak, tracks.available, tracks.updated_at, tracks.title_key, tracks.artist_key, tracks.album_key, tracks.first_seen_at,
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = ?1 AND favorites.track_id = tracks.id) AS favorite
+FROM tracks NOT INDEXED
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.seq IN (
+    SELECT t.seq
+    FROM albums AS a INDEXED BY albums_artist_id_idx
+    JOIN tracks AS t INDEXED BY tracks_album_disc_no_idx ON t.album_id = a.id
+    WHERE a.artist_id = ?2 AND a.available = 1 AND t.available = 1
+      AND (CAST(?3 AS INTEGER) <> 0
+           OR (t.album_key, t.album_id, t.disc, t."no", t.id) > (CAST(?4 AS BLOB), CAST(?5 AS TEXT), CAST(?6 AS INTEGER), CAST(?7 AS INTEGER), CAST(?8 AS TEXT)))
+    ORDER BY t.album_key, t.album_id, t.disc, t."no", t.id
+    LIMIT ?9
+)
+ORDER BY tracks.album_key, tracks.album_id, tracks.disc, tracks."no", tracks.id
+`
+
+type ListArtistTracksByAlbumAscParams struct {
+	UserID       string
+	ArtistID     string
+	FirstPage    int64
+	AlbumKey     []byte
+	AfterAlbumID string
+	Disc         int64
+	TrackNo      int64
+	AfterID      string
+	PageSize     int64
+}
+
+type ListArtistTracksByAlbumAscRow struct {
+	Track            Track
+	AlbumTitle       string
+	AlbumYear        sql.NullInt64
+	AlbumCoverSha256 sql.NullString
+	AlbumArtistID    string
+	AlbumArtistName  string
+	Favorite         bool
+}
+
+// ListArtistTracksByAlbumAsc returns a page of the available tracks of the
+// albums of an artist by (album_key, album_id, disc, no, id), ascending.
+func (q *Queries) ListArtistTracksByAlbumAsc(ctx context.Context, arg ListArtistTracksByAlbumAscParams) ([]ListArtistTracksByAlbumAscRow, error) {
+	rows, err := q.db.QueryContext(ctx, listArtistTracksByAlbumAsc,
+		arg.UserID,
+		arg.ArtistID,
+		arg.FirstPage,
+		arg.AlbumKey,
+		arg.AfterAlbumID,
+		arg.Disc,
+		arg.TrackNo,
+		arg.AfterID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListArtistTracksByAlbumAscRow
+	for rows.Next() {
+		var i ListArtistTracksByAlbumAscRow
+		if err := rows.Scan(
+			&i.Track.Seq,
+			&i.Track.ID,
+			&i.Track.AlbumID,
+			&i.Track.Fingerprint,
+			&i.Track.FpVersion,
+			&i.Track.Occurrence,
+			&i.Track.Disc,
+			&i.Track.No,
+			&i.Track.Title,
+			&i.Track.Artist,
+			&i.Track.Genre,
+			&i.Track.RelPath,
+			&i.Track.FileSize,
+			&i.Track.FileMtimeNs,
+			&i.Track.FileSha256,
+			&i.Track.Codec,
+			&i.Track.SampleRate,
+			&i.Track.Channels,
+			&i.Track.BitDepth,
+			&i.Track.Bitrate,
+			&i.Track.DurationMs,
+			&i.Track.LyricsRel,
+			&i.Track.LyricsSha256,
+			&i.Track.RgTrackGain,
+			&i.Track.RgTrackPeak,
+			&i.Track.RgAlbumGain,
+			&i.Track.RgAlbumPeak,
+			&i.Track.Available,
+			&i.Track.UpdatedAt,
+			&i.Track.TitleKey,
+			&i.Track.ArtistKey,
+			&i.Track.AlbumKey,
+			&i.Track.FirstSeenAt,
+			&i.AlbumTitle,
+			&i.AlbumYear,
+			&i.AlbumCoverSha256,
+			&i.AlbumArtistID,
+			&i.AlbumArtistName,
+			&i.Favorite,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listArtistTracksByAlbumDesc = `-- name: ListArtistTracksByAlbumDesc :many
+SELECT tracks.seq, tracks.id, tracks.album_id, tracks.fingerprint, tracks.fp_version, tracks.occurrence, tracks.disc, tracks."no", tracks.title, tracks.artist, tracks.genre, tracks.rel_path, tracks.file_size, tracks.file_mtime_ns, tracks.file_sha256, tracks.codec, tracks.sample_rate, tracks.channels, tracks.bit_depth, tracks.bitrate, tracks.duration_ms, tracks.lyrics_rel, tracks.lyrics_sha256, tracks.rg_track_gain, tracks.rg_track_peak, tracks.rg_album_gain, tracks.rg_album_peak, tracks.available, tracks.updated_at, tracks.title_key, tracks.artist_key, tracks.album_key, tracks.first_seen_at,
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = ?1 AND favorites.track_id = tracks.id) AS favorite
+FROM tracks NOT INDEXED
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.seq IN (
+    SELECT t.seq
+    FROM albums AS a INDEXED BY albums_artist_id_idx
+    JOIN tracks AS t INDEXED BY tracks_album_disc_no_idx ON t.album_id = a.id
+    WHERE a.artist_id = ?2 AND a.available = 1 AND t.available = 1
+      AND (CAST(?3 AS INTEGER) <> 0
+           OR (t.album_key, t.album_id, t.disc, t."no", t.id) < (CAST(?4 AS BLOB), CAST(?5 AS TEXT), CAST(?6 AS INTEGER), CAST(?7 AS INTEGER), CAST(?8 AS TEXT)))
+    ORDER BY t.album_key DESC, t.album_id DESC, t.disc DESC, t."no" DESC, t.id DESC
+    LIMIT ?9
+)
+ORDER BY tracks.album_key DESC, tracks.album_id DESC, tracks.disc DESC, tracks."no" DESC, tracks.id DESC
+`
+
+type ListArtistTracksByAlbumDescParams struct {
+	UserID       string
+	ArtistID     string
+	FirstPage    int64
+	AlbumKey     []byte
+	AfterAlbumID string
+	Disc         int64
+	TrackNo      int64
+	AfterID      string
+	PageSize     int64
+}
+
+type ListArtistTracksByAlbumDescRow struct {
+	Track            Track
+	AlbumTitle       string
+	AlbumYear        sql.NullInt64
+	AlbumCoverSha256 sql.NullString
+	AlbumArtistID    string
+	AlbumArtistName  string
+	Favorite         bool
+}
+
+// ListArtistTracksByAlbumDesc returns a page of the available tracks of the
+// albums of an artist by (album_key, album_id, disc, no, id), reversed.
+func (q *Queries) ListArtistTracksByAlbumDesc(ctx context.Context, arg ListArtistTracksByAlbumDescParams) ([]ListArtistTracksByAlbumDescRow, error) {
+	rows, err := q.db.QueryContext(ctx, listArtistTracksByAlbumDesc,
+		arg.UserID,
+		arg.ArtistID,
+		arg.FirstPage,
+		arg.AlbumKey,
+		arg.AfterAlbumID,
+		arg.Disc,
+		arg.TrackNo,
+		arg.AfterID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListArtistTracksByAlbumDescRow
+	for rows.Next() {
+		var i ListArtistTracksByAlbumDescRow
+		if err := rows.Scan(
+			&i.Track.Seq,
+			&i.Track.ID,
+			&i.Track.AlbumID,
+			&i.Track.Fingerprint,
+			&i.Track.FpVersion,
+			&i.Track.Occurrence,
+			&i.Track.Disc,
+			&i.Track.No,
+			&i.Track.Title,
+			&i.Track.Artist,
+			&i.Track.Genre,
+			&i.Track.RelPath,
+			&i.Track.FileSize,
+			&i.Track.FileMtimeNs,
+			&i.Track.FileSha256,
+			&i.Track.Codec,
+			&i.Track.SampleRate,
+			&i.Track.Channels,
+			&i.Track.BitDepth,
+			&i.Track.Bitrate,
+			&i.Track.DurationMs,
+			&i.Track.LyricsRel,
+			&i.Track.LyricsSha256,
+			&i.Track.RgTrackGain,
+			&i.Track.RgTrackPeak,
+			&i.Track.RgAlbumGain,
+			&i.Track.RgAlbumPeak,
+			&i.Track.Available,
+			&i.Track.UpdatedAt,
+			&i.Track.TitleKey,
+			&i.Track.ArtistKey,
+			&i.Track.AlbumKey,
+			&i.Track.FirstSeenAt,
+			&i.AlbumTitle,
+			&i.AlbumYear,
+			&i.AlbumCoverSha256,
+			&i.AlbumArtistID,
+			&i.AlbumArtistName,
+			&i.Favorite,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listArtistTracksByArtistAsc = `-- name: ListArtistTracksByArtistAsc :many
+SELECT tracks.seq, tracks.id, tracks.album_id, tracks.fingerprint, tracks.fp_version, tracks.occurrence, tracks.disc, tracks."no", tracks.title, tracks.artist, tracks.genre, tracks.rel_path, tracks.file_size, tracks.file_mtime_ns, tracks.file_sha256, tracks.codec, tracks.sample_rate, tracks.channels, tracks.bit_depth, tracks.bitrate, tracks.duration_ms, tracks.lyrics_rel, tracks.lyrics_sha256, tracks.rg_track_gain, tracks.rg_track_peak, tracks.rg_album_gain, tracks.rg_album_peak, tracks.available, tracks.updated_at, tracks.title_key, tracks.artist_key, tracks.album_key, tracks.first_seen_at,
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = ?1 AND favorites.track_id = tracks.id) AS favorite
+FROM tracks NOT INDEXED
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.seq IN (
+    SELECT t.seq
+    FROM albums AS a INDEXED BY albums_artist_id_idx
+    JOIN tracks AS t INDEXED BY tracks_album_disc_no_idx ON t.album_id = a.id
+    WHERE a.artist_id = ?2 AND a.available = 1 AND t.available = 1
+      AND (CAST(?3 AS INTEGER) <> 0
+           OR (t.artist_key, t.album_key, t.album_id, t.disc, t."no", t.id) > (CAST(?4 AS BLOB), CAST(?5 AS BLOB), CAST(?6 AS TEXT), CAST(?7 AS INTEGER), CAST(?8 AS INTEGER), CAST(?9 AS TEXT)))
+    ORDER BY t.artist_key, t.album_key, t.album_id, t.disc, t."no", t.id
+    LIMIT ?10
+)
+ORDER BY tracks.artist_key, tracks.album_key, tracks.album_id, tracks.disc, tracks."no", tracks.id
+`
+
+type ListArtistTracksByArtistAscParams struct {
+	UserID       string
+	ArtistID     string
+	FirstPage    int64
+	ArtistKey    []byte
+	AlbumKey     []byte
+	AfterAlbumID string
+	Disc         int64
+	TrackNo      int64
+	AfterID      string
+	PageSize     int64
+}
+
+type ListArtistTracksByArtistAscRow struct {
+	Track            Track
+	AlbumTitle       string
+	AlbumYear        sql.NullInt64
+	AlbumCoverSha256 sql.NullString
+	AlbumArtistID    string
+	AlbumArtistName  string
+	Favorite         bool
+}
+
+// ListArtistTracksByArtistAsc returns a page of the available tracks of the
+// albums of an artist by (artist_key, album_key, album_id, disc, no, id), ascending.
+func (q *Queries) ListArtistTracksByArtistAsc(ctx context.Context, arg ListArtistTracksByArtistAscParams) ([]ListArtistTracksByArtistAscRow, error) {
+	rows, err := q.db.QueryContext(ctx, listArtistTracksByArtistAsc,
+		arg.UserID,
+		arg.ArtistID,
+		arg.FirstPage,
+		arg.ArtistKey,
+		arg.AlbumKey,
+		arg.AfterAlbumID,
+		arg.Disc,
+		arg.TrackNo,
+		arg.AfterID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListArtistTracksByArtistAscRow
+	for rows.Next() {
+		var i ListArtistTracksByArtistAscRow
+		if err := rows.Scan(
+			&i.Track.Seq,
+			&i.Track.ID,
+			&i.Track.AlbumID,
+			&i.Track.Fingerprint,
+			&i.Track.FpVersion,
+			&i.Track.Occurrence,
+			&i.Track.Disc,
+			&i.Track.No,
+			&i.Track.Title,
+			&i.Track.Artist,
+			&i.Track.Genre,
+			&i.Track.RelPath,
+			&i.Track.FileSize,
+			&i.Track.FileMtimeNs,
+			&i.Track.FileSha256,
+			&i.Track.Codec,
+			&i.Track.SampleRate,
+			&i.Track.Channels,
+			&i.Track.BitDepth,
+			&i.Track.Bitrate,
+			&i.Track.DurationMs,
+			&i.Track.LyricsRel,
+			&i.Track.LyricsSha256,
+			&i.Track.RgTrackGain,
+			&i.Track.RgTrackPeak,
+			&i.Track.RgAlbumGain,
+			&i.Track.RgAlbumPeak,
+			&i.Track.Available,
+			&i.Track.UpdatedAt,
+			&i.Track.TitleKey,
+			&i.Track.ArtistKey,
+			&i.Track.AlbumKey,
+			&i.Track.FirstSeenAt,
+			&i.AlbumTitle,
+			&i.AlbumYear,
+			&i.AlbumCoverSha256,
+			&i.AlbumArtistID,
+			&i.AlbumArtistName,
+			&i.Favorite,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listArtistTracksByArtistDesc = `-- name: ListArtistTracksByArtistDesc :many
+SELECT tracks.seq, tracks.id, tracks.album_id, tracks.fingerprint, tracks.fp_version, tracks.occurrence, tracks.disc, tracks."no", tracks.title, tracks.artist, tracks.genre, tracks.rel_path, tracks.file_size, tracks.file_mtime_ns, tracks.file_sha256, tracks.codec, tracks.sample_rate, tracks.channels, tracks.bit_depth, tracks.bitrate, tracks.duration_ms, tracks.lyrics_rel, tracks.lyrics_sha256, tracks.rg_track_gain, tracks.rg_track_peak, tracks.rg_album_gain, tracks.rg_album_peak, tracks.available, tracks.updated_at, tracks.title_key, tracks.artist_key, tracks.album_key, tracks.first_seen_at,
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = ?1 AND favorites.track_id = tracks.id) AS favorite
+FROM tracks NOT INDEXED
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.seq IN (
+    SELECT t.seq
+    FROM albums AS a INDEXED BY albums_artist_id_idx
+    JOIN tracks AS t INDEXED BY tracks_album_disc_no_idx ON t.album_id = a.id
+    WHERE a.artist_id = ?2 AND a.available = 1 AND t.available = 1
+      AND (CAST(?3 AS INTEGER) <> 0
+           OR (t.artist_key, t.album_key, t.album_id, t.disc, t."no", t.id) < (CAST(?4 AS BLOB), CAST(?5 AS BLOB), CAST(?6 AS TEXT), CAST(?7 AS INTEGER), CAST(?8 AS INTEGER), CAST(?9 AS TEXT)))
+    ORDER BY t.artist_key DESC, t.album_key DESC, t.album_id DESC, t.disc DESC, t."no" DESC, t.id DESC
+    LIMIT ?10
+)
+ORDER BY tracks.artist_key DESC, tracks.album_key DESC, tracks.album_id DESC, tracks.disc DESC, tracks."no" DESC, tracks.id DESC
+`
+
+type ListArtistTracksByArtistDescParams struct {
+	UserID       string
+	ArtistID     string
+	FirstPage    int64
+	ArtistKey    []byte
+	AlbumKey     []byte
+	AfterAlbumID string
+	Disc         int64
+	TrackNo      int64
+	AfterID      string
+	PageSize     int64
+}
+
+type ListArtistTracksByArtistDescRow struct {
+	Track            Track
+	AlbumTitle       string
+	AlbumYear        sql.NullInt64
+	AlbumCoverSha256 sql.NullString
+	AlbumArtistID    string
+	AlbumArtistName  string
+	Favorite         bool
+}
+
+// ListArtistTracksByArtistDesc returns a page of the available tracks of the
+// albums of an artist by (artist_key, album_key, album_id, disc, no, id), reversed.
+func (q *Queries) ListArtistTracksByArtistDesc(ctx context.Context, arg ListArtistTracksByArtistDescParams) ([]ListArtistTracksByArtistDescRow, error) {
+	rows, err := q.db.QueryContext(ctx, listArtistTracksByArtistDesc,
+		arg.UserID,
+		arg.ArtistID,
+		arg.FirstPage,
+		arg.ArtistKey,
+		arg.AlbumKey,
+		arg.AfterAlbumID,
+		arg.Disc,
+		arg.TrackNo,
+		arg.AfterID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListArtistTracksByArtistDescRow
+	for rows.Next() {
+		var i ListArtistTracksByArtistDescRow
+		if err := rows.Scan(
+			&i.Track.Seq,
+			&i.Track.ID,
+			&i.Track.AlbumID,
+			&i.Track.Fingerprint,
+			&i.Track.FpVersion,
+			&i.Track.Occurrence,
+			&i.Track.Disc,
+			&i.Track.No,
+			&i.Track.Title,
+			&i.Track.Artist,
+			&i.Track.Genre,
+			&i.Track.RelPath,
+			&i.Track.FileSize,
+			&i.Track.FileMtimeNs,
+			&i.Track.FileSha256,
+			&i.Track.Codec,
+			&i.Track.SampleRate,
+			&i.Track.Channels,
+			&i.Track.BitDepth,
+			&i.Track.Bitrate,
+			&i.Track.DurationMs,
+			&i.Track.LyricsRel,
+			&i.Track.LyricsSha256,
+			&i.Track.RgTrackGain,
+			&i.Track.RgTrackPeak,
+			&i.Track.RgAlbumGain,
+			&i.Track.RgAlbumPeak,
+			&i.Track.Available,
+			&i.Track.UpdatedAt,
+			&i.Track.TitleKey,
+			&i.Track.ArtistKey,
+			&i.Track.AlbumKey,
+			&i.Track.FirstSeenAt,
+			&i.AlbumTitle,
+			&i.AlbumYear,
+			&i.AlbumCoverSha256,
+			&i.AlbumArtistID,
+			&i.AlbumArtistName,
+			&i.Favorite,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listArtistTracksByTitleAsc = `-- name: ListArtistTracksByTitleAsc :many
+
+SELECT tracks.seq, tracks.id, tracks.album_id, tracks.fingerprint, tracks.fp_version, tracks.occurrence, tracks.disc, tracks."no", tracks.title, tracks.artist, tracks.genre, tracks.rel_path, tracks.file_size, tracks.file_mtime_ns, tracks.file_sha256, tracks.codec, tracks.sample_rate, tracks.channels, tracks.bit_depth, tracks.bitrate, tracks.duration_ms, tracks.lyrics_rel, tracks.lyrics_sha256, tracks.rg_track_gain, tracks.rg_track_peak, tracks.rg_album_gain, tracks.rg_album_peak, tracks.available, tracks.updated_at, tracks.title_key, tracks.artist_key, tracks.album_key, tracks.first_seen_at,
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = ?1 AND favorites.track_id = tracks.id) AS favorite
+FROM tracks NOT INDEXED
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.seq IN (
+    SELECT t.seq
+    FROM albums AS a INDEXED BY albums_artist_id_idx
+    JOIN tracks AS t INDEXED BY tracks_album_disc_no_idx ON t.album_id = a.id
+    WHERE a.artist_id = ?2 AND a.available = 1 AND t.available = 1
+      AND (CAST(?3 AS INTEGER) <> 0
+           OR (t.title_key, t.id) > (CAST(?4 AS BLOB), CAST(?5 AS TEXT)))
+    ORDER BY t.title_key, t.id
+    LIMIT ?6
+)
+ORDER BY tracks.title_key, tracks.id
+`
+
+type ListArtistTracksByTitleAscParams struct {
+	UserID    string
+	ArtistID  string
+	FirstPage int64
+	TitleKey  []byte
+	AfterID   string
+	PageSize  int64
+}
+
+type ListArtistTracksByTitleAscRow struct {
+	Track            Track
+	AlbumTitle       string
+	AlbumYear        sql.NullInt64
+	AlbumCoverSha256 sql.NullString
+	AlbumArtistID    string
+	AlbumArtistName  string
+	Favorite         bool
+}
+
+// The lists of the tracks of the albums of one artist (artist=<id>: the
+// artist of the album, as for the albums), in the same eight orders. Like
+// the lists of the albums of one artist, they read the albums of the
+// artist from albums_artist_id_idx and their tracks from
+// tracks_album_disc_no_idx, and sort those, where the lists above walk the
+// index of their order: with a filter those would skip the tracks of
+// every other artist. An artist may have thousands of tracks: the inner
+// query sorts only their keys and keeps the page, and the outer one reads
+// what the API shows for the rows of the page alone. One query is both the
+// first page (first_page not 0) and the pages after a key. The rows of the
+// page are found by their key, seq, and by no index (NOT INDEXED): one of
+// the order would make SQLite walk every track to look for them.
+// ListArtistTracksByTitleAsc returns a page of the available tracks of the
+// albums of an artist by (title_key, id), ascending.
+func (q *Queries) ListArtistTracksByTitleAsc(ctx context.Context, arg ListArtistTracksByTitleAscParams) ([]ListArtistTracksByTitleAscRow, error) {
+	rows, err := q.db.QueryContext(ctx, listArtistTracksByTitleAsc,
+		arg.UserID,
+		arg.ArtistID,
+		arg.FirstPage,
+		arg.TitleKey,
+		arg.AfterID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListArtistTracksByTitleAscRow
+	for rows.Next() {
+		var i ListArtistTracksByTitleAscRow
+		if err := rows.Scan(
+			&i.Track.Seq,
+			&i.Track.ID,
+			&i.Track.AlbumID,
+			&i.Track.Fingerprint,
+			&i.Track.FpVersion,
+			&i.Track.Occurrence,
+			&i.Track.Disc,
+			&i.Track.No,
+			&i.Track.Title,
+			&i.Track.Artist,
+			&i.Track.Genre,
+			&i.Track.RelPath,
+			&i.Track.FileSize,
+			&i.Track.FileMtimeNs,
+			&i.Track.FileSha256,
+			&i.Track.Codec,
+			&i.Track.SampleRate,
+			&i.Track.Channels,
+			&i.Track.BitDepth,
+			&i.Track.Bitrate,
+			&i.Track.DurationMs,
+			&i.Track.LyricsRel,
+			&i.Track.LyricsSha256,
+			&i.Track.RgTrackGain,
+			&i.Track.RgTrackPeak,
+			&i.Track.RgAlbumGain,
+			&i.Track.RgAlbumPeak,
+			&i.Track.Available,
+			&i.Track.UpdatedAt,
+			&i.Track.TitleKey,
+			&i.Track.ArtistKey,
+			&i.Track.AlbumKey,
+			&i.Track.FirstSeenAt,
+			&i.AlbumTitle,
+			&i.AlbumYear,
+			&i.AlbumCoverSha256,
+			&i.AlbumArtistID,
+			&i.AlbumArtistName,
+			&i.Favorite,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listArtistTracksByTitleDesc = `-- name: ListArtistTracksByTitleDesc :many
+SELECT tracks.seq, tracks.id, tracks.album_id, tracks.fingerprint, tracks.fp_version, tracks.occurrence, tracks.disc, tracks."no", tracks.title, tracks.artist, tracks.genre, tracks.rel_path, tracks.file_size, tracks.file_mtime_ns, tracks.file_sha256, tracks.codec, tracks.sample_rate, tracks.channels, tracks.bit_depth, tracks.bitrate, tracks.duration_ms, tracks.lyrics_rel, tracks.lyrics_sha256, tracks.rg_track_gain, tracks.rg_track_peak, tracks.rg_album_gain, tracks.rg_album_peak, tracks.available, tracks.updated_at, tracks.title_key, tracks.artist_key, tracks.album_key, tracks.first_seen_at,
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = ?1 AND favorites.track_id = tracks.id) AS favorite
+FROM tracks NOT INDEXED
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.seq IN (
+    SELECT t.seq
+    FROM albums AS a INDEXED BY albums_artist_id_idx
+    JOIN tracks AS t INDEXED BY tracks_album_disc_no_idx ON t.album_id = a.id
+    WHERE a.artist_id = ?2 AND a.available = 1 AND t.available = 1
+      AND (CAST(?3 AS INTEGER) <> 0
+           OR (t.title_key, t.id) < (CAST(?4 AS BLOB), CAST(?5 AS TEXT)))
+    ORDER BY t.title_key DESC, t.id DESC
+    LIMIT ?6
+)
+ORDER BY tracks.title_key DESC, tracks.id DESC
+`
+
+type ListArtistTracksByTitleDescParams struct {
+	UserID    string
+	ArtistID  string
+	FirstPage int64
+	TitleKey  []byte
+	AfterID   string
+	PageSize  int64
+}
+
+type ListArtistTracksByTitleDescRow struct {
+	Track            Track
+	AlbumTitle       string
+	AlbumYear        sql.NullInt64
+	AlbumCoverSha256 sql.NullString
+	AlbumArtistID    string
+	AlbumArtistName  string
+	Favorite         bool
+}
+
+// ListArtistTracksByTitleDesc returns a page of the available tracks of the
+// albums of an artist by (title_key, id), reversed.
+func (q *Queries) ListArtistTracksByTitleDesc(ctx context.Context, arg ListArtistTracksByTitleDescParams) ([]ListArtistTracksByTitleDescRow, error) {
+	rows, err := q.db.QueryContext(ctx, listArtistTracksByTitleDesc,
+		arg.UserID,
+		arg.ArtistID,
+		arg.FirstPage,
+		arg.TitleKey,
+		arg.AfterID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListArtistTracksByTitleDescRow
+	for rows.Next() {
+		var i ListArtistTracksByTitleDescRow
+		if err := rows.Scan(
+			&i.Track.Seq,
+			&i.Track.ID,
+			&i.Track.AlbumID,
+			&i.Track.Fingerprint,
+			&i.Track.FpVersion,
+			&i.Track.Occurrence,
+			&i.Track.Disc,
+			&i.Track.No,
+			&i.Track.Title,
+			&i.Track.Artist,
+			&i.Track.Genre,
+			&i.Track.RelPath,
+			&i.Track.FileSize,
+			&i.Track.FileMtimeNs,
+			&i.Track.FileSha256,
+			&i.Track.Codec,
+			&i.Track.SampleRate,
+			&i.Track.Channels,
+			&i.Track.BitDepth,
+			&i.Track.Bitrate,
+			&i.Track.DurationMs,
+			&i.Track.LyricsRel,
+			&i.Track.LyricsSha256,
+			&i.Track.RgTrackGain,
+			&i.Track.RgTrackPeak,
+			&i.Track.RgAlbumGain,
+			&i.Track.RgAlbumPeak,
+			&i.Track.Available,
+			&i.Track.UpdatedAt,
+			&i.Track.TitleKey,
+			&i.Track.ArtistKey,
+			&i.Track.AlbumKey,
+			&i.Track.FirstSeenAt,
+			&i.AlbumTitle,
+			&i.AlbumYear,
+			&i.AlbumCoverSha256,
+			&i.AlbumArtistID,
+			&i.AlbumArtistName,
+			&i.Favorite,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listArtistsByName = `-- name: ListArtistsByName :many
 SELECT artists.seq, artists.id, artists.name, artists.sort_key,
     (SELECT count(*) FROM albums
@@ -2142,10 +3091,10 @@ func (q *Queries) ListArtistsByNameAfter(ctx context.Context, arg ListArtistsByN
 }
 
 const listAvailableTracksOfAlbum = `-- name: ListAvailableTracksOfAlbum :many
-SELECT tracks.seq, tracks.id, tracks.album_id, tracks.fingerprint, tracks.fp_version, tracks.occurrence, tracks.disc, tracks."no", tracks.title, tracks.artist, tracks.genre, tracks.rel_path, tracks.file_size, tracks.file_mtime_ns, tracks.file_sha256, tracks.codec, tracks.sample_rate, tracks.channels, tracks.bit_depth, tracks.bitrate, tracks.duration_ms, tracks.lyrics_rel, tracks.lyrics_sha256, tracks.rg_track_gain, tracks.rg_track_peak, tracks.rg_album_gain, tracks.rg_album_peak, tracks.available, tracks.updated_at,
+SELECT tracks.seq, tracks.id, tracks.album_id, tracks.fingerprint, tracks.fp_version, tracks.occurrence, tracks.disc, tracks."no", tracks.title, tracks.artist, tracks.genre, tracks.rel_path, tracks.file_size, tracks.file_mtime_ns, tracks.file_sha256, tracks.codec, tracks.sample_rate, tracks.channels, tracks.bit_depth, tracks.bitrate, tracks.duration_ms, tracks.lyrics_rel, tracks.lyrics_sha256, tracks.rg_track_gain, tracks.rg_track_peak, tracks.rg_album_gain, tracks.rg_album_peak, tracks.available, tracks.updated_at, tracks.title_key, tracks.artist_key, tracks.album_key, tracks.first_seen_at,
     EXISTS (SELECT 1 FROM favorites
             WHERE favorites.user_id = ?1 AND favorites.track_id = tracks.id) AS favorite
-FROM tracks
+FROM tracks INDEXED BY tracks_album_disc_no_idx
 WHERE tracks.album_id = ?2 AND tracks.available = 1
 ORDER BY tracks.disc, tracks."no", tracks.seq
 `
@@ -2162,7 +3111,10 @@ type ListAvailableTracksOfAlbumRow struct {
 
 // ListAvailableTracksOfAlbum returns the available tracks of an album by
 // (disc, no), then in the order the rows were created, and whether each is
-// a favorite of the user.
+// a favorite of the user. The index is named, as in every query that reads
+// the tracks of one album: the indexes of the list of the tracks begin with
+// available, and without statistics (a first scan) SQLite would read every
+// available track through one of them.
 func (q *Queries) ListAvailableTracksOfAlbum(ctx context.Context, arg ListAvailableTracksOfAlbumParams) ([]ListAvailableTracksOfAlbumRow, error) {
 	rows, err := q.db.QueryContext(ctx, listAvailableTracksOfAlbum, arg.UserID, arg.AlbumID)
 	if err != nil {
@@ -2202,6 +3154,1612 @@ func (q *Queries) ListAvailableTracksOfAlbum(ctx context.Context, arg ListAvaila
 			&i.Track.RgAlbumPeak,
 			&i.Track.Available,
 			&i.Track.UpdatedAt,
+			&i.Track.TitleKey,
+			&i.Track.ArtistKey,
+			&i.Track.AlbumKey,
+			&i.Track.FirstSeenAt,
+			&i.Favorite,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTracksByAddedAsc = `-- name: ListTracksByAddedAsc :many
+SELECT tracks.seq, tracks.id, tracks.album_id, tracks.fingerprint, tracks.fp_version, tracks.occurrence, tracks.disc, tracks."no", tracks.title, tracks.artist, tracks.genre, tracks.rel_path, tracks.file_size, tracks.file_mtime_ns, tracks.file_sha256, tracks.codec, tracks.sample_rate, tracks.channels, tracks.bit_depth, tracks.bitrate, tracks.duration_ms, tracks.lyrics_rel, tracks.lyrics_sha256, tracks.rg_track_gain, tracks.rg_track_peak, tracks.rg_album_gain, tracks.rg_album_peak, tracks.available, tracks.updated_at, tracks.title_key, tracks.artist_key, tracks.album_key, tracks.first_seen_at,
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = ?1 AND favorites.track_id = tracks.id) AS favorite
+FROM tracks
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.available = 1
+ORDER BY tracks.first_seen_at, tracks.id
+LIMIT ?2
+`
+
+type ListTracksByAddedAscParams struct {
+	UserID   string
+	PageSize int64
+}
+
+type ListTracksByAddedAscRow struct {
+	Track            Track
+	AlbumTitle       string
+	AlbumYear        sql.NullInt64
+	AlbumCoverSha256 sql.NullString
+	AlbumArtistID    string
+	AlbumArtistName  string
+	Favorite         bool
+}
+
+// ListTracksByAddedAsc returns the first page of the available tracks by
+// (first_seen_at, id), ascending.
+func (q *Queries) ListTracksByAddedAsc(ctx context.Context, arg ListTracksByAddedAscParams) ([]ListTracksByAddedAscRow, error) {
+	rows, err := q.db.QueryContext(ctx, listTracksByAddedAsc, arg.UserID, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTracksByAddedAscRow
+	for rows.Next() {
+		var i ListTracksByAddedAscRow
+		if err := rows.Scan(
+			&i.Track.Seq,
+			&i.Track.ID,
+			&i.Track.AlbumID,
+			&i.Track.Fingerprint,
+			&i.Track.FpVersion,
+			&i.Track.Occurrence,
+			&i.Track.Disc,
+			&i.Track.No,
+			&i.Track.Title,
+			&i.Track.Artist,
+			&i.Track.Genre,
+			&i.Track.RelPath,
+			&i.Track.FileSize,
+			&i.Track.FileMtimeNs,
+			&i.Track.FileSha256,
+			&i.Track.Codec,
+			&i.Track.SampleRate,
+			&i.Track.Channels,
+			&i.Track.BitDepth,
+			&i.Track.Bitrate,
+			&i.Track.DurationMs,
+			&i.Track.LyricsRel,
+			&i.Track.LyricsSha256,
+			&i.Track.RgTrackGain,
+			&i.Track.RgTrackPeak,
+			&i.Track.RgAlbumGain,
+			&i.Track.RgAlbumPeak,
+			&i.Track.Available,
+			&i.Track.UpdatedAt,
+			&i.Track.TitleKey,
+			&i.Track.ArtistKey,
+			&i.Track.AlbumKey,
+			&i.Track.FirstSeenAt,
+			&i.AlbumTitle,
+			&i.AlbumYear,
+			&i.AlbumCoverSha256,
+			&i.AlbumArtistID,
+			&i.AlbumArtistName,
+			&i.Favorite,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTracksByAddedAscAfter = `-- name: ListTracksByAddedAscAfter :many
+SELECT tracks.seq, tracks.id, tracks.album_id, tracks.fingerprint, tracks.fp_version, tracks.occurrence, tracks.disc, tracks."no", tracks.title, tracks.artist, tracks.genre, tracks.rel_path, tracks.file_size, tracks.file_mtime_ns, tracks.file_sha256, tracks.codec, tracks.sample_rate, tracks.channels, tracks.bit_depth, tracks.bitrate, tracks.duration_ms, tracks.lyrics_rel, tracks.lyrics_sha256, tracks.rg_track_gain, tracks.rg_track_peak, tracks.rg_album_gain, tracks.rg_album_peak, tracks.available, tracks.updated_at, tracks.title_key, tracks.artist_key, tracks.album_key, tracks.first_seen_at,
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = ?1 AND favorites.track_id = tracks.id) AS favorite
+FROM tracks
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.available = 1
+  AND (tracks.first_seen_at, tracks.id) > (CAST(?2 AS INTEGER), CAST(?3 AS TEXT))
+ORDER BY tracks.first_seen_at, tracks.id
+LIMIT ?4
+`
+
+type ListTracksByAddedAscAfterParams struct {
+	UserID      string
+	FirstSeenAt int64
+	AfterID     string
+	PageSize    int64
+}
+
+type ListTracksByAddedAscAfterRow struct {
+	Track            Track
+	AlbumTitle       string
+	AlbumYear        sql.NullInt64
+	AlbumCoverSha256 sql.NullString
+	AlbumArtistID    string
+	AlbumArtistName  string
+	Favorite         bool
+}
+
+// ListTracksByAddedAscAfter returns the page of ListTracksByAddedAsc
+// after the track with that key.
+func (q *Queries) ListTracksByAddedAscAfter(ctx context.Context, arg ListTracksByAddedAscAfterParams) ([]ListTracksByAddedAscAfterRow, error) {
+	rows, err := q.db.QueryContext(ctx, listTracksByAddedAscAfter,
+		arg.UserID,
+		arg.FirstSeenAt,
+		arg.AfterID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTracksByAddedAscAfterRow
+	for rows.Next() {
+		var i ListTracksByAddedAscAfterRow
+		if err := rows.Scan(
+			&i.Track.Seq,
+			&i.Track.ID,
+			&i.Track.AlbumID,
+			&i.Track.Fingerprint,
+			&i.Track.FpVersion,
+			&i.Track.Occurrence,
+			&i.Track.Disc,
+			&i.Track.No,
+			&i.Track.Title,
+			&i.Track.Artist,
+			&i.Track.Genre,
+			&i.Track.RelPath,
+			&i.Track.FileSize,
+			&i.Track.FileMtimeNs,
+			&i.Track.FileSha256,
+			&i.Track.Codec,
+			&i.Track.SampleRate,
+			&i.Track.Channels,
+			&i.Track.BitDepth,
+			&i.Track.Bitrate,
+			&i.Track.DurationMs,
+			&i.Track.LyricsRel,
+			&i.Track.LyricsSha256,
+			&i.Track.RgTrackGain,
+			&i.Track.RgTrackPeak,
+			&i.Track.RgAlbumGain,
+			&i.Track.RgAlbumPeak,
+			&i.Track.Available,
+			&i.Track.UpdatedAt,
+			&i.Track.TitleKey,
+			&i.Track.ArtistKey,
+			&i.Track.AlbumKey,
+			&i.Track.FirstSeenAt,
+			&i.AlbumTitle,
+			&i.AlbumYear,
+			&i.AlbumCoverSha256,
+			&i.AlbumArtistID,
+			&i.AlbumArtistName,
+			&i.Favorite,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTracksByAddedDesc = `-- name: ListTracksByAddedDesc :many
+SELECT tracks.seq, tracks.id, tracks.album_id, tracks.fingerprint, tracks.fp_version, tracks.occurrence, tracks.disc, tracks."no", tracks.title, tracks.artist, tracks.genre, tracks.rel_path, tracks.file_size, tracks.file_mtime_ns, tracks.file_sha256, tracks.codec, tracks.sample_rate, tracks.channels, tracks.bit_depth, tracks.bitrate, tracks.duration_ms, tracks.lyrics_rel, tracks.lyrics_sha256, tracks.rg_track_gain, tracks.rg_track_peak, tracks.rg_album_gain, tracks.rg_album_peak, tracks.available, tracks.updated_at, tracks.title_key, tracks.artist_key, tracks.album_key, tracks.first_seen_at,
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = ?1 AND favorites.track_id = tracks.id) AS favorite
+FROM tracks
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.available = 1
+ORDER BY tracks.first_seen_at DESC, tracks.id DESC
+LIMIT ?2
+`
+
+type ListTracksByAddedDescParams struct {
+	UserID   string
+	PageSize int64
+}
+
+type ListTracksByAddedDescRow struct {
+	Track            Track
+	AlbumTitle       string
+	AlbumYear        sql.NullInt64
+	AlbumCoverSha256 sql.NullString
+	AlbumArtistID    string
+	AlbumArtistName  string
+	Favorite         bool
+}
+
+// ListTracksByAddedDesc returns the first page of the available tracks by
+// (first_seen_at, id), reversed.
+func (q *Queries) ListTracksByAddedDesc(ctx context.Context, arg ListTracksByAddedDescParams) ([]ListTracksByAddedDescRow, error) {
+	rows, err := q.db.QueryContext(ctx, listTracksByAddedDesc, arg.UserID, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTracksByAddedDescRow
+	for rows.Next() {
+		var i ListTracksByAddedDescRow
+		if err := rows.Scan(
+			&i.Track.Seq,
+			&i.Track.ID,
+			&i.Track.AlbumID,
+			&i.Track.Fingerprint,
+			&i.Track.FpVersion,
+			&i.Track.Occurrence,
+			&i.Track.Disc,
+			&i.Track.No,
+			&i.Track.Title,
+			&i.Track.Artist,
+			&i.Track.Genre,
+			&i.Track.RelPath,
+			&i.Track.FileSize,
+			&i.Track.FileMtimeNs,
+			&i.Track.FileSha256,
+			&i.Track.Codec,
+			&i.Track.SampleRate,
+			&i.Track.Channels,
+			&i.Track.BitDepth,
+			&i.Track.Bitrate,
+			&i.Track.DurationMs,
+			&i.Track.LyricsRel,
+			&i.Track.LyricsSha256,
+			&i.Track.RgTrackGain,
+			&i.Track.RgTrackPeak,
+			&i.Track.RgAlbumGain,
+			&i.Track.RgAlbumPeak,
+			&i.Track.Available,
+			&i.Track.UpdatedAt,
+			&i.Track.TitleKey,
+			&i.Track.ArtistKey,
+			&i.Track.AlbumKey,
+			&i.Track.FirstSeenAt,
+			&i.AlbumTitle,
+			&i.AlbumYear,
+			&i.AlbumCoverSha256,
+			&i.AlbumArtistID,
+			&i.AlbumArtistName,
+			&i.Favorite,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTracksByAddedDescAfter = `-- name: ListTracksByAddedDescAfter :many
+SELECT tracks.seq, tracks.id, tracks.album_id, tracks.fingerprint, tracks.fp_version, tracks.occurrence, tracks.disc, tracks."no", tracks.title, tracks.artist, tracks.genre, tracks.rel_path, tracks.file_size, tracks.file_mtime_ns, tracks.file_sha256, tracks.codec, tracks.sample_rate, tracks.channels, tracks.bit_depth, tracks.bitrate, tracks.duration_ms, tracks.lyrics_rel, tracks.lyrics_sha256, tracks.rg_track_gain, tracks.rg_track_peak, tracks.rg_album_gain, tracks.rg_album_peak, tracks.available, tracks.updated_at, tracks.title_key, tracks.artist_key, tracks.album_key, tracks.first_seen_at,
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = ?1 AND favorites.track_id = tracks.id) AS favorite
+FROM tracks
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.available = 1
+  AND (tracks.first_seen_at, tracks.id) < (CAST(?2 AS INTEGER), CAST(?3 AS TEXT))
+ORDER BY tracks.first_seen_at DESC, tracks.id DESC
+LIMIT ?4
+`
+
+type ListTracksByAddedDescAfterParams struct {
+	UserID      string
+	FirstSeenAt int64
+	AfterID     string
+	PageSize    int64
+}
+
+type ListTracksByAddedDescAfterRow struct {
+	Track            Track
+	AlbumTitle       string
+	AlbumYear        sql.NullInt64
+	AlbumCoverSha256 sql.NullString
+	AlbumArtistID    string
+	AlbumArtistName  string
+	Favorite         bool
+}
+
+// ListTracksByAddedDescAfter returns the page of ListTracksByAddedDesc
+// after the track with that key.
+func (q *Queries) ListTracksByAddedDescAfter(ctx context.Context, arg ListTracksByAddedDescAfterParams) ([]ListTracksByAddedDescAfterRow, error) {
+	rows, err := q.db.QueryContext(ctx, listTracksByAddedDescAfter,
+		arg.UserID,
+		arg.FirstSeenAt,
+		arg.AfterID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTracksByAddedDescAfterRow
+	for rows.Next() {
+		var i ListTracksByAddedDescAfterRow
+		if err := rows.Scan(
+			&i.Track.Seq,
+			&i.Track.ID,
+			&i.Track.AlbumID,
+			&i.Track.Fingerprint,
+			&i.Track.FpVersion,
+			&i.Track.Occurrence,
+			&i.Track.Disc,
+			&i.Track.No,
+			&i.Track.Title,
+			&i.Track.Artist,
+			&i.Track.Genre,
+			&i.Track.RelPath,
+			&i.Track.FileSize,
+			&i.Track.FileMtimeNs,
+			&i.Track.FileSha256,
+			&i.Track.Codec,
+			&i.Track.SampleRate,
+			&i.Track.Channels,
+			&i.Track.BitDepth,
+			&i.Track.Bitrate,
+			&i.Track.DurationMs,
+			&i.Track.LyricsRel,
+			&i.Track.LyricsSha256,
+			&i.Track.RgTrackGain,
+			&i.Track.RgTrackPeak,
+			&i.Track.RgAlbumGain,
+			&i.Track.RgAlbumPeak,
+			&i.Track.Available,
+			&i.Track.UpdatedAt,
+			&i.Track.TitleKey,
+			&i.Track.ArtistKey,
+			&i.Track.AlbumKey,
+			&i.Track.FirstSeenAt,
+			&i.AlbumTitle,
+			&i.AlbumYear,
+			&i.AlbumCoverSha256,
+			&i.AlbumArtistID,
+			&i.AlbumArtistName,
+			&i.Favorite,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTracksByAlbumAsc = `-- name: ListTracksByAlbumAsc :many
+SELECT tracks.seq, tracks.id, tracks.album_id, tracks.fingerprint, tracks.fp_version, tracks.occurrence, tracks.disc, tracks."no", tracks.title, tracks.artist, tracks.genre, tracks.rel_path, tracks.file_size, tracks.file_mtime_ns, tracks.file_sha256, tracks.codec, tracks.sample_rate, tracks.channels, tracks.bit_depth, tracks.bitrate, tracks.duration_ms, tracks.lyrics_rel, tracks.lyrics_sha256, tracks.rg_track_gain, tracks.rg_track_peak, tracks.rg_album_gain, tracks.rg_album_peak, tracks.available, tracks.updated_at, tracks.title_key, tracks.artist_key, tracks.album_key, tracks.first_seen_at,
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = ?1 AND favorites.track_id = tracks.id) AS favorite
+FROM tracks
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.available = 1
+ORDER BY tracks.album_key, tracks.album_id, tracks.disc, tracks."no", tracks.id
+LIMIT ?2
+`
+
+type ListTracksByAlbumAscParams struct {
+	UserID   string
+	PageSize int64
+}
+
+type ListTracksByAlbumAscRow struct {
+	Track            Track
+	AlbumTitle       string
+	AlbumYear        sql.NullInt64
+	AlbumCoverSha256 sql.NullString
+	AlbumArtistID    string
+	AlbumArtistName  string
+	Favorite         bool
+}
+
+// ListTracksByAlbumAsc returns the first page of the available tracks by
+// (album_key, album_id, disc, no, id), ascending.
+func (q *Queries) ListTracksByAlbumAsc(ctx context.Context, arg ListTracksByAlbumAscParams) ([]ListTracksByAlbumAscRow, error) {
+	rows, err := q.db.QueryContext(ctx, listTracksByAlbumAsc, arg.UserID, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTracksByAlbumAscRow
+	for rows.Next() {
+		var i ListTracksByAlbumAscRow
+		if err := rows.Scan(
+			&i.Track.Seq,
+			&i.Track.ID,
+			&i.Track.AlbumID,
+			&i.Track.Fingerprint,
+			&i.Track.FpVersion,
+			&i.Track.Occurrence,
+			&i.Track.Disc,
+			&i.Track.No,
+			&i.Track.Title,
+			&i.Track.Artist,
+			&i.Track.Genre,
+			&i.Track.RelPath,
+			&i.Track.FileSize,
+			&i.Track.FileMtimeNs,
+			&i.Track.FileSha256,
+			&i.Track.Codec,
+			&i.Track.SampleRate,
+			&i.Track.Channels,
+			&i.Track.BitDepth,
+			&i.Track.Bitrate,
+			&i.Track.DurationMs,
+			&i.Track.LyricsRel,
+			&i.Track.LyricsSha256,
+			&i.Track.RgTrackGain,
+			&i.Track.RgTrackPeak,
+			&i.Track.RgAlbumGain,
+			&i.Track.RgAlbumPeak,
+			&i.Track.Available,
+			&i.Track.UpdatedAt,
+			&i.Track.TitleKey,
+			&i.Track.ArtistKey,
+			&i.Track.AlbumKey,
+			&i.Track.FirstSeenAt,
+			&i.AlbumTitle,
+			&i.AlbumYear,
+			&i.AlbumCoverSha256,
+			&i.AlbumArtistID,
+			&i.AlbumArtistName,
+			&i.Favorite,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTracksByAlbumAscAfter = `-- name: ListTracksByAlbumAscAfter :many
+SELECT tracks.seq, tracks.id, tracks.album_id, tracks.fingerprint, tracks.fp_version, tracks.occurrence, tracks.disc, tracks."no", tracks.title, tracks.artist, tracks.genre, tracks.rel_path, tracks.file_size, tracks.file_mtime_ns, tracks.file_sha256, tracks.codec, tracks.sample_rate, tracks.channels, tracks.bit_depth, tracks.bitrate, tracks.duration_ms, tracks.lyrics_rel, tracks.lyrics_sha256, tracks.rg_track_gain, tracks.rg_track_peak, tracks.rg_album_gain, tracks.rg_album_peak, tracks.available, tracks.updated_at, tracks.title_key, tracks.artist_key, tracks.album_key, tracks.first_seen_at,
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = ?1 AND favorites.track_id = tracks.id) AS favorite
+FROM tracks
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.available = 1
+  AND (tracks.album_key, tracks.album_id, tracks.disc, tracks."no", tracks.id) > (CAST(?2 AS BLOB), CAST(?3 AS TEXT), CAST(?4 AS INTEGER), CAST(?5 AS INTEGER), CAST(?6 AS TEXT))
+ORDER BY tracks.album_key, tracks.album_id, tracks.disc, tracks."no", tracks.id
+LIMIT ?7
+`
+
+type ListTracksByAlbumAscAfterParams struct {
+	UserID       string
+	AlbumKey     []byte
+	AfterAlbumID string
+	Disc         int64
+	TrackNo      int64
+	AfterID      string
+	PageSize     int64
+}
+
+type ListTracksByAlbumAscAfterRow struct {
+	Track            Track
+	AlbumTitle       string
+	AlbumYear        sql.NullInt64
+	AlbumCoverSha256 sql.NullString
+	AlbumArtistID    string
+	AlbumArtistName  string
+	Favorite         bool
+}
+
+// ListTracksByAlbumAscAfter returns the page of ListTracksByAlbumAsc
+// after the track with that key.
+func (q *Queries) ListTracksByAlbumAscAfter(ctx context.Context, arg ListTracksByAlbumAscAfterParams) ([]ListTracksByAlbumAscAfterRow, error) {
+	rows, err := q.db.QueryContext(ctx, listTracksByAlbumAscAfter,
+		arg.UserID,
+		arg.AlbumKey,
+		arg.AfterAlbumID,
+		arg.Disc,
+		arg.TrackNo,
+		arg.AfterID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTracksByAlbumAscAfterRow
+	for rows.Next() {
+		var i ListTracksByAlbumAscAfterRow
+		if err := rows.Scan(
+			&i.Track.Seq,
+			&i.Track.ID,
+			&i.Track.AlbumID,
+			&i.Track.Fingerprint,
+			&i.Track.FpVersion,
+			&i.Track.Occurrence,
+			&i.Track.Disc,
+			&i.Track.No,
+			&i.Track.Title,
+			&i.Track.Artist,
+			&i.Track.Genre,
+			&i.Track.RelPath,
+			&i.Track.FileSize,
+			&i.Track.FileMtimeNs,
+			&i.Track.FileSha256,
+			&i.Track.Codec,
+			&i.Track.SampleRate,
+			&i.Track.Channels,
+			&i.Track.BitDepth,
+			&i.Track.Bitrate,
+			&i.Track.DurationMs,
+			&i.Track.LyricsRel,
+			&i.Track.LyricsSha256,
+			&i.Track.RgTrackGain,
+			&i.Track.RgTrackPeak,
+			&i.Track.RgAlbumGain,
+			&i.Track.RgAlbumPeak,
+			&i.Track.Available,
+			&i.Track.UpdatedAt,
+			&i.Track.TitleKey,
+			&i.Track.ArtistKey,
+			&i.Track.AlbumKey,
+			&i.Track.FirstSeenAt,
+			&i.AlbumTitle,
+			&i.AlbumYear,
+			&i.AlbumCoverSha256,
+			&i.AlbumArtistID,
+			&i.AlbumArtistName,
+			&i.Favorite,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTracksByAlbumDesc = `-- name: ListTracksByAlbumDesc :many
+SELECT tracks.seq, tracks.id, tracks.album_id, tracks.fingerprint, tracks.fp_version, tracks.occurrence, tracks.disc, tracks."no", tracks.title, tracks.artist, tracks.genre, tracks.rel_path, tracks.file_size, tracks.file_mtime_ns, tracks.file_sha256, tracks.codec, tracks.sample_rate, tracks.channels, tracks.bit_depth, tracks.bitrate, tracks.duration_ms, tracks.lyrics_rel, tracks.lyrics_sha256, tracks.rg_track_gain, tracks.rg_track_peak, tracks.rg_album_gain, tracks.rg_album_peak, tracks.available, tracks.updated_at, tracks.title_key, tracks.artist_key, tracks.album_key, tracks.first_seen_at,
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = ?1 AND favorites.track_id = tracks.id) AS favorite
+FROM tracks
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.available = 1
+ORDER BY tracks.album_key DESC, tracks.album_id DESC, tracks.disc DESC, tracks."no" DESC, tracks.id DESC
+LIMIT ?2
+`
+
+type ListTracksByAlbumDescParams struct {
+	UserID   string
+	PageSize int64
+}
+
+type ListTracksByAlbumDescRow struct {
+	Track            Track
+	AlbumTitle       string
+	AlbumYear        sql.NullInt64
+	AlbumCoverSha256 sql.NullString
+	AlbumArtistID    string
+	AlbumArtistName  string
+	Favorite         bool
+}
+
+// ListTracksByAlbumDesc returns the first page of the available tracks by
+// (album_key, album_id, disc, no, id), reversed.
+func (q *Queries) ListTracksByAlbumDesc(ctx context.Context, arg ListTracksByAlbumDescParams) ([]ListTracksByAlbumDescRow, error) {
+	rows, err := q.db.QueryContext(ctx, listTracksByAlbumDesc, arg.UserID, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTracksByAlbumDescRow
+	for rows.Next() {
+		var i ListTracksByAlbumDescRow
+		if err := rows.Scan(
+			&i.Track.Seq,
+			&i.Track.ID,
+			&i.Track.AlbumID,
+			&i.Track.Fingerprint,
+			&i.Track.FpVersion,
+			&i.Track.Occurrence,
+			&i.Track.Disc,
+			&i.Track.No,
+			&i.Track.Title,
+			&i.Track.Artist,
+			&i.Track.Genre,
+			&i.Track.RelPath,
+			&i.Track.FileSize,
+			&i.Track.FileMtimeNs,
+			&i.Track.FileSha256,
+			&i.Track.Codec,
+			&i.Track.SampleRate,
+			&i.Track.Channels,
+			&i.Track.BitDepth,
+			&i.Track.Bitrate,
+			&i.Track.DurationMs,
+			&i.Track.LyricsRel,
+			&i.Track.LyricsSha256,
+			&i.Track.RgTrackGain,
+			&i.Track.RgTrackPeak,
+			&i.Track.RgAlbumGain,
+			&i.Track.RgAlbumPeak,
+			&i.Track.Available,
+			&i.Track.UpdatedAt,
+			&i.Track.TitleKey,
+			&i.Track.ArtistKey,
+			&i.Track.AlbumKey,
+			&i.Track.FirstSeenAt,
+			&i.AlbumTitle,
+			&i.AlbumYear,
+			&i.AlbumCoverSha256,
+			&i.AlbumArtistID,
+			&i.AlbumArtistName,
+			&i.Favorite,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTracksByAlbumDescAfter = `-- name: ListTracksByAlbumDescAfter :many
+SELECT tracks.seq, tracks.id, tracks.album_id, tracks.fingerprint, tracks.fp_version, tracks.occurrence, tracks.disc, tracks."no", tracks.title, tracks.artist, tracks.genre, tracks.rel_path, tracks.file_size, tracks.file_mtime_ns, tracks.file_sha256, tracks.codec, tracks.sample_rate, tracks.channels, tracks.bit_depth, tracks.bitrate, tracks.duration_ms, tracks.lyrics_rel, tracks.lyrics_sha256, tracks.rg_track_gain, tracks.rg_track_peak, tracks.rg_album_gain, tracks.rg_album_peak, tracks.available, tracks.updated_at, tracks.title_key, tracks.artist_key, tracks.album_key, tracks.first_seen_at,
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = ?1 AND favorites.track_id = tracks.id) AS favorite
+FROM tracks
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.available = 1
+  AND (tracks.album_key, tracks.album_id, tracks.disc, tracks."no", tracks.id) < (CAST(?2 AS BLOB), CAST(?3 AS TEXT), CAST(?4 AS INTEGER), CAST(?5 AS INTEGER), CAST(?6 AS TEXT))
+ORDER BY tracks.album_key DESC, tracks.album_id DESC, tracks.disc DESC, tracks."no" DESC, tracks.id DESC
+LIMIT ?7
+`
+
+type ListTracksByAlbumDescAfterParams struct {
+	UserID       string
+	AlbumKey     []byte
+	AfterAlbumID string
+	Disc         int64
+	TrackNo      int64
+	AfterID      string
+	PageSize     int64
+}
+
+type ListTracksByAlbumDescAfterRow struct {
+	Track            Track
+	AlbumTitle       string
+	AlbumYear        sql.NullInt64
+	AlbumCoverSha256 sql.NullString
+	AlbumArtistID    string
+	AlbumArtistName  string
+	Favorite         bool
+}
+
+// ListTracksByAlbumDescAfter returns the page of ListTracksByAlbumDesc
+// after the track with that key.
+func (q *Queries) ListTracksByAlbumDescAfter(ctx context.Context, arg ListTracksByAlbumDescAfterParams) ([]ListTracksByAlbumDescAfterRow, error) {
+	rows, err := q.db.QueryContext(ctx, listTracksByAlbumDescAfter,
+		arg.UserID,
+		arg.AlbumKey,
+		arg.AfterAlbumID,
+		arg.Disc,
+		arg.TrackNo,
+		arg.AfterID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTracksByAlbumDescAfterRow
+	for rows.Next() {
+		var i ListTracksByAlbumDescAfterRow
+		if err := rows.Scan(
+			&i.Track.Seq,
+			&i.Track.ID,
+			&i.Track.AlbumID,
+			&i.Track.Fingerprint,
+			&i.Track.FpVersion,
+			&i.Track.Occurrence,
+			&i.Track.Disc,
+			&i.Track.No,
+			&i.Track.Title,
+			&i.Track.Artist,
+			&i.Track.Genre,
+			&i.Track.RelPath,
+			&i.Track.FileSize,
+			&i.Track.FileMtimeNs,
+			&i.Track.FileSha256,
+			&i.Track.Codec,
+			&i.Track.SampleRate,
+			&i.Track.Channels,
+			&i.Track.BitDepth,
+			&i.Track.Bitrate,
+			&i.Track.DurationMs,
+			&i.Track.LyricsRel,
+			&i.Track.LyricsSha256,
+			&i.Track.RgTrackGain,
+			&i.Track.RgTrackPeak,
+			&i.Track.RgAlbumGain,
+			&i.Track.RgAlbumPeak,
+			&i.Track.Available,
+			&i.Track.UpdatedAt,
+			&i.Track.TitleKey,
+			&i.Track.ArtistKey,
+			&i.Track.AlbumKey,
+			&i.Track.FirstSeenAt,
+			&i.AlbumTitle,
+			&i.AlbumYear,
+			&i.AlbumCoverSha256,
+			&i.AlbumArtistID,
+			&i.AlbumArtistName,
+			&i.Favorite,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTracksByArtistAsc = `-- name: ListTracksByArtistAsc :many
+SELECT tracks.seq, tracks.id, tracks.album_id, tracks.fingerprint, tracks.fp_version, tracks.occurrence, tracks.disc, tracks."no", tracks.title, tracks.artist, tracks.genre, tracks.rel_path, tracks.file_size, tracks.file_mtime_ns, tracks.file_sha256, tracks.codec, tracks.sample_rate, tracks.channels, tracks.bit_depth, tracks.bitrate, tracks.duration_ms, tracks.lyrics_rel, tracks.lyrics_sha256, tracks.rg_track_gain, tracks.rg_track_peak, tracks.rg_album_gain, tracks.rg_album_peak, tracks.available, tracks.updated_at, tracks.title_key, tracks.artist_key, tracks.album_key, tracks.first_seen_at,
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = ?1 AND favorites.track_id = tracks.id) AS favorite
+FROM tracks
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.available = 1
+ORDER BY tracks.artist_key, tracks.album_key, tracks.album_id, tracks.disc, tracks."no", tracks.id
+LIMIT ?2
+`
+
+type ListTracksByArtistAscParams struct {
+	UserID   string
+	PageSize int64
+}
+
+type ListTracksByArtistAscRow struct {
+	Track            Track
+	AlbumTitle       string
+	AlbumYear        sql.NullInt64
+	AlbumCoverSha256 sql.NullString
+	AlbumArtistID    string
+	AlbumArtistName  string
+	Favorite         bool
+}
+
+// ListTracksByArtistAsc returns the first page of the available tracks by
+// (artist_key, album_key, album_id, disc, no, id), ascending.
+func (q *Queries) ListTracksByArtistAsc(ctx context.Context, arg ListTracksByArtistAscParams) ([]ListTracksByArtistAscRow, error) {
+	rows, err := q.db.QueryContext(ctx, listTracksByArtistAsc, arg.UserID, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTracksByArtistAscRow
+	for rows.Next() {
+		var i ListTracksByArtistAscRow
+		if err := rows.Scan(
+			&i.Track.Seq,
+			&i.Track.ID,
+			&i.Track.AlbumID,
+			&i.Track.Fingerprint,
+			&i.Track.FpVersion,
+			&i.Track.Occurrence,
+			&i.Track.Disc,
+			&i.Track.No,
+			&i.Track.Title,
+			&i.Track.Artist,
+			&i.Track.Genre,
+			&i.Track.RelPath,
+			&i.Track.FileSize,
+			&i.Track.FileMtimeNs,
+			&i.Track.FileSha256,
+			&i.Track.Codec,
+			&i.Track.SampleRate,
+			&i.Track.Channels,
+			&i.Track.BitDepth,
+			&i.Track.Bitrate,
+			&i.Track.DurationMs,
+			&i.Track.LyricsRel,
+			&i.Track.LyricsSha256,
+			&i.Track.RgTrackGain,
+			&i.Track.RgTrackPeak,
+			&i.Track.RgAlbumGain,
+			&i.Track.RgAlbumPeak,
+			&i.Track.Available,
+			&i.Track.UpdatedAt,
+			&i.Track.TitleKey,
+			&i.Track.ArtistKey,
+			&i.Track.AlbumKey,
+			&i.Track.FirstSeenAt,
+			&i.AlbumTitle,
+			&i.AlbumYear,
+			&i.AlbumCoverSha256,
+			&i.AlbumArtistID,
+			&i.AlbumArtistName,
+			&i.Favorite,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTracksByArtistAscAfter = `-- name: ListTracksByArtistAscAfter :many
+SELECT tracks.seq, tracks.id, tracks.album_id, tracks.fingerprint, tracks.fp_version, tracks.occurrence, tracks.disc, tracks."no", tracks.title, tracks.artist, tracks.genre, tracks.rel_path, tracks.file_size, tracks.file_mtime_ns, tracks.file_sha256, tracks.codec, tracks.sample_rate, tracks.channels, tracks.bit_depth, tracks.bitrate, tracks.duration_ms, tracks.lyrics_rel, tracks.lyrics_sha256, tracks.rg_track_gain, tracks.rg_track_peak, tracks.rg_album_gain, tracks.rg_album_peak, tracks.available, tracks.updated_at, tracks.title_key, tracks.artist_key, tracks.album_key, tracks.first_seen_at,
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = ?1 AND favorites.track_id = tracks.id) AS favorite
+FROM tracks
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.available = 1
+  AND (tracks.artist_key, tracks.album_key, tracks.album_id, tracks.disc, tracks."no", tracks.id) > (CAST(?2 AS BLOB), CAST(?3 AS BLOB), CAST(?4 AS TEXT), CAST(?5 AS INTEGER), CAST(?6 AS INTEGER), CAST(?7 AS TEXT))
+ORDER BY tracks.artist_key, tracks.album_key, tracks.album_id, tracks.disc, tracks."no", tracks.id
+LIMIT ?8
+`
+
+type ListTracksByArtistAscAfterParams struct {
+	UserID       string
+	ArtistKey    []byte
+	AlbumKey     []byte
+	AfterAlbumID string
+	Disc         int64
+	TrackNo      int64
+	AfterID      string
+	PageSize     int64
+}
+
+type ListTracksByArtistAscAfterRow struct {
+	Track            Track
+	AlbumTitle       string
+	AlbumYear        sql.NullInt64
+	AlbumCoverSha256 sql.NullString
+	AlbumArtistID    string
+	AlbumArtistName  string
+	Favorite         bool
+}
+
+// ListTracksByArtistAscAfter returns the page of ListTracksByArtistAsc
+// after the track with that key.
+func (q *Queries) ListTracksByArtistAscAfter(ctx context.Context, arg ListTracksByArtistAscAfterParams) ([]ListTracksByArtistAscAfterRow, error) {
+	rows, err := q.db.QueryContext(ctx, listTracksByArtistAscAfter,
+		arg.UserID,
+		arg.ArtistKey,
+		arg.AlbumKey,
+		arg.AfterAlbumID,
+		arg.Disc,
+		arg.TrackNo,
+		arg.AfterID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTracksByArtistAscAfterRow
+	for rows.Next() {
+		var i ListTracksByArtistAscAfterRow
+		if err := rows.Scan(
+			&i.Track.Seq,
+			&i.Track.ID,
+			&i.Track.AlbumID,
+			&i.Track.Fingerprint,
+			&i.Track.FpVersion,
+			&i.Track.Occurrence,
+			&i.Track.Disc,
+			&i.Track.No,
+			&i.Track.Title,
+			&i.Track.Artist,
+			&i.Track.Genre,
+			&i.Track.RelPath,
+			&i.Track.FileSize,
+			&i.Track.FileMtimeNs,
+			&i.Track.FileSha256,
+			&i.Track.Codec,
+			&i.Track.SampleRate,
+			&i.Track.Channels,
+			&i.Track.BitDepth,
+			&i.Track.Bitrate,
+			&i.Track.DurationMs,
+			&i.Track.LyricsRel,
+			&i.Track.LyricsSha256,
+			&i.Track.RgTrackGain,
+			&i.Track.RgTrackPeak,
+			&i.Track.RgAlbumGain,
+			&i.Track.RgAlbumPeak,
+			&i.Track.Available,
+			&i.Track.UpdatedAt,
+			&i.Track.TitleKey,
+			&i.Track.ArtistKey,
+			&i.Track.AlbumKey,
+			&i.Track.FirstSeenAt,
+			&i.AlbumTitle,
+			&i.AlbumYear,
+			&i.AlbumCoverSha256,
+			&i.AlbumArtistID,
+			&i.AlbumArtistName,
+			&i.Favorite,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTracksByArtistDesc = `-- name: ListTracksByArtistDesc :many
+SELECT tracks.seq, tracks.id, tracks.album_id, tracks.fingerprint, tracks.fp_version, tracks.occurrence, tracks.disc, tracks."no", tracks.title, tracks.artist, tracks.genre, tracks.rel_path, tracks.file_size, tracks.file_mtime_ns, tracks.file_sha256, tracks.codec, tracks.sample_rate, tracks.channels, tracks.bit_depth, tracks.bitrate, tracks.duration_ms, tracks.lyrics_rel, tracks.lyrics_sha256, tracks.rg_track_gain, tracks.rg_track_peak, tracks.rg_album_gain, tracks.rg_album_peak, tracks.available, tracks.updated_at, tracks.title_key, tracks.artist_key, tracks.album_key, tracks.first_seen_at,
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = ?1 AND favorites.track_id = tracks.id) AS favorite
+FROM tracks
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.available = 1
+ORDER BY tracks.artist_key DESC, tracks.album_key DESC, tracks.album_id DESC, tracks.disc DESC, tracks."no" DESC, tracks.id DESC
+LIMIT ?2
+`
+
+type ListTracksByArtistDescParams struct {
+	UserID   string
+	PageSize int64
+}
+
+type ListTracksByArtistDescRow struct {
+	Track            Track
+	AlbumTitle       string
+	AlbumYear        sql.NullInt64
+	AlbumCoverSha256 sql.NullString
+	AlbumArtistID    string
+	AlbumArtistName  string
+	Favorite         bool
+}
+
+// ListTracksByArtistDesc returns the first page of the available tracks by
+// (artist_key, album_key, album_id, disc, no, id), reversed.
+func (q *Queries) ListTracksByArtistDesc(ctx context.Context, arg ListTracksByArtistDescParams) ([]ListTracksByArtistDescRow, error) {
+	rows, err := q.db.QueryContext(ctx, listTracksByArtistDesc, arg.UserID, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTracksByArtistDescRow
+	for rows.Next() {
+		var i ListTracksByArtistDescRow
+		if err := rows.Scan(
+			&i.Track.Seq,
+			&i.Track.ID,
+			&i.Track.AlbumID,
+			&i.Track.Fingerprint,
+			&i.Track.FpVersion,
+			&i.Track.Occurrence,
+			&i.Track.Disc,
+			&i.Track.No,
+			&i.Track.Title,
+			&i.Track.Artist,
+			&i.Track.Genre,
+			&i.Track.RelPath,
+			&i.Track.FileSize,
+			&i.Track.FileMtimeNs,
+			&i.Track.FileSha256,
+			&i.Track.Codec,
+			&i.Track.SampleRate,
+			&i.Track.Channels,
+			&i.Track.BitDepth,
+			&i.Track.Bitrate,
+			&i.Track.DurationMs,
+			&i.Track.LyricsRel,
+			&i.Track.LyricsSha256,
+			&i.Track.RgTrackGain,
+			&i.Track.RgTrackPeak,
+			&i.Track.RgAlbumGain,
+			&i.Track.RgAlbumPeak,
+			&i.Track.Available,
+			&i.Track.UpdatedAt,
+			&i.Track.TitleKey,
+			&i.Track.ArtistKey,
+			&i.Track.AlbumKey,
+			&i.Track.FirstSeenAt,
+			&i.AlbumTitle,
+			&i.AlbumYear,
+			&i.AlbumCoverSha256,
+			&i.AlbumArtistID,
+			&i.AlbumArtistName,
+			&i.Favorite,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTracksByArtistDescAfter = `-- name: ListTracksByArtistDescAfter :many
+SELECT tracks.seq, tracks.id, tracks.album_id, tracks.fingerprint, tracks.fp_version, tracks.occurrence, tracks.disc, tracks."no", tracks.title, tracks.artist, tracks.genre, tracks.rel_path, tracks.file_size, tracks.file_mtime_ns, tracks.file_sha256, tracks.codec, tracks.sample_rate, tracks.channels, tracks.bit_depth, tracks.bitrate, tracks.duration_ms, tracks.lyrics_rel, tracks.lyrics_sha256, tracks.rg_track_gain, tracks.rg_track_peak, tracks.rg_album_gain, tracks.rg_album_peak, tracks.available, tracks.updated_at, tracks.title_key, tracks.artist_key, tracks.album_key, tracks.first_seen_at,
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = ?1 AND favorites.track_id = tracks.id) AS favorite
+FROM tracks
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.available = 1
+  AND (tracks.artist_key, tracks.album_key, tracks.album_id, tracks.disc, tracks."no", tracks.id) < (CAST(?2 AS BLOB), CAST(?3 AS BLOB), CAST(?4 AS TEXT), CAST(?5 AS INTEGER), CAST(?6 AS INTEGER), CAST(?7 AS TEXT))
+ORDER BY tracks.artist_key DESC, tracks.album_key DESC, tracks.album_id DESC, tracks.disc DESC, tracks."no" DESC, tracks.id DESC
+LIMIT ?8
+`
+
+type ListTracksByArtistDescAfterParams struct {
+	UserID       string
+	ArtistKey    []byte
+	AlbumKey     []byte
+	AfterAlbumID string
+	Disc         int64
+	TrackNo      int64
+	AfterID      string
+	PageSize     int64
+}
+
+type ListTracksByArtistDescAfterRow struct {
+	Track            Track
+	AlbumTitle       string
+	AlbumYear        sql.NullInt64
+	AlbumCoverSha256 sql.NullString
+	AlbumArtistID    string
+	AlbumArtistName  string
+	Favorite         bool
+}
+
+// ListTracksByArtistDescAfter returns the page of ListTracksByArtistDesc
+// after the track with that key.
+func (q *Queries) ListTracksByArtistDescAfter(ctx context.Context, arg ListTracksByArtistDescAfterParams) ([]ListTracksByArtistDescAfterRow, error) {
+	rows, err := q.db.QueryContext(ctx, listTracksByArtistDescAfter,
+		arg.UserID,
+		arg.ArtistKey,
+		arg.AlbumKey,
+		arg.AfterAlbumID,
+		arg.Disc,
+		arg.TrackNo,
+		arg.AfterID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTracksByArtistDescAfterRow
+	for rows.Next() {
+		var i ListTracksByArtistDescAfterRow
+		if err := rows.Scan(
+			&i.Track.Seq,
+			&i.Track.ID,
+			&i.Track.AlbumID,
+			&i.Track.Fingerprint,
+			&i.Track.FpVersion,
+			&i.Track.Occurrence,
+			&i.Track.Disc,
+			&i.Track.No,
+			&i.Track.Title,
+			&i.Track.Artist,
+			&i.Track.Genre,
+			&i.Track.RelPath,
+			&i.Track.FileSize,
+			&i.Track.FileMtimeNs,
+			&i.Track.FileSha256,
+			&i.Track.Codec,
+			&i.Track.SampleRate,
+			&i.Track.Channels,
+			&i.Track.BitDepth,
+			&i.Track.Bitrate,
+			&i.Track.DurationMs,
+			&i.Track.LyricsRel,
+			&i.Track.LyricsSha256,
+			&i.Track.RgTrackGain,
+			&i.Track.RgTrackPeak,
+			&i.Track.RgAlbumGain,
+			&i.Track.RgAlbumPeak,
+			&i.Track.Available,
+			&i.Track.UpdatedAt,
+			&i.Track.TitleKey,
+			&i.Track.ArtistKey,
+			&i.Track.AlbumKey,
+			&i.Track.FirstSeenAt,
+			&i.AlbumTitle,
+			&i.AlbumYear,
+			&i.AlbumCoverSha256,
+			&i.AlbumArtistID,
+			&i.AlbumArtistName,
+			&i.Favorite,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTracksByTitleAsc = `-- name: ListTracksByTitleAsc :many
+
+SELECT tracks.seq, tracks.id, tracks.album_id, tracks.fingerprint, tracks.fp_version, tracks.occurrence, tracks.disc, tracks."no", tracks.title, tracks.artist, tracks.genre, tracks.rel_path, tracks.file_size, tracks.file_mtime_ns, tracks.file_sha256, tracks.codec, tracks.sample_rate, tracks.channels, tracks.bit_depth, tracks.bitrate, tracks.duration_ms, tracks.lyrics_rel, tracks.lyrics_sha256, tracks.rg_track_gain, tracks.rg_track_peak, tracks.rg_album_gain, tracks.rg_album_peak, tracks.available, tracks.updated_at, tracks.title_key, tracks.artist_key, tracks.album_key, tracks.first_seen_at,
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = ?1 AND favorites.track_id = tracks.id) AS favorite
+FROM tracks
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.available = 1
+ORDER BY tracks.title_key, tracks.id
+LIMIT ?2
+`
+
+type ListTracksByTitleAscParams struct {
+	UserID   string
+	PageSize int64
+}
+
+type ListTracksByTitleAscRow struct {
+	Track            Track
+	AlbumTitle       string
+	AlbumYear        sql.NullInt64
+	AlbumCoverSha256 sql.NullString
+	AlbumArtistID    string
+	AlbumArtistName  string
+	Favorite         bool
+}
+
+// The list of the tracks (GET /tracks, docs/proposals/web-client-api.md
+// A1): the available tracks in four orders, each ending with the id so
+// that it is total, each walking an index of its own (tracks_*_idx), like
+// the lists of the albums above. Every row has what the API shows of its
+// album and whether the track is a favorite of the user.
+// ListTracksByTitleAsc returns the first page of the available tracks by
+// (title_key, id), ascending.
+func (q *Queries) ListTracksByTitleAsc(ctx context.Context, arg ListTracksByTitleAscParams) ([]ListTracksByTitleAscRow, error) {
+	rows, err := q.db.QueryContext(ctx, listTracksByTitleAsc, arg.UserID, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTracksByTitleAscRow
+	for rows.Next() {
+		var i ListTracksByTitleAscRow
+		if err := rows.Scan(
+			&i.Track.Seq,
+			&i.Track.ID,
+			&i.Track.AlbumID,
+			&i.Track.Fingerprint,
+			&i.Track.FpVersion,
+			&i.Track.Occurrence,
+			&i.Track.Disc,
+			&i.Track.No,
+			&i.Track.Title,
+			&i.Track.Artist,
+			&i.Track.Genre,
+			&i.Track.RelPath,
+			&i.Track.FileSize,
+			&i.Track.FileMtimeNs,
+			&i.Track.FileSha256,
+			&i.Track.Codec,
+			&i.Track.SampleRate,
+			&i.Track.Channels,
+			&i.Track.BitDepth,
+			&i.Track.Bitrate,
+			&i.Track.DurationMs,
+			&i.Track.LyricsRel,
+			&i.Track.LyricsSha256,
+			&i.Track.RgTrackGain,
+			&i.Track.RgTrackPeak,
+			&i.Track.RgAlbumGain,
+			&i.Track.RgAlbumPeak,
+			&i.Track.Available,
+			&i.Track.UpdatedAt,
+			&i.Track.TitleKey,
+			&i.Track.ArtistKey,
+			&i.Track.AlbumKey,
+			&i.Track.FirstSeenAt,
+			&i.AlbumTitle,
+			&i.AlbumYear,
+			&i.AlbumCoverSha256,
+			&i.AlbumArtistID,
+			&i.AlbumArtistName,
+			&i.Favorite,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTracksByTitleAscAfter = `-- name: ListTracksByTitleAscAfter :many
+SELECT tracks.seq, tracks.id, tracks.album_id, tracks.fingerprint, tracks.fp_version, tracks.occurrence, tracks.disc, tracks."no", tracks.title, tracks.artist, tracks.genre, tracks.rel_path, tracks.file_size, tracks.file_mtime_ns, tracks.file_sha256, tracks.codec, tracks.sample_rate, tracks.channels, tracks.bit_depth, tracks.bitrate, tracks.duration_ms, tracks.lyrics_rel, tracks.lyrics_sha256, tracks.rg_track_gain, tracks.rg_track_peak, tracks.rg_album_gain, tracks.rg_album_peak, tracks.available, tracks.updated_at, tracks.title_key, tracks.artist_key, tracks.album_key, tracks.first_seen_at,
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = ?1 AND favorites.track_id = tracks.id) AS favorite
+FROM tracks
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.available = 1
+  AND (tracks.title_key, tracks.id) > (CAST(?2 AS BLOB), CAST(?3 AS TEXT))
+ORDER BY tracks.title_key, tracks.id
+LIMIT ?4
+`
+
+type ListTracksByTitleAscAfterParams struct {
+	UserID   string
+	TitleKey []byte
+	AfterID  string
+	PageSize int64
+}
+
+type ListTracksByTitleAscAfterRow struct {
+	Track            Track
+	AlbumTitle       string
+	AlbumYear        sql.NullInt64
+	AlbumCoverSha256 sql.NullString
+	AlbumArtistID    string
+	AlbumArtistName  string
+	Favorite         bool
+}
+
+// ListTracksByTitleAscAfter returns the page of ListTracksByTitleAsc
+// after the track with that key.
+func (q *Queries) ListTracksByTitleAscAfter(ctx context.Context, arg ListTracksByTitleAscAfterParams) ([]ListTracksByTitleAscAfterRow, error) {
+	rows, err := q.db.QueryContext(ctx, listTracksByTitleAscAfter,
+		arg.UserID,
+		arg.TitleKey,
+		arg.AfterID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTracksByTitleAscAfterRow
+	for rows.Next() {
+		var i ListTracksByTitleAscAfterRow
+		if err := rows.Scan(
+			&i.Track.Seq,
+			&i.Track.ID,
+			&i.Track.AlbumID,
+			&i.Track.Fingerprint,
+			&i.Track.FpVersion,
+			&i.Track.Occurrence,
+			&i.Track.Disc,
+			&i.Track.No,
+			&i.Track.Title,
+			&i.Track.Artist,
+			&i.Track.Genre,
+			&i.Track.RelPath,
+			&i.Track.FileSize,
+			&i.Track.FileMtimeNs,
+			&i.Track.FileSha256,
+			&i.Track.Codec,
+			&i.Track.SampleRate,
+			&i.Track.Channels,
+			&i.Track.BitDepth,
+			&i.Track.Bitrate,
+			&i.Track.DurationMs,
+			&i.Track.LyricsRel,
+			&i.Track.LyricsSha256,
+			&i.Track.RgTrackGain,
+			&i.Track.RgTrackPeak,
+			&i.Track.RgAlbumGain,
+			&i.Track.RgAlbumPeak,
+			&i.Track.Available,
+			&i.Track.UpdatedAt,
+			&i.Track.TitleKey,
+			&i.Track.ArtistKey,
+			&i.Track.AlbumKey,
+			&i.Track.FirstSeenAt,
+			&i.AlbumTitle,
+			&i.AlbumYear,
+			&i.AlbumCoverSha256,
+			&i.AlbumArtistID,
+			&i.AlbumArtistName,
+			&i.Favorite,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTracksByTitleDesc = `-- name: ListTracksByTitleDesc :many
+SELECT tracks.seq, tracks.id, tracks.album_id, tracks.fingerprint, tracks.fp_version, tracks.occurrence, tracks.disc, tracks."no", tracks.title, tracks.artist, tracks.genre, tracks.rel_path, tracks.file_size, tracks.file_mtime_ns, tracks.file_sha256, tracks.codec, tracks.sample_rate, tracks.channels, tracks.bit_depth, tracks.bitrate, tracks.duration_ms, tracks.lyrics_rel, tracks.lyrics_sha256, tracks.rg_track_gain, tracks.rg_track_peak, tracks.rg_album_gain, tracks.rg_album_peak, tracks.available, tracks.updated_at, tracks.title_key, tracks.artist_key, tracks.album_key, tracks.first_seen_at,
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = ?1 AND favorites.track_id = tracks.id) AS favorite
+FROM tracks
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.available = 1
+ORDER BY tracks.title_key DESC, tracks.id DESC
+LIMIT ?2
+`
+
+type ListTracksByTitleDescParams struct {
+	UserID   string
+	PageSize int64
+}
+
+type ListTracksByTitleDescRow struct {
+	Track            Track
+	AlbumTitle       string
+	AlbumYear        sql.NullInt64
+	AlbumCoverSha256 sql.NullString
+	AlbumArtistID    string
+	AlbumArtistName  string
+	Favorite         bool
+}
+
+// ListTracksByTitleDesc returns the first page of the available tracks by
+// (title_key, id), reversed.
+func (q *Queries) ListTracksByTitleDesc(ctx context.Context, arg ListTracksByTitleDescParams) ([]ListTracksByTitleDescRow, error) {
+	rows, err := q.db.QueryContext(ctx, listTracksByTitleDesc, arg.UserID, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTracksByTitleDescRow
+	for rows.Next() {
+		var i ListTracksByTitleDescRow
+		if err := rows.Scan(
+			&i.Track.Seq,
+			&i.Track.ID,
+			&i.Track.AlbumID,
+			&i.Track.Fingerprint,
+			&i.Track.FpVersion,
+			&i.Track.Occurrence,
+			&i.Track.Disc,
+			&i.Track.No,
+			&i.Track.Title,
+			&i.Track.Artist,
+			&i.Track.Genre,
+			&i.Track.RelPath,
+			&i.Track.FileSize,
+			&i.Track.FileMtimeNs,
+			&i.Track.FileSha256,
+			&i.Track.Codec,
+			&i.Track.SampleRate,
+			&i.Track.Channels,
+			&i.Track.BitDepth,
+			&i.Track.Bitrate,
+			&i.Track.DurationMs,
+			&i.Track.LyricsRel,
+			&i.Track.LyricsSha256,
+			&i.Track.RgTrackGain,
+			&i.Track.RgTrackPeak,
+			&i.Track.RgAlbumGain,
+			&i.Track.RgAlbumPeak,
+			&i.Track.Available,
+			&i.Track.UpdatedAt,
+			&i.Track.TitleKey,
+			&i.Track.ArtistKey,
+			&i.Track.AlbumKey,
+			&i.Track.FirstSeenAt,
+			&i.AlbumTitle,
+			&i.AlbumYear,
+			&i.AlbumCoverSha256,
+			&i.AlbumArtistID,
+			&i.AlbumArtistName,
+			&i.Favorite,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTracksByTitleDescAfter = `-- name: ListTracksByTitleDescAfter :many
+SELECT tracks.seq, tracks.id, tracks.album_id, tracks.fingerprint, tracks.fp_version, tracks.occurrence, tracks.disc, tracks."no", tracks.title, tracks.artist, tracks.genre, tracks.rel_path, tracks.file_size, tracks.file_mtime_ns, tracks.file_sha256, tracks.codec, tracks.sample_rate, tracks.channels, tracks.bit_depth, tracks.bitrate, tracks.duration_ms, tracks.lyrics_rel, tracks.lyrics_sha256, tracks.rg_track_gain, tracks.rg_track_peak, tracks.rg_album_gain, tracks.rg_album_peak, tracks.available, tracks.updated_at, tracks.title_key, tracks.artist_key, tracks.album_key, tracks.first_seen_at,
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = ?1 AND favorites.track_id = tracks.id) AS favorite
+FROM tracks
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.available = 1
+  AND (tracks.title_key, tracks.id) < (CAST(?2 AS BLOB), CAST(?3 AS TEXT))
+ORDER BY tracks.title_key DESC, tracks.id DESC
+LIMIT ?4
+`
+
+type ListTracksByTitleDescAfterParams struct {
+	UserID   string
+	TitleKey []byte
+	AfterID  string
+	PageSize int64
+}
+
+type ListTracksByTitleDescAfterRow struct {
+	Track            Track
+	AlbumTitle       string
+	AlbumYear        sql.NullInt64
+	AlbumCoverSha256 sql.NullString
+	AlbumArtistID    string
+	AlbumArtistName  string
+	Favorite         bool
+}
+
+// ListTracksByTitleDescAfter returns the page of ListTracksByTitleDesc
+// after the track with that key.
+func (q *Queries) ListTracksByTitleDescAfter(ctx context.Context, arg ListTracksByTitleDescAfterParams) ([]ListTracksByTitleDescAfterRow, error) {
+	rows, err := q.db.QueryContext(ctx, listTracksByTitleDescAfter,
+		arg.UserID,
+		arg.TitleKey,
+		arg.AfterID,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTracksByTitleDescAfterRow
+	for rows.Next() {
+		var i ListTracksByTitleDescAfterRow
+		if err := rows.Scan(
+			&i.Track.Seq,
+			&i.Track.ID,
+			&i.Track.AlbumID,
+			&i.Track.Fingerprint,
+			&i.Track.FpVersion,
+			&i.Track.Occurrence,
+			&i.Track.Disc,
+			&i.Track.No,
+			&i.Track.Title,
+			&i.Track.Artist,
+			&i.Track.Genre,
+			&i.Track.RelPath,
+			&i.Track.FileSize,
+			&i.Track.FileMtimeNs,
+			&i.Track.FileSha256,
+			&i.Track.Codec,
+			&i.Track.SampleRate,
+			&i.Track.Channels,
+			&i.Track.BitDepth,
+			&i.Track.Bitrate,
+			&i.Track.DurationMs,
+			&i.Track.LyricsRel,
+			&i.Track.LyricsSha256,
+			&i.Track.RgTrackGain,
+			&i.Track.RgTrackPeak,
+			&i.Track.RgAlbumGain,
+			&i.Track.RgAlbumPeak,
+			&i.Track.Available,
+			&i.Track.UpdatedAt,
+			&i.Track.TitleKey,
+			&i.Track.ArtistKey,
+			&i.Track.AlbumKey,
+			&i.Track.FirstSeenAt,
+			&i.AlbumTitle,
+			&i.AlbumYear,
+			&i.AlbumCoverSha256,
+			&i.AlbumArtistID,
+			&i.AlbumArtistName,
 			&i.Favorite,
 		); err != nil {
 			return nil, err

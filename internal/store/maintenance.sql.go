@@ -53,7 +53,7 @@ SELECT albums.id, albums.track_count, albums.duration_ms,
     count(tracks.seq) AS available_tracks,
     CAST(coalesce(sum(tracks.duration_ms), 0) AS INTEGER) AS available_duration_ms
 FROM albums
-LEFT JOIN tracks ON tracks.album_id = albums.id AND tracks.available = 1
+LEFT JOIN tracks INDEXED BY tracks_album_disc_no_idx ON tracks.album_id = albums.id AND tracks.available = 1
 GROUP BY albums.seq
 HAVING albums.track_count <> count(tracks.seq)
     OR albums.duration_ms <> coalesce(sum(tracks.duration_ms), 0)

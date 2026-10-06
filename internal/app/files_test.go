@@ -636,7 +636,7 @@ func (w *world) bigTrack(size int) (id string, data []byte) {
 		if err := q.UpsertTrack(ctx, store.UpsertTrackParams{ID: track, AlbumID: album, Fingerprint: "f", FpVersion: "v",
 			Occurrence: 1, Disc: 1, No: 1, Title: "Big", Artist: "Big", RelPath: "01 - Big.flac", FileSize: info.Size(),
 			FileMtimeNs: info.ModTime().UnixNano(), FileSha256: sha256Hex(data), Codec: "flac", SampleRate: 44100, Channels: 2,
-			UpdatedAt: 1}); err != nil {
+			UpdatedAt: 1, TitleKey: names.SortKey("Big"), ArtistKey: names.SortKey("Big"), FirstSeenAt: 1}); err != nil {
 			return err
 		}
 		return q.UpdateAlbumCounters(ctx, album)

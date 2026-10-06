@@ -83,6 +83,34 @@ func (s Server) GetAlbum(ctx context.Context, req GetAlbumRequestObject) (GetAlb
 	return GetAlbum200JSONResponse{Body: body}, nil
 }
 
+// ListTracks lists the available tracks in the order asked for.
+func (s Server) ListTracks(ctx context.Context, req ListTracksRequestObject) (ListTracksResponseObject, error) {
+	p, err := principal(ctx)
+	if err != nil {
+		return nil, err
+	}
+	q := catalog.TrackQuery{UserID: p.UserID, Sort: catalog.SortTitle, Order: catalog.OrderAsc,
+		Limit: limitOf(req.Params.Limit), After: req.Params.After}
+	if req.Params.Sort != nil {
+		q.Sort = string(*req.Params.Sort)
+	}
+	if req.Params.Order != nil {
+		q.Order = string(*req.Params.Order)
+	}
+	if req.Params.Artist != nil {
+		q.ArtistID = req.Params.Artist.String()
+	}
+	page, err := s.catalog.Load().ListTracks(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	body := TrackList{Tracks: make([]Track, 0, len(page.Tracks)), Next: nextOf(page.Next)}
+	for _, t := range page.Tracks {
+		body.Tracks = append(body.Tracks, trackOf(t))
+	}
+	return ListTracks200JSONResponse{Body: body}, nil
+}
+
 // GetTrack returns a track, available or not.
 func (s Server) GetTrack(ctx context.Context, req GetTrackRequestObject) (GetTrackResponseObject, error) {
 	p, err := principal(ctx)

@@ -56,6 +56,15 @@ curl -sS -H "$AUTH" "$BASE/search?q=kind+of+blue"
 
 The cover of an album is at the `cover.url` of the album (`/api/v1/albums/ALBUM_ID/cover?v=HASH`); add `size=256` or `size=640` for a thumbnail.
 
+## Tracks
+
+`GET /tracks` lists every available track, paginated like the albums. `sort` is `title` (the default), `artist` (the artist of each track, then album and number), `album` (album after album, in the order of the album page) or `added` (when Vibrance first saw the audio of the track: a track that MusicLib moves to another album keeps its moment). `artist=ARTIST_ID` keeps the tracks of the albums of one artist.
+
+```sh
+curl -sS -H "$AUTH" "$BASE/tracks?sort=added&order=desc&limit=50"
+curl -sS -H "$AUTH" "$BASE/tracks?sort=album&artist=ARTIST_ID"
+```
+
 ## Audio, with `Range`
 
 The audio of a track is its file, as MusicLib wrote it. Ranges and conditional requests work as for any file; the `ETag` is the SHA-256 of the file.

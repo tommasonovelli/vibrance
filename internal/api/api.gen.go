@@ -629,6 +629,48 @@ func (e SearchParamsTypes) Valid() bool {
 	}
 }
 
+// Defines values for ListTracksParamsSort.
+const (
+	ListTracksParamsSortAdded  ListTracksParamsSort = "added"
+	ListTracksParamsSortAlbum  ListTracksParamsSort = "album"
+	ListTracksParamsSortArtist ListTracksParamsSort = "artist"
+	ListTracksParamsSortTitle  ListTracksParamsSort = "title"
+)
+
+// Valid indicates whether the value is a known member of the ListTracksParamsSort enum.
+func (e ListTracksParamsSort) Valid() bool {
+	switch e {
+	case ListTracksParamsSortAdded:
+		return true
+	case ListTracksParamsSortAlbum:
+		return true
+	case ListTracksParamsSortArtist:
+		return true
+	case ListTracksParamsSortTitle:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListTracksParamsOrder.
+const (
+	ListTracksParamsOrderAsc  ListTracksParamsOrder = "asc"
+	ListTracksParamsOrderDesc ListTracksParamsOrder = "desc"
+)
+
+// Valid indicates whether the value is a known member of the ListTracksParamsOrder enum.
+func (e ListTracksParamsOrder) Valid() bool {
+	switch e {
+	case ListTracksParamsOrderAsc:
+		return true
+	case ListTracksParamsOrderDesc:
+		return true
+	default:
+		return false
+	}
+}
+
 // AddPlaylistItemsRequest The tracks to add to a playlist, and where.
 //
 // Example: {"position":null,"track_ids":["0199a5c0-7b1e-7c3a-9d2f-4b6a8c0e1f23"]}
@@ -1430,6 +1472,15 @@ type Track struct {
 	Title      string      `json:"title"`
 }
 
+// TrackList One page of tracks.
+type TrackList struct {
+	// Next The value to send as `after` to read the next page; `null` on the last page.
+	//
+	// Example: eyJzIjoidGl0bGUiLCJvIjoiYXNjIn0
+	Next   *Cursor `json:"next"`
+	Tracks []Track `json:"tracks"`
+}
+
 // UpdateUserRequest The role of an account and whether it is disabled: both are sent at every change.
 //
 // Example: {"disabled":true,"role":"user"}
@@ -1960,6 +2011,32 @@ type SearchParams struct {
 // SearchParamsTypes defines parameters for Search.
 type SearchParamsTypes string
 
+// ListTracksParams defines parameters for ListTracks.
+type ListTracksParams struct {
+	// Sort The order of the list.
+	Sort *ListTracksParamsSort `form:"sort,omitempty" json:"sort,omitempty"`
+
+	// Order The direction of the order.
+	Order *ListTracksParamsOrder `form:"order,omitempty" json:"order,omitempty"`
+
+	// Artist The id of an artist, to list only the tracks of its albums. An id that no artist has gives an empty list, not an error.
+	Artist *openapi_types.UUID `form:"artist,omitempty" json:"artist,omitempty"`
+
+	// Limit The most rows in a page.
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// After The `next` of the page before, to read the page after it. Opaque: do
+	// not build or change one. `400 invalid_cursor` when it is not a cursor
+	// of this list, or was read with another `sort` or `order`.
+	After *After `form:"after,omitempty" json:"after,omitempty"`
+}
+
+// ListTracksParamsSort defines parameters for ListTracks.
+type ListTracksParamsSort string
+
+// ListTracksParamsOrder defines parameters for ListTracks.
+type ListTracksParamsOrder string
+
 // GetTrackAudioParams defines parameters for GetTrackAudio.
 type GetTrackAudioParams struct {
 	// Profile Reserved for transcoding, which this version does not have. Leave
@@ -2111,6 +2188,9 @@ type ServerInterface interface {
 	// GetServerInfo Name and version of the server
 	// (GET /server)
 	GetServerInfo(w http.ResponseWriter, r *http.Request)
+	// ListTracks The available tracks, in a chosen order
+	// (GET /tracks)
+	ListTracks(w http.ResponseWriter, r *http.Request, params ListTracksParams)
 	// GetTrack One track
 	// (GET /tracks/{id})
 	GetTrack(w http.ResponseWriter, r *http.Request, id PathId)
@@ -3708,6 +3788,91 @@ func (siw *ServerInterfaceWrapper) GetServerInfo(w http.ResponseWriter, r *http.
 	handler.ServeHTTP(w, r)
 }
 
+// ListTracks operation middleware
+func (siw *ServerInterfaceWrapper) ListTracks(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListTracksParams
+
+	// ------------- Optional query parameter "sort" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "sort", r.URL.Query(), &params.Sort, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "order" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "order", r.URL.Query(), &params.Order, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "order"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "order", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "artist" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "artist", r.URL.Query(), &params.Artist, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "artist"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "artist", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "after" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "after", r.URL.Query(), &params.After, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "after"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "after", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListTracks(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetTrack operation middleware
 func (siw *ServerInterfaceWrapper) GetTrack(w http.ResponseWriter, r *http.Request) {
 
@@ -4001,6 +4166,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/artists/{id}", wrapper.GetArtist)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/albums", wrapper.ListAlbums)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/albums/{id}", wrapper.GetAlbum)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/tracks", wrapper.ListTracks)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/tracks/{id}", wrapper.GetTrack)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/search", wrapper.Search)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/tracks/{id}/audio", wrapper.GetTrackAudio)
@@ -8894,6 +9060,126 @@ func (response GetServerInfo503JSONResponse) VisitGetServerInfoResponse(w http.R
 	return err
 }
 
+type ListTracksRequestObject struct {
+	Params ListTracksParams
+}
+
+type ListTracksResponseObject interface {
+	VisitListTracksResponse(w http.ResponseWriter) error
+}
+
+type ListTracks200ResponseHeaders struct {
+	XRequestId openapi_types.UUID
+}
+
+type ListTracks200JSONResponse struct {
+	Body    TrackList
+	Headers ListTracks200ResponseHeaders
+}
+
+func (response ListTracks200JSONResponse) VisitListTracksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListTracks400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response ListTracks400JSONResponse) VisitListTracksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListTracks401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response ListTracks401JSONResponse) VisitListTracksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListTracks403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response ListTracks403JSONResponse) VisitListTracksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListTracks421JSONResponse struct{ MisdirectedRequestJSONResponse }
+
+func (response ListTracks421JSONResponse) VisitListTracksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(421)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListTracks500JSONResponse struct{ InternalJSONResponse }
+
+func (response ListTracks500JSONResponse) VisitListTracksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListTracks503JSONResponse struct{ UnavailableJSONResponse }
+
+func (response ListTracks503JSONResponse) VisitListTracksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetTrackRequestObject struct {
 	Id PathId `json:"id"`
 }
@@ -9613,6 +9899,9 @@ type StrictServerInterface interface {
 	// GetServerInfo Name and version of the server
 	// (GET /server)
 	GetServerInfo(ctx context.Context, request GetServerInfoRequestObject) (GetServerInfoResponseObject, error)
+	// ListTracks The available tracks, in a chosen order
+	// (GET /tracks)
+	ListTracks(ctx context.Context, request ListTracksRequestObject) (ListTracksResponseObject, error)
 	// GetTrack One track
 	// (GET /tracks/{id})
 	GetTrack(ctx context.Context, request GetTrackRequestObject) (GetTrackResponseObject, error)
@@ -10613,6 +10902,32 @@ func (sh *strictHandler) GetServerInfo(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetServerInfoResponseObject); ok {
 		if err := validResponse.VisitGetServerInfoResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListTracks operation middleware
+func (sh *strictHandler) ListTracks(w http.ResponseWriter, r *http.Request, params ListTracksParams) {
+	var request ListTracksRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListTracks(ctx, request.(ListTracksRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListTracks")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListTracksResponseObject); ok {
+		if err := validResponse.VisitListTracksResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

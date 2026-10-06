@@ -84,7 +84,7 @@ const listStaleFingerprints = `-- name: ListStaleFingerprints :many
 SELECT tracks.seq, tracks.id, tracks.album_id, albums.rel_path AS album_rel_path, tracks.rel_path,
     tracks.file_size, tracks.file_mtime_ns, tracks.file_sha256,
     tracks.fingerprint, tracks.fp_version, tracks.occurrence
-FROM tracks
+FROM tracks NOT INDEXED
 JOIN albums ON albums.id = tracks.album_id
 WHERE tracks.available = 1 AND tracks.fp_version <> ?1 AND tracks.seq > ?2
 ORDER BY tracks.seq
@@ -114,7 +114,9 @@ type ListStaleFingerprintsRow struct {
 // ListStaleFingerprints returns a page of the available tracks whose
 // fingerprint was computed by another ffmpeg than the current one, in the
 // order of seq and after a given seq, with the folder of their album
-// (DESIGN.md 6.6). Only such a fingerprint is computed again.
+// (DESIGN.md 6.6). Only such a fingerprint is computed again. The tracks are
+// read in the order of seq, their key, and by no index: one that begins with
+// available would give them in another order, to be sorted for every page.
 func (q *Queries) ListStaleFingerprints(ctx context.Context, arg ListStaleFingerprintsParams) ([]ListStaleFingerprintsRow, error) {
 	rows, err := q.db.QueryContext(ctx, listStaleFingerprints, arg.FpVersion, arg.AfterSeq, arg.PageSize)
 	if err != nil {
@@ -150,8 +152,43 @@ func (q *Queries) ListStaleFingerprints(ctx context.Context, arg ListStaleFinger
 	return items, nil
 }
 
+const listTrackNames = `-- name: ListTrackNames :many
+SELECT id, title, artist FROM tracks ORDER BY seq
+`
+
+type ListTrackNamesRow struct {
+	ID     string
+	Title  string
+	Artist string
+}
+
+// ListTrackNames returns the title and the artist of every track: what its
+// title_key and artist_key are computed from (DESIGN.md 5.5).
+func (q *Queries) ListTrackNames(ctx context.Context) ([]ListTrackNamesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listTrackNames)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTrackNamesRow
+	for rows.Next() {
+		var i ListTrackNamesRow
+		if err := rows.Scan(&i.ID, &i.Title, &i.Artist); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTracksByAlbum = `-- name: ListTracksByAlbum :many
-SELECT seq, id, album_id, fingerprint, fp_version, occurrence, disc, "no", title, artist, genre, rel_path, file_size, file_mtime_ns, file_sha256, codec, sample_rate, channels, bit_depth, bitrate, duration_ms, lyrics_rel, lyrics_sha256, rg_track_gain, rg_track_peak, rg_album_gain, rg_album_peak, available, updated_at FROM tracks WHERE album_id = ? ORDER BY seq
+SELECT seq, id, album_id, fingerprint, fp_version, occurrence, disc, "no", title, artist, genre, rel_path, file_size, file_mtime_ns, file_sha256, codec, sample_rate, channels, bit_depth, bitrate, duration_ms, lyrics_rel, lyrics_sha256, rg_track_gain, rg_track_peak, rg_album_gain, rg_album_peak, available, updated_at, title_key, artist_key, album_key, first_seen_at FROM tracks WHERE album_id = ? ORDER BY seq
 `
 
 // ListTracksByAlbum returns every row of an album, available or not, in the
@@ -196,6 +233,10 @@ func (q *Queries) ListTracksByAlbum(ctx context.Context, albumID string) ([]Trac
 			&i.RgAlbumPeak,
 			&i.Available,
 			&i.UpdatedAt,
+			&i.TitleKey,
+			&i.ArtistKey,
+			&i.AlbumKey,
+			&i.FirstSeenAt,
 		); err != nil {
 			return nil, err
 		}
@@ -208,6 +249,25 @@ func (q *Queries) ListTracksByAlbum(ctx context.Context, albumID string) ([]Trac
 		return nil, err
 	}
 	return items, nil
+}
+
+const setAlbumKeyOfTracks = `-- name: SetAlbumKeyOfTracks :exec
+UPDATE tracks SET album_key = ?1
+WHERE album_id = ?2 AND album_key <> ?1
+`
+
+type SetAlbumKeyOfTracksParams struct {
+	AlbumKey []byte
+	AlbumID  string
+}
+
+// SetAlbumKeyOfTracks gives every row of an album, available or not, the
+// sort key of the title of the album, of which tracks.album_key is a copy
+// (the list of the tracks by album). Only the rows whose copy differs are
+// written.
+func (q *Queries) SetAlbumKeyOfTracks(ctx context.Context, arg SetAlbumKeyOfTracksParams) error {
+	_, err := q.db.ExecContext(ctx, setAlbumKeyOfTracks, arg.AlbumKey, arg.AlbumID)
+	return err
 }
 
 const setTrackFingerprint = `-- name: SetTrackFingerprint :execrows
@@ -259,6 +319,23 @@ func (q *Queries) SetTrackFingerprint(ctx context.Context, arg SetTrackFingerpri
 	return result.RowsAffected()
 }
 
+const setTrackSortKeys = `-- name: SetTrackSortKeys :exec
+UPDATE tracks SET title_key = ?, artist_key = ? WHERE id = ?
+`
+
+type SetTrackSortKeysParams struct {
+	TitleKey  []byte
+	ArtistKey []byte
+	ID        string
+}
+
+// SetTrackSortKeys gives a track the sort keys of its title and of its
+// artist, computed again after the collation changed (DESIGN.md 5.5, T26).
+func (q *Queries) SetTrackSortKeys(ctx context.Context, arg SetTrackSortKeysParams) error {
+	_, err := q.db.ExecContext(ctx, setTrackSortKeys, arg.TitleKey, arg.ArtistKey, arg.ID)
+	return err
+}
+
 const setTrackUnavailable = `-- name: SetTrackUnavailable :exec
 UPDATE tracks SET available = 0, updated_at = ? WHERE id = ?
 `
@@ -277,7 +354,7 @@ func (q *Queries) SetTrackUnavailable(ctx context.Context, arg SetTrackUnavailab
 }
 
 const setTracksOfAlbumUnavailable = `-- name: SetTracksOfAlbumUnavailable :exec
-UPDATE tracks SET available = 0, updated_at = ? WHERE album_id = ? AND available = 1
+UPDATE tracks SET available = 0, updated_at = ? WHERE album_id = ? AND +available = 1
 `
 
 type SetTracksOfAlbumUnavailableParams struct {
@@ -286,7 +363,10 @@ type SetTracksOfAlbumUnavailableParams struct {
 }
 
 // SetTracksOfAlbumUnavailable records that the files of every track of an
-// album are gone with its folder (DESIGN.md 6.4). The rows stay (I3).
+// album are gone with its folder (DESIGN.md 6.4). The rows stay (I3). The
+// plus keeps SQLite from an index that begins with available, through which
+// it would read every available track (see ListAvailableTracksOfAlbum; an
+// UPDATE that names its index is not read by sqlc).
 func (q *Queries) SetTracksOfAlbumUnavailable(ctx context.Context, arg SetTracksOfAlbumUnavailableParams) error {
 	_, err := q.db.ExecContext(ctx, setTracksOfAlbumUnavailable, arg.UpdatedAt, arg.AlbumID)
 	return err
@@ -299,14 +379,14 @@ INSERT INTO tracks (
     codec, sample_rate, channels, bit_depth, bitrate, duration_ms,
     lyrics_rel, lyrics_sha256,
     rg_track_gain, rg_track_peak, rg_album_gain, rg_album_peak,
-    available, updated_at
+    available, updated_at, title_key, artist_key, first_seen_at
 ) VALUES (
     ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
     ?, ?, ?, ?,
     ?, ?, ?, ?, ?, ?,
     ?, ?,
     ?, ?, ?, ?,
-    1, ?
+    1, ?, ?, ?, ?
 )
 ON CONFLICT (id) DO UPDATE SET
     fingerprint = excluded.fingerprint,
@@ -316,6 +396,8 @@ ON CONFLICT (id) DO UPDATE SET
     "no" = excluded."no",
     title = excluded.title,
     artist = excluded.artist,
+    title_key = excluded.title_key,
+    artist_key = excluded.artist_key,
     genre = excluded.genre,
     rel_path = excluded.rel_path,
     file_size = excluded.file_size,
@@ -366,11 +448,18 @@ type UpsertTrackParams struct {
 	RgAlbumGain  sql.NullFloat64
 	RgAlbumPeak  sql.NullFloat64
 	UpdatedAt    int64
+	TitleKey     []byte
+	ArtistKey    []byte
+	FirstSeenAt  int64
 }
 
 // UpsertTrack creates a track, or gives a known one, found by its id, what
 // its file says now, and makes it available (DESIGN.md 5.4, 6.3 step 8).
-// The id and the album of a row never change (I3).
+// The id and the album of a row never change (I3). title_key and
+// artist_key are the sort keys of the title and of the artist (DESIGN.md
+// 5.5). first_seen_at is written only when the row is created: a known row
+// keeps it. album_key, the copy of the title_key of the album, is written
+// for every row of the album by SetAlbumKeyOfTracks.
 func (q *Queries) UpsertTrack(ctx context.Context, arg UpsertTrackParams) error {
 	_, err := q.db.ExecContext(ctx, upsertTrack,
 		arg.ID,
@@ -400,6 +489,9 @@ func (q *Queries) UpsertTrack(ctx context.Context, arg UpsertTrackParams) error 
 		arg.RgAlbumGain,
 		arg.RgAlbumPeak,
 		arg.UpdatedAt,
+		arg.TitleKey,
+		arg.ArtistKey,
+		arg.FirstSeenAt,
 	)
 	return err
 }
