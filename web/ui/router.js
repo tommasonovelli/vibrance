@@ -42,7 +42,7 @@ async function show(href, restore) {
     // The colour field of a head (app.css §11) belongs to the page that set it.
     main.removeAttribute('data-glow');
     main.style.removeProperty('--cover');
-    main.style.removeProperty('--cover-b');
+    for (const name of ['--cover-b', '--cover-c', '--cover-d']) main.style.removeProperty(name);
     try {
       const view = await (found ? found.route.load() : import('./views/not-found.js'));
       await view.render(main, params, signal);
@@ -65,7 +65,8 @@ async function show(href, restore) {
   main.removeAttribute('aria-busy');
   scrollTo(0, restore ? restore.y : 0);
   if (!first) {
-    main.focus({ preventScroll: true });
+    // A view that put the focus in one of its fields (Search, an empty playlist) keeps it.
+    if (!main.contains(document.activeElement)) main.focus({ preventScroll: true });
     announce(document.title);
   }
   first = false;

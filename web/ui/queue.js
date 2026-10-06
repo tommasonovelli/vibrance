@@ -5,9 +5,11 @@
 // or moved with Alt and the arrows, removed with its ×; every removal says
 // Undo. At the end of the context the music stops, and the list says so.
 import * as player from './player.js';
-import { api, coverUrl } from './api.js';
+import { coverUrl } from './api.js';
 import { $, clone, emptyState, formatLength, formatTime, setCover, show, toast } from './ui.js';
-import { newPlaylist, reload as reloadSidebar } from './sidebar.js';
+import { newPlaylist } from './sidebar.js';
+import { navigate } from './router.js';
+import { appendTracks } from './actions.js';
 
 const root = document.documentElement;
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
@@ -264,11 +266,9 @@ function saveQueue() {
   const context = now.context;
   newPlaylist(async playlist => {
     try {
-      for (let i = 0; i < tracks.length; i += 1000) {
-        await api.post(`/playlists/${playlist.id}/items`, { track_ids: tracks.slice(i, i + 1000).map(track => track.id), position: null });
-      }
-      reloadSidebar();
-      toast({ title: `Saved as ${playlist.name}`, sub: plural(tracks.length, 'song'), badge: 'add' });
+      await appendTracks(playlist, tracks);
+      // The toast's button takes the person to the playlist they just made.
+      toast({ title: `Saved as ${playlist.name}`, sub: plural(tracks.length, 'song'), badge: 'add', undo: () => navigate(`/playlists/${playlist.id}`), undoLabel: 'Open' });
     } catch (error) {
       toast({ title: `Couldn’t add the songs to ${playlist.name}`, sub: error.message, badge: 'alert', error: true });
     }

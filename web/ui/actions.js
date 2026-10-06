@@ -3,9 +3,9 @@
 // change shows at once and ends in a toast with Undo, not in a question
 // (proposal 7.2); a failure puts things back and says so in one sentence.
 import { api, coverUrl, isMissing, isStale, optional, walk } from './api.js';
-import { $, clone, openSheet, setCover, setIcon, show, staleToast, toast, whenClosed, formatTime } from './ui.js';
+import { $, clone, confirmSheet, openSheet, setCover, show, staleToast, toast, whenClosed, formatTime } from './ui.js';
 import * as player from './player.js';
-import { getPlaylists, newPlaylist, reload as reloadSidebar } from './sidebar.js';
+import { getPlaylists, newPlaylist } from './sidebar.js';
 
 const emit = (name, detail) => document.dispatchEvent(new CustomEvent(name, { detail }));
 const number = new Intl.NumberFormat('en');
@@ -106,36 +106,76 @@ document.addEventListener('track:favorite', ({ detail }) => {
 
 // ---- Playlists ---------------------------------------------------------------
 
-// Adds the songs at the end of each playlist. Undo takes each new item out
+// Whatever changes a playlist says so on `document`, with the playlist as the
+// server answered it: the sidebar, the open playlist and the grid follow
+// (`playlist:changed` { playlist, added?: items, removed?: item ids },
+// `playlist:deleted` { id }). Nobody reads a playlist again to learn this.
+export const playlistContext = playlist => ({ type: 'playlist', id: playlist.id, name: playlist.name });
+
+// Every song of a playlist, in order, the ones that are gone included.
+export async function playlistTracks(id) {
+  const all = [];
+  for await (const page of walk(`/playlists/${id}/items`)) all.push(...page.items.map(item => item.track));
+  return all;
+}
+
+// A playlist that changed elsewhere (412): read it again, or take it away if
+// it is gone.
+export async function resync(id) {
+  try {
+    emit('playlist:changed', { playlist: await api.get(`/playlists/${id}`) });
+  } catch (error) {
+    if (error.status === 404) emit('playlist:deleted', { id });
+  }
+}
+
+// Puts songs at the end of a playlist, at most 1,000 to a request. Each
+// block is announced as soon as the server has it.
+export async function appendTracks(playlist, tracks) {
+  const added = [];
+  let last = null;
+  for (let i = 0; i < tracks.length; i += 1000) {
+    const block = tracks.slice(i, i + 1000);
+    last = await api.post(`/playlists/${playlist.id}/items`, { track_ids: block.map(track => track.id), position: null });
+    const items = block.map((track, n) => ({ id: last.added[n].item_id, position: last.added[n].position, added_at: last.playlist.updated_at, track }));
+    added.push(...items);
+    emit('playlist:changed', { playlist: last.playlist, added: items });
+  }
+  return { playlist: last.playlist, added };
+}
+
+// Adds the songs at the end of each playlist; answers what was done, or null
+// when something failed (a toast says so). Undo takes each new item out
 // again by its id, on the revision the answer gave (an item put back would
 // be a new item with a new date).
 export async function addToPlaylists(tracks, playlists) {
   const results = [];
   try {
-    for (const playlist of playlists) {
-      results.push([playlist, await api.post(`/playlists/${playlist.id}/items`, { track_ids: tracks.map(track => track.id), position: null })]);
-    }
+    for (const playlist of playlists) results.push([playlist, await appendTracks(playlist, tracks)]);
   } catch (error) {
-    const name = playlists[results.length].name;
-    if (results.length) reloadSidebar();
-    return failed(`Couldn’t add to ${name}`, error);
+    failed(`Couldn’t add to ${playlists[results.length].name}`, error);
+    return null;
   }
-  reloadSidebar();
   toast({
     title: playlists.length === 1 ? `Added to ${playlists[0].name}` : `Added to ${plural(playlists.length, 'playlist')}`,
     ...about(tracks), badge: 'add',
     undo: async () => {
-      try {
-        for (const [playlist, { playlist: now, added }] of results) {
-          let etag = now.etag;
-          for (const { item_id } of added) etag = (await api.del(`/playlists/${playlist.id}/items/${item_id}`, { ifMatch: etag })).etag;
+      for (const [playlist, { playlist: now, added }] of results) {
+        let etag = now.etag, latest = now;
+        try {
+          for (const { id } of added) {
+            latest = await api.del(`/playlists/${playlist.id}/items/${id}`, { ifMatch: etag });
+            etag = latest.etag;
+          }
+        } catch (error) {
+          if (isStale(error)) { staleToast(); resync(playlist.id); } else failed('Couldn’t undo', error);
+          continue;
         }
-      } catch (error) {
-        if (isStale(error)) staleToast(); else failed('Couldn’t undo', error);
+        emit('playlist:changed', { playlist: latest, removed: added.map(item => item.id) });
       }
-      reloadSidebar();
     },
   });
+  return results;
 }
 
 // What a menu item does with songs that may have to be read first (an
@@ -145,15 +185,16 @@ const withTracks = (read, fn) => async () => {
 };
 
 // "Add to playlist": a submenu, one song in one click. `tracks` is a list or
-// a function that reads it.
-export function playlistMenu(tracks) {
+// a function that reads it. On a playlist's own page the playlist is left
+// out, and the item says "another".
+export function playlistMenu(tracks, { except = null, label = 'Add to playlist' } = {}) {
   return {
-    label: 'Add to playlist', icon: 'plus',
+    label, icon: 'plus',
     items: [
       { label: 'New playlist…', icon: 'plus', run: withTracks(tracks, list => newPlaylist(playlist => addToPlaylists(list, [playlist]))) },
       ...(getPlaylists().length ? ['-'] : []),
-      ...getPlaylists().map(playlist => ({
-        label: playlist.name, icon: 'playlists', cover: coverUrl(playlist.covers?.[0], 256),
+      ...getPlaylists().filter(playlist => playlist.id !== except).map(playlist => ({
+        label: playlist.name, icon: 'playlists', cover: coverUrl(playlist.covers?.[0], 256), key: playlist.id,
         run: withTracks(tracks, list => addToPlaylists(list, [playlist])),
       })),
     ],
@@ -165,8 +206,53 @@ export async function markHeld(menu, track) {
   const held = await optional(api.get(`/tracks/${track.id}/playlists`)).catch(() => null);
   if (!held) return;
   const ids = new Set(held.playlists.map(playlist => playlist.id));
-  const items = menu.querySelectorAll('.sub .menu .mi'); // the first is "New playlist…"
-  getPlaylists().forEach((playlist, i) => items[i + 1] && show($('.end', items[i + 1]), ids.has(playlist.id)));
+  for (const item of menu.querySelectorAll('.sub .menu .mi[data-key]')) show($('.end', item), ids.has(item.dataset.key));
+}
+
+// The Edit details sheet: name and description. The change shows at once
+// (it is announced before the server answers) and goes back if it fails.
+export function editPlaylist(playlist) {
+  const dialog = openSheet('t-sheet-edit-playlist', d => {
+    $('input[name="name"]', d).value = playlist.name;
+    $('textarea', d).value = playlist.description;
+  });
+  const form = $('form', dialog);
+  form.elements.name.select();
+  form.addEventListener('submit', async event => {
+    if (event.submitter?.value !== 'save') return;
+    event.preventDefault();
+    const name = form.elements.name.value.trim(), description = form.elements.description.value.trim();
+    if (!name) { form.elements.name.focus(); return; }
+    dialog.close('save');
+    if (name === playlist.name && description === playlist.description) return;
+    emit('playlist:changed', { playlist: { ...playlist, name, description } });
+    try {
+      emit('playlist:changed', { playlist: await api.put(`/playlists/${playlist.id}`, { name, description }, { ifMatch: playlist.etag }) });
+    } catch (error) {
+      if (isStale(error)) { staleToast(); resync(playlist.id); return; }
+      emit('playlist:changed', { playlist });
+      failed('Couldn’t save the details', error);
+    }
+  });
+}
+
+// Delete playlist: the one thing here that asks first, as it cannot be undone.
+export async function deletePlaylist(playlist) {
+  const ok = await confirmSheet({
+    title: `Delete “${playlist.name}”?`,
+    text: `The playlist is deleted. Its ${plural(playlist.item_count, 'song')} stay in your library. This can’t be undone.`,
+    action: 'Delete playlist', danger: true,
+  });
+  if (!ok) return false;
+  try {
+    await api.del(`/playlists/${playlist.id}`, { ifMatch: playlist.etag });
+  } catch (error) {
+    if (isStale(error)) { staleToast(); resync(playlist.id); } else failed('Couldn’t delete the playlist', error);
+    return false;
+  }
+  emit('playlist:deleted', { id: playlist.id });
+  toast({ title: `Deleted “${playlist.name}”`, badge: 'trash' });
+  return true;
 }
 
 // Several songs, several playlists: the sheet with the check boxes.
@@ -273,7 +359,7 @@ export const downloadCover = album => save(`${album.cover.url}${album.cover.url.
 
 // ---- Menus -------------------------------------------------------------------
 
-const artistLabel = track => (track.artist === track.album.artist.name ? 'Go to artist' : `Go to ${track.album.artist.name}`);
+export const artistLabel = track => (track.artist === track.album.artist.name ? 'Go to artist' : `Go to ${track.album.artist.name}`);
 
 // The ⋯ menu of one song or of a selection. `skip` leaves out the link to
 // the page the songs are on already ('album' or 'artist'). Several songs get
@@ -311,7 +397,7 @@ export function lazy(read, what) {
 // The items of a whole album or artist: `read` gets the songs, `context`
 // is where the music comes from. A page that has buttons for some of them
 // leaves those out.
-export function collectionMenu(read, context, { play = true, queue = true, favorites = false } = {}) {
+export function collectionMenu(read, context, { play = true, queue = true, favorites = false, playlist = true } = {}) {
   const run = fn => withTracks(read, fn);
   return [
     ...(play ? [
@@ -320,7 +406,7 @@ export function collectionMenu(read, context, { play = true, queue = true, favor
     ] : []),
     { label: 'Play next', icon: 'play-next', run: run(playNext) },
     ...(queue ? [{ label: 'Add to queue', icon: 'queue', run: run(addToQueue) }] : []),
-    playlistMenu(read),
+    ...(playlist ? [playlistMenu(read)] : []),
     ...(favorites ? [{ label: 'Add all songs to favorites', icon: 'heart', run: run(tracks => setFavorites(tracks, true)) }] : []),
   ];
 }

@@ -43,28 +43,61 @@ export function setPlayingFrom(id) {
 
 // ---- Content ---------------------------------------------------------------
 
+// One row of the list: name, count, the first cover (or the quiet icon).
+function fillPlaylist(li, playlist) {
+  li.dataset.playlist = playlist.id;
+  $('a', li).href = `/playlists/${playlist.id}`;
+  $('.nav-label', li).textContent = playlist.name;
+  $('.nav-count', li).textContent = playlist.item_count;
+  const art = coverUrl(playlist.covers?.[0], 256);
+  const img = $('.side-cover', li);
+  if (art && img.getAttribute('src') !== art) img.src = art;
+  show(img, !!art);
+  show($('.fav-ic', li), !art);
+}
+
 function renderPlaylists() {
   const list = $('#side-playlists');
   for (const li of list.querySelectorAll('[data-playlist]')) li.remove();
+  const rows = document.createDocumentFragment();
   for (const playlist of playlists) {
     const li = clone('t-side-playlist');
-    li.dataset.playlist = playlist.id;
-    $('a', li).href = `/playlists/${playlist.id}`;
-    $('.nav-label', li).textContent = playlist.name;
-    $('.nav-count', li).textContent = playlist.item_count;
-    const art = coverUrl(playlist.covers?.[0], 256);
-    if (art) {
-      const img = $('.side-cover', li);
-      img.src = art;
-      img.hidden = false;
-    } else {
-      $('.fav-ic', li).hidden = false;
-    }
-    list.append(li);
+    fillPlaylist(li, playlist);
+    rows.append(li);
   }
+  list.append(rows);
   setPlayingFrom(playingFrom);
   setCurrent(location.pathname);
 }
+
+const changed = () => document.dispatchEvent(new CustomEvent('playlists:changed'));
+
+// A playlist was made or changed (a rename, songs added or taken out): its
+// row follows, and nothing else is read again. Every answer that changes a
+// playlist carries it whole, so this is all the sidebar ever needs.
+function update(playlist) {
+  const at = playlists.findIndex(p => p.id === playlist.id);
+  if (at >= 0) playlists[at] = playlist; else playlists.push(playlist);
+  let li = document.querySelector(`#side-playlists [data-playlist="${CSS.escape(playlist.id)}"]`);
+  if (!li) {
+    li = clone('t-side-playlist');
+    $('#side-playlists').append(li);
+  }
+  fillPlaylist(li, playlist);
+  setPlayingFrom(playingFrom);
+  setCurrent(location.pathname);
+  changed();
+}
+
+function drop(id) {
+  playlists = playlists.filter(p => p.id !== id);
+  document.querySelector(`#side-playlists [data-playlist="${CSS.escape(id)}"]`)?.remove();
+  changed();
+}
+
+// Playlists change from many places; they say so, and the sidebar listens.
+document.addEventListener('playlist:changed', ({ detail }) => update(detail.playlist));
+document.addEventListener('playlist:deleted', ({ detail }) => drop(detail.id));
 
 // Reads the playlists, the number of favorites and, for an admin, the number
 // of problems of the library again. A part the server does not have yet, or
@@ -78,7 +111,7 @@ export async function reload(isAdmin = !$('#nav-admin').hidden) {
   if (lists) {
     playlists = lists.playlists;
     renderPlaylists();
-    document.dispatchEvent(new CustomEvent('playlists:changed'));
+    changed();
   }
   const count = $('#favorites-count');
   count.hidden = !favorites;
@@ -110,7 +143,7 @@ export function newPlaylist(onCreated = playlist => navigate(`/playlists/${playl
     try {
       const playlist = await api.post('/playlists', { name, description: form.elements.description.value.trim() });
       dialog.close('create');
-      await reload();
+      document.dispatchEvent(new CustomEvent('playlist:changed', { detail: { playlist } }));
       onCreated(playlist);
     } catch (error) {
       toast({ title: 'Couldn’t create the playlist', sub: error.message, badge: 'alert', error: true });

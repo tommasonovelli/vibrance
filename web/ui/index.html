@@ -170,24 +170,27 @@
 <template id="t-searchlink"><a class="searchlink" href="/search"><svg class="i" aria-hidden="true"><use href="#i-search"/></svg><span>Search songs, albums, artists</span><kbd>Ctrl K</kbd></a></template>
 
 <template id="t-track"><div class="tr" role="row" tabindex="-1" draggable="true">
+<span class="grip" aria-hidden="true" title="Drag to reorder"><svg class="i f sm"><use href="#i-grip"/></svg></span>
 <span class="no" role="cell"><span class="n"></span><span class="eq" role="img" aria-label="Playing" hidden><i></i><i></i><i></i></span><svg class="i f sm pl" aria-hidden="true"><use href="#i-play"/></svg></span>
 <span class="t" role="cell"><img class="th" alt="" width="40" height="40" loading="lazy" decoding="async" draggable="false"><span class="tt"><span class="nm"></span><a class="ar"></a></span></span>
 <a class="c c-artist" role="cell"></a>
 <a class="c c-album" role="cell"></a>
 <span class="c c-genre" role="cell"></span>
+<span class="c c-added" role="cell"></span>
 <span class="lyr" role="cell"></span>
 <button class="iconbtn heart" type="button" aria-label="Add to favorites"><svg class="i" aria-hidden="true"><use href="#i-heart"/></svg></button>
 <span class="tm" role="cell"></span>
 <button class="dots" type="button" aria-haspopup="menu" aria-label="More actions"></button>
 </div></template>
 
-<template id="t-track-head"><div class="tr hd" role="row"><span class="no">#</span><span>Title</span><span class="c-album">Album</span><span class="c-genre">Genre</span><span class="heart-col"></span><span class="tm"><svg class="i sm" role="img" aria-label="Duration"><use href="#i-clock"/></svg></span><span></span></div></template>
+<template id="t-track-head"><div class="tr hd" role="row"><span class="grip"></span><span class="no">#</span><span>Title</span><span class="c-album">Album</span><span class="c-genre">Genre</span><span class="c-added">Added</span><span class="heart-col"></span><span class="tm"><svg class="i sm" role="img" aria-label="Duration"><use href="#i-clock"/></svg></span><span></span></div></template>
 
 <template id="t-selbar"><div class="selbar" role="toolbar" aria-label="Selected songs">
 <span class="sel-count"></span>
 <button class="btn" type="button" data-act="next"><svg class="i" aria-hidden="true"><use href="#i-play-next"/></svg>Play next</button>
 <button class="btn" type="button" data-act="queue"><svg class="i" aria-hidden="true"><use href="#i-queue"/></svg>Add to queue</button>
 <button class="btn" type="button" data-act="playlist"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>Add to playlist…</button>
+<button class="btn" type="button" data-act="remove" hidden><svg class="i" aria-hidden="true"><use href="#i-remove"/></svg>Remove from playlist</button>
 <button class="btn sel-fav" type="button" data-act="fav"><svg class="i" aria-hidden="true"><use href="#i-heart"/></svg><span>Add to favorites</span></button>
 <button class="iconbtn" type="button" data-act="clear" aria-label="Clear selection"><svg class="i sm" aria-hidden="true"><use href="#i-close"/></svg></button>
 </div></template>
@@ -406,6 +409,64 @@
 </div>
 <p class="note">On a Mac, Cmd takes the place of Ctrl. Single-key shortcuts are off until you turn them on, here or in Account.</p>
 </div></dialog></template>
+
+<!-- Round 4: playlists. -->
+
+<template id="t-new-playlist"><button class="btn btn-primary" type="button"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>New playlist</button></template>
+
+<template id="t-pl-art"><div><div class="mosaic"><img alt="" width="120" height="120" loading="lazy" decoding="async"><img alt="" width="120" height="120" loading="lazy" decoding="async"><img alt="" width="120" height="120" loading="lazy" decoding="async"><img alt="" width="120" height="120" loading="lazy" decoding="async"></div><img class="pl-cover" alt="" width="240" height="240" loading="lazy" decoding="async"><div class="empty-art"><svg class="i" aria-hidden="true"><use href="#i-playlists"/></svg></div></div></template>
+
+<template id="t-playlists"><div>
+<div class="toolbar toolbar-grid">
+<div class="seg" role="radiogroup" aria-label="Sort by"><button type="button" role="radio" data-sort="updated">Recently updated</button><button type="button" role="radio" data-sort="name">Name</button></div>
+<span class="spacer"></span>
+<span class="note count" hidden></span>
+</div>
+<div class="list"></div>
+</div></template>
+
+<template id="t-fav-tile"><article class="card" role="listitem"><a class="glowtile" href="/favorites" aria-label="Favorites"><svg class="i" aria-hidden="true"><use href="#i-heart"/></svg></a><a class="ct" href="/favorites">Favorites</a><div class="cm"></div></article></template>
+
+<template id="t-playlist-card"><article class="card" role="listitem"><div class="art"><a href="" tabindex="-1" aria-hidden="true"></a><button class="cplay" type="button" aria-label="Play"><svg class="i f" aria-hidden="true"><use href="#i-play"/></svg></button><button class="dots cdots" type="button" aria-haspopup="menu" aria-label="More actions"></button></div><a class="ct" href=""></a><div class="cm"></div></article></template>
+
+<template id="t-playlist"><div>
+<a class="backlink" href="/playlists"><svg class="i sm" aria-hidden="true"><use href="#i-chevron-left"/></svg>Playlists</a>
+<div class="pl-head">
+<div class="cover-box"></div>
+<div class="fields">
+<div class="kicker"><svg class="i sm" aria-hidden="true"><use href="#i-lock"/></svg>Private playlist</div>
+<h1 class="pl-title"></h1>
+<p class="desc" hidden></p>
+<p class="meta"></p>
+<div class="hero-actions">
+<button class="play-xl" type="button"><svg class="i f" aria-hidden="true"><use href="#i-play"/></svg></button>
+<button class="btn shuffle" type="button"><svg class="i" aria-hidden="true"><use href="#i-shuffle"/></svg>Shuffle</button>
+<button class="btn edit" type="button"><svg class="i" aria-hidden="true"><use href="#i-edit"/></svg>Edit details</button>
+</div>
+</div>
+<button class="dots head-dots" type="button" aria-haspopup="menu" aria-label="More playlist actions"></button>
+</div>
+<section aria-label="Songs">
+<div class="songs"></div>
+<div class="pl-empty" hidden></div>
+<p class="length"></p>
+</section>
+<section class="find" aria-labelledby="find-title">
+<h2 id="find-title">Find songs for this playlist</h2>
+<p class="note">Search your library and add songs without leaving the page.</p>
+<label class="search"><svg class="i" aria-hidden="true"><use href="#i-search"/></svg><input type="search" placeholder="Search songs" aria-label="Search songs to add" autocomplete="off" maxlength="100"></label>
+<div class="res-list" role="list" aria-label="Songs found"></div>
+</section>
+</div></template>
+
+<template id="t-find-row"><div class="res" role="listitem"><span class="t"><img class="th" alt="" width="40" height="40" loading="lazy" decoding="async"><span class="tt"><span class="nm"></span><span class="ar"></span></span></span><span class="c note"></span><button class="btn add" type="button">Add</button><span class="note added" hidden><svg class="i sm" aria-hidden="true"><use href="#i-check"/></svg>Added</span></div></template>
+
+<template id="t-sheet-edit-playlist"><dialog class="sheet"><form class="sheet-form" method="dialog">
+<h2 class="sheet-title">Edit details</h2>
+<div class="field"><label for="ep-name">Name</label><input id="ep-name" name="name" type="text" maxlength="200" required autocomplete="off"></div>
+<div class="field"><label for="ep-desc">Description <span class="note">optional</span></label><textarea id="ep-desc" name="description" maxlength="2000" placeholder="What is it for?"></textarea></div>
+<div class="actions"><button class="btn" type="button" value="cancel" data-close>Cancel</button><button class="btn btn-primary" type="submit" value="save">Save</button></div>
+</form></dialog></template>
 
 </body>
 </html>

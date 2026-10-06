@@ -172,7 +172,7 @@ main:focus { outline: none; }
    blends onto the element's own background, so the sidebar and the sign-in
    page each paint --paper and are a stacking context: over a transparent
    group the grain would be grey speckle. */
-.sidebar::before, .sidebar::after, .login::before, .login::after {
+.sidebar::before, .sidebar::after, .login::before, .login::after, .glowtile::before, .glowtile::after {
   content: ""; position: absolute; inset: auto 0 0; z-index: -1; height: 68%;
   pointer-events: none;
   mask: linear-gradient(to top, #000, rgb(0 0 0 / .8) 25%, rgb(0 0 0 / .5) 50%, rgb(0 0 0 / .22) 72%, rgb(0 0 0 / .06) 88%, transparent);
@@ -183,7 +183,7 @@ main:focus { outline: none; }
     radial-gradient(12rem 35% at 14rem 106% in oklab, var(--glow-2), transparent),
     radial-gradient(24rem 95% at 6rem 100% in oklab, var(--glow-3), transparent);
 }
-.sidebar::after, .login::after { background: url(grain.svg); mix-blend-mode: soft-light; opacity: .3; }
+.sidebar::after, .login::after, .glowtile::after { background: url(grain.svg); mix-blend-mode: soft-light; opacity: .3; }
 
 /* The symbol is 28px, its ring about as tall as the word's capitals; the
    word, outlined Bricolage Grotesque, is in ink. The lockup is a link and is
@@ -519,7 +519,17 @@ a.ar:where([href]) { color: var(--graphite); }
   content-visibility: auto; contain-intrinsic-size: auto 56px;
 }
 .tr > .no { grid-area: no; } .tr > .t { grid-area: t; } .tr > .c-artist { grid-area: artist; } .tr > .c-album { grid-area: album; }
-.tr > .c-genre { grid-area: genre; } .tr > .lyr { grid-area: lyr; } .tr > .heart, .tr > .heart-col { grid-area: heart; } .tr > .tm { grid-area: tm; } .tr > .dots { grid-area: dots; }
+.tr > .c-genre { grid-area: genre; } .tr > .grip { grid-area: grip; } .tr > .c-added { grid-area: added; } .tr > .lyr { grid-area: lyr; } .tr > .heart, .tr > .heart-col { grid-area: heart; } .tr > .tm { grid-area: tm; } .tr > .dots { grid-area: dots; }
+.tl.is-playlist { --cols: 1.25rem 2rem minmax(0, 4fr) minmax(0, 3fr) minmax(0, 1.4fr) 2rem 3.25rem 2rem; --areas: "grip no t album added heart tm dots"; position: relative; margin-top: 0; }
+.is-playlist .tr { padding-left: var(--s1); }
+.tl:not(.is-playlist) :is(.grip, .c-added), .tl.is-playlist .c-genre { display: none; }
+.tr .grip { display: grid; place-items: center; color: var(--graphite); cursor: grab; touch-action: none; visibility: hidden; }
+.tr:not(.hd):is(:hover, :focus-within) .grip { visibility: visible; }
+.tr.is-drag { opacity: .45; }
+/* A song that is not in the library any more keeps its place, in grey. */
+.is-playlist .tr.is-off { opacity: 1; }
+.is-playlist .tr.is-off .th { opacity: .35; filter: grayscale(1); }
+.is-playlist .tr.is-off :is(.nm, .c) { color: var(--graphite); }
 .is-album .tr { min-height: 44px; padding: 0 var(--s1); contain-intrinsic-size: auto 44px; }
 .is-album .th, .is-album .tt .ar { display: none; }
 .is-album .no { justify-items: end; }
@@ -545,7 +555,7 @@ a.ar:where([href]) { color: var(--graphite); }
 .tr .tm { text-align: right; color: var(--graphite); font-variant-numeric: tabular-nums; }
 .tr .heart:not(.is-fav) { visibility: hidden; }
 .tr:hover .heart, .tr:focus-within .heart, .tr.hov .heart { visibility: visible; }
-@media (hover: none) { .tr .heart { visibility: visible; } }
+@media (hover: none) { .tr .heart, .tr .grip { visibility: visible; } }
 .eq { display: inline-flex; align-items: flex-end; gap: 2px; height: 14px; color: var(--accent); }
 .eq i { width: 3px; background: currentColor; border-radius: 1px; }
 .eq i:nth-child(1) { height: 60%; } .eq i:nth-child(2) { height: 100%; } .eq i:nth-child(3) { height: 40%; }
@@ -640,10 +650,15 @@ body:has(.selbar) .toasts { bottom: calc(var(--player) + 4.75rem); }
 }
 .page[data-glow]::before { background: var(--cover) center 30% / cover; filter: blur(80px) saturate(1.6); opacity: .55; }
 .page[data-glow="artist"]::before { background: var(--cover) left center / 55% 100% no-repeat, var(--cover-b, var(--cover)) right center / 55% 100% no-repeat; }
+.page[data-glow="playlist"]::before {
+  background:
+    var(--cover) 0 0 / 50% 50% no-repeat, var(--cover-b) 100% 0 / 50% 50% no-repeat,
+    var(--cover-c) 0 100% / 50% 50% no-repeat, var(--cover-d) 100% 100% / 50% 50% no-repeat;
+}
 .page[data-glow]::after { background: url(grain.svg); mix-blend-mode: soft-light; opacity: .2; }
 @keyframes field-in { from { opacity: 0; } }
 .page[data-glow] :is(.backlink, .head-dots, .hero .dots, .artist, .fmt) { color: var(--ink); }
-.page[data-glow] :is(.backlink, .album-head, .hero) :focus-visible { outline-color: var(--ink); }
+.page[data-glow] :is(.backlink, .album-head, .pl-head, .hero) :focus-visible { outline-color: var(--ink); }
 
 .album-head { display: grid; grid-template-columns: 240px minmax(0, 1fr) auto; gap: var(--s6); align-items: start; padding: var(--s5) 0 var(--s6); }
 .cover { display: block; width: 240px; height: 240px; border-radius: var(--r-cover); object-fit: cover; box-shadow: var(--shadow-cover); background: var(--fill-strong); }
@@ -784,10 +799,13 @@ dl.facts dd { margin: 0; font-variant-numeric: tabular-nums; }
   .tl, .tl.is-artist, .tl.is-search { --cols: 2rem minmax(0, 1fr) 3rem 2rem; --areas: "no t tm dots"; }
   .tl.is-search { --cols: minmax(0, 1fr) 3rem 2rem; --areas: "t tm dots"; }
   .tl.is-album { --cols: 1.5rem minmax(0, 1fr) 3.25rem 2rem; --areas: "no t tm dots"; }
-  .tl .c, .tl .lyr, .tl .heart, .tr.hd { display: none; }
+  .tl.is-playlist { --cols: 2rem minmax(0, 1fr) 3rem 2rem; --areas: "no t tm dots"; }
+  .tl .c, .tl .lyr, .tl .heart, .tl .grip, .tr.hd { display: none; }
   .tl.is-album .tr { gap: var(--s2); }
   .grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: var(--s5) var(--s4); }
-  .album-head { grid-template-columns: minmax(0, 1fr) auto; gap: var(--s4); }
+  .album-head, .pl-head { grid-template-columns: minmax(0, 1fr) auto; gap: var(--s4); }
+  .pl-title { font: var(--type-large); }
+  .res .c { display: none; }
   .cover-box { grid-column: 1 / -1; }
   .cover { width: min(100%, 240px); height: auto; aspect-ratio: 1; }
   .avatar { width: 120px; height: 120px; }
@@ -818,7 +836,7 @@ dl.facts dd { margin: 0; font-variant-numeric: tabular-nums; }
    controls and panels become superellipses with the radii scaled by 1.6 so
    the corner reads the same size. Pills and circles stay round. */
 @supports (corner-shape: squircle) {
-  .np-cover, .np-cover img, .qcov, .now-cover, .side-cover, .fav-ic, .tcov-img, .ticon, .mi-cover, .blk, .th, .art img, .cover, .top-art img, .pick img, .pick .new, .sd-cover { corner-shape: squircle; border-radius: calc(var(--r-cover) * 1.6); }
+  .np-cover, .np-cover img, .qcov, .now-cover, .side-cover, .fav-ic, .tcov-img, .ticon, .mi-cover, .blk, .th, .art img, .cover, .pl-cover, .mosaic, .empty-art, .glowtile, .top-art img, .pick img, .pick .new, .sd-cover { corner-shape: squircle; border-radius: calc(var(--r-cover) * 1.6); }
   .btn, input, textarea, .nav-item, .brand, .mi, .undo, .qi:hover, .qi:focus-visible, .reveal, .skip-link, kbd, .searchlink, .pick, .tr:not(.hd):hover, .tr.is-sel { corner-shape: squircle; border-radius: calc(var(--r-control) * 1.6); }
   .menu, .sheet, .toast, .notice, .login-card, .topcard, .selbar, .bigsearch input, .now-queue { corner-shape: squircle; border-radius: calc(var(--r-panel) * 1.6); }
 }
@@ -892,7 +910,7 @@ dl.facts dd { margin: 0; font-variant-numeric: tabular-nums; }
 .qi .x { visibility: hidden; width: 2rem; height: 2rem; }
 .qi:is(:hover, :focus-within) :is(.grip, .x) { visibility: visible; }
 @media (hover: none) { .qi :is(.grip, .x) { visibility: visible; } }
-.q-drop { position: absolute; inset: 0 0 auto; height: 2px; border-radius: 1px; background: var(--accent); translate: 0 var(--y, 0px); pointer-events: none; }
+.q-drop, .drop-line { position: absolute; inset: 0 0 auto; height: 2px; border-radius: 1px; background: var(--accent); translate: 0 var(--y, 0px); pointer-events: none; }
 .qend { display: flex; flex-direction: column; gap: var(--s3); margin-top: var(--s4); padding: var(--s4) var(--s1) 0; border-top: 1px solid var(--hairline); }
 .q-notes { display: grid; gap: 6px; }
 .qend .btn { align-self: flex-start; }
@@ -1043,3 +1061,55 @@ button.ly:hover, .ly.is-current { color: var(--ink); }
 .keys { display: inline-flex; gap: var(--s1); }
 .kcols-single.off { opacity: .5; }
 @media (max-width: 40rem) { .kcols { grid-template-columns: 1fr; } }
+
+/* 18. Playlists: the grid of cards with their covers, the Favorites tile, a
+   playlist's head (the same cover field as an album, from its four covers),
+   the "Added" column, the line that shows where a dragged song will land, and
+   the search that adds songs without leaving the page. A playlist shows one
+   cover with fewer than four, a 2 by 2 mosaic with four, and a quiet
+   placeholder with none (proposal A2). */
+
+.pl-cover, .mosaic, .empty-art { display: block; width: 100%; aspect-ratio: 1; border-radius: var(--r-cover); box-shadow: var(--shadow-cover); background: var(--fill-strong); }
+.pl-cover { height: auto; object-fit: cover; }
+.mosaic { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
+.mosaic img, .art .mosaic img { display: block; width: 100%; height: 100%; aspect-ratio: auto; border-radius: 0; box-shadow: none; object-fit: cover; }
+.empty-art { display: grid; place-items: center; box-shadow: none; color: var(--graphite); }
+.empty-art .i { width: 48px; height: 48px; stroke-width: 1; }
+.grid-pl { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+@media (max-width: 52rem) { .grid-pl { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); } }
+
+/* Favorites is a tile of the sidebar's glow: no cover, the heart. */
+.glowtile { position: relative; isolation: isolate; overflow: hidden; display: grid; place-items: center; width: 100%; aspect-ratio: 1; border-radius: var(--r-cover); background: var(--fill-strong); color: var(--ink); box-shadow: var(--shadow-cover); }
+.glowtile:hover { text-decoration: none; }
+.glowtile::before, .glowtile::after { height: 100%; }
+.glowtile::before {
+  background:
+    radial-gradient(70% 60% at 30% 100% in oklab, var(--glow-1), transparent),
+    radial-gradient(60% 50% at 90% 104% in oklab, var(--glow-2), transparent),
+    radial-gradient(120% 95% at 50% 100% in oklab, var(--glow-3), transparent);
+}
+.glowtile .i { width: 64px; height: 64px; stroke-width: 1.25; }
+
+.pl-head { display: grid; grid-template-columns: 240px minmax(0, 1fr) auto; gap: var(--s6); align-items: end; padding: var(--s5) 0 var(--s6); }
+.pl-head .cover-box { width: 240px; max-width: 100%; }
+.pl-head .fields { padding-top: 0; }
+.pl-head .head-dots { align-self: start; }
+.pl-head .kicker { display: flex; align-items: center; gap: 6px; }
+.pl-title { font: var(--type-display); letter-spacing: -.025em; overflow-wrap: anywhere; }
+.desc { color: var(--ink); opacity: .8; overflow-wrap: anywhere; }
+.meta { font-variant-numeric: tabular-nums; }
+.pl-head .hero-actions { margin-top: var(--s3); }
+.play-xl:disabled { opacity: .4; cursor: default; }
+.pl-empty .empty { padding-block: var(--s6); }
+
+.find { margin-top: var(--s7); padding-top: var(--s5); border-top: 1px solid var(--hairline); }
+.find .search { max-width: 26.25rem; margin: var(--s4) 0 var(--s2); }
+.res {
+  display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 3fr) auto; align-items: center; gap: var(--s3);
+  min-height: 56px; padding: 0 var(--s2); border-top: 1px solid var(--hairline);
+  content-visibility: auto; contain-intrinsic-size: auto 56px;
+}
+.res .t { display: flex; align-items: center; gap: var(--s3); min-width: 0; }
+.res .c { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.res .added { display: inline-flex; align-items: center; gap: 6px; padding-right: var(--s2); }
+.res-list > .note { padding: var(--s3) var(--s2); border-top: 1px solid var(--hairline); }

@@ -36,6 +36,23 @@ export function formatLength(ms) {
   return m ? `${h} h ${two(m)} min` : `${h} h`;
 }
 
+// A day, as a column of "Added" shows it: Sep 28, with the year only when it is not this one.
+const monthDay = new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' });
+const withYear = new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric' });
+export function formatDate(iso) {
+  const date = new Date(iso);
+  return (date.getFullYear() === new Date().getFullYear() ? monthDay : withYear).format(date);
+}
+
+// How long ago: just now, 5 minutes ago, yesterday, 2 days ago, last month.
+const relative = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+const UNITS = [['year', 31536000], ['month', 2592000], ['week', 604800], ['day', 86400], ['hour', 3600], ['minute', 60]];
+export function formatAgo(iso) {
+  const seconds = (Date.parse(iso) - Date.now()) / 1000;
+  const unit = UNITS.find(([, size]) => -seconds >= size);
+  return unit ? relative.format(Math.trunc(seconds / unit[1]), unit[0]) : 'just now';
+}
+
 // ---- Announcements ---------------------------------------------------------
 
 // Said by screen readers, politely: a new page, a result. Emptied first so
@@ -172,7 +189,7 @@ export const staleToast = () => toast({ title: 'Playlist changed elsewhere', sub
 
 // openMenu(button, items, at). `at` = {x, y} opens it at the pointer (a
 // right-click) instead of under the button. An item is {label, icon, href, run, danger, checked,
-// cover, disabled, filled}, or {label, icon, items: [...]} for a submenu (one level),
+// cover, disabled, filled, key}, or {label, icon, items: [...]} for a submenu (one level),
 // or '-' for a line. Keys: ↑ ↓ Home End move, → opens a submenu, ← and Esc
 // close it, Esc closes the menu, Tab leaves. A submenu stays open for 300 ms
 // after the pointer leaves it, so a diagonal move does not lose it.
@@ -201,6 +218,7 @@ function itemElement(spec) {
     el = link;
   }
   if (spec.danger) el.classList.add('danger');
+  if (spec.key) el.dataset.key = spec.key; // what a later change to the menu finds the item by
   if (spec.disabled) {
     el.setAttribute('aria-disabled', 'true');
   } else {
