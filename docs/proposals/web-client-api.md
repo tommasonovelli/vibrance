@@ -2,7 +2,7 @@
 
 Status: **proposal, to be approved by the owner**. Nothing here is part of DESIGN.md yet.
 
-This document compares the player mockups (the "Vibrance Player" design canvas: Library, Albums with the queue panel, Album, Artist, Playlists, Playlist, Search, Now playing, Sign in, Account, Administration, sheets and menus, empty, loading and error states, keyboard shortcuts) with `api/openapi.yaml` as of commit `8c0ed5f`. It lists every action the mockups show, the endpoint each one uses, and the endpoints and fields that are missing. Each missing piece is written as the OpenAPI fragment we expect, so that a backend engineer can implement it without guessing.
+This document compares the player mockups (the "Vibrance Player" design canvas: Library, Albums with the queue panel, Album, Artist, Playlists, Playlist, Search, Now playing, Sign in, Account, Administration, sheets and menus, empty, loading and error states, keyboard shortcuts) with `api/openapi.yaml` as of commit `6890c24`. It lists every action the mockups show, the endpoint each one uses, and the endpoints and fields that are missing. Each missing piece is written as the OpenAPI fragment we expect, so that a backend engineer can implement it without guessing.
 
 ## How to use this document
 
