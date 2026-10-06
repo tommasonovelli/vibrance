@@ -20,6 +20,15 @@ export const isMissing = e => e instanceof ApiError && e.code === 'not_found';
 export const isStale = e => e instanceof ApiError && e.code === 'precondition_failed';
 export const optional = promise => promise.catch(e => { if (isMissing(e)) return null; throw e; });
 
+// Whether the last request got an answer, any answer: the banner of status.js
+// says "Can't reach Vibrance" while it did not. Told once per change.
+let reachable = true;
+function reach(ok) {
+  if (ok === reachable) return;
+  reachable = ok;
+  document.dispatchEvent(new CustomEvent(ok ? 'net:up' : 'net:down'));
+}
+
 function url(path, query) {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query || {})) {
@@ -48,8 +57,10 @@ async function request(method, path, { query, body, ifMatch, signal, keepalive }
     response = await fetch(url(path, query), { method, headers, signal, keepalive, body: body === undefined ? undefined : JSON.stringify(body) });
   } catch (e) {
     if (e.name === 'AbortError') throw e;
+    reach(false);
     throw new ApiError(0, 'network', 'Can’t reach Vibrance.', {}, label);
   }
+  reach(true);
   let data = null;
   if (response.status !== 204 && /json/.test(response.headers.get('Content-Type') || '')) {
     try { data = await response.json(); } catch { /* an empty or broken body: handled below */ }

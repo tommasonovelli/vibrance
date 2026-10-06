@@ -3,7 +3,7 @@
 // exports `render(main, params, signal)`, where params holds the parts of the
 // path (`:id`), `path` itself and `query` (URLSearchParams), and `signal` aborts when the
 // reader has already gone elsewhere: pass it to the API and stop writing.
-import { announce, errorNotice } from './ui.js';
+import { announce, clone, errorNotice } from './ui.js';
 
 let routes = [];
 let main;
@@ -43,12 +43,18 @@ async function show(href, restore) {
     main.removeAttribute('data-glow');
     main.style.removeProperty('--cover');
     for (const name of ['--cover-b', '--cover-c', '--cover-d']) main.style.removeProperty(name);
+    // A view that has shown nothing after a second (it reads before it draws)
+    // gets still blocks where it will land, no spinner, no shimmer.
+    const late = setTimeout(() => { if (!main.children.length) main.append(clone('t-ph-page')); }, 1000);
     try {
       const view = await (found ? found.route.load() : import('./views/not-found.js'));
       await view.render(main, params, signal);
     } catch (error) {
       if (signal.aborted || error.name === 'AbortError') return;
       main.append(errorNotice(error, () => show(href)));
+    } finally {
+      clearTimeout(late);
+      if (!signal.aborted) main.querySelector(':scope > .ph-page')?.remove();
     }
   };
   let work;

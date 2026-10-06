@@ -90,6 +90,9 @@
 </nav>
 
 <div class="shell">
+<!-- One banner for what concerns every page: offline, no answer, and (for an
+     admin) the library updating, in maintenance or away. status.js fills it. -->
+<div id="banner" class="banner" hidden><span class="banner-msg"><span class="dot" aria-hidden="true"></span><span class="banner-text"></span></span><a class="banner-link" href="/admin" hidden>Administration</a><button class="btn banner-retry" type="button" hidden>Try now</button></div>
 <div class="cols">
 <main id="main" class="page" tabindex="-1"></main>
 <aside id="queue" class="queue" aria-label="Queue"></aside>
@@ -135,7 +138,7 @@
 
 <template id="t-page-head"><header class="head"><h1 class="title"></h1><div class="head-tools"></div></header></template>
 
-<template id="t-empty"><div class="empty"><span class="mark"><svg class="i" aria-hidden="true"><use href="#i-info"/></svg></span><h2 class="empty-title"></h2><p class="empty-text" hidden></p><a class="empty-link" hidden></a></div></template>
+<template id="t-empty"><div class="empty"><span class="mark"><svg class="i" aria-hidden="true"><use href="#i-info"/></svg></span><h2 class="empty-title"></h2><p class="empty-text" hidden></p><a class="empty-link" hidden></a><button class="btn btn-primary empty-action" type="button" hidden></button></div></template>
 
 <template id="t-error"><div class="notice" role="alert"><div class="notice-head"><svg class="i" aria-hidden="true"><use href="#i-alert"/></svg><span class="notice-text"></span></div><details class="details"><summary>Details</summary><pre></pre></details><div><button class="btn notice-retry" type="button">Try now</button></div></div></template>
 
@@ -200,6 +203,8 @@
 <template id="t-more"><div class="more"><p class="note more-text"></p><button class="link" type="button">Couldn’t load more. Try again</button></div></template>
 
 <template id="t-ph-rows"><div class="ph" aria-hidden="true"><div class="ph-row"><i class="blk"></i><i class="blk"></i><i class="blk"></i></div><div class="ph-row"><i class="blk"></i><i class="blk"></i><i class="blk"></i></div><div class="ph-row"><i class="blk"></i><i class="blk"></i><i class="blk"></i></div></div></template>
+
+<template id="t-ph-page"><div class="ph-page" aria-hidden="true"><i class="blk ph-title"></i><div class="ph"><div class="ph-row"><i class="blk"></i><i class="blk"></i><i class="blk"></i></div><div class="ph-row"><i class="blk"></i><i class="blk"></i><i class="blk"></i></div><div class="ph-row"><i class="blk"></i><i class="blk"></i><i class="blk"></i></div><div class="ph-row"><i class="blk"></i><i class="blk"></i><i class="blk"></i></div></div></div></template>
 
 <template id="t-ph-grid"><div class="grid ph" aria-hidden="true"><div class="ph-card"><i class="blk"></i><i class="blk"></i><i class="blk"></i></div><div class="ph-card"><i class="blk"></i><i class="blk"></i><i class="blk"></i></div><div class="ph-card"><i class="blk"></i><i class="blk"></i><i class="blk"></i></div><div class="ph-card"><i class="blk"></i><i class="blk"></i><i class="blk"></i></div></div></template>
 
@@ -466,6 +471,95 @@
 <div class="field"><label for="ep-name">Name</label><input id="ep-name" name="name" type="text" maxlength="200" required autocomplete="off"></div>
 <div class="field"><label for="ep-desc">Description <span class="note">optional</span></label><textarea id="ep-desc" name="description" maxlength="2000" placeholder="What is it for?"></textarea></div>
 <div class="actions"><button class="btn" type="button" value="cancel" data-close>Cancel</button><button class="btn btn-primary" type="submit" value="save">Save</button></div>
+</form></dialog></template>
+
+<!-- Round 5: Account, Administration and the library line of an empty page. -->
+<template id="t-admin-line"><p class="status admin-line"><span class="dot" aria-hidden="true"></span><span class="al-text"></span><button class="link" type="button">Scan library</button></p></template>
+
+<template id="t-account"><div class="acct">
+<div>
+<section aria-labelledby="ac-profile">
+<div class="section-head"><h2 id="ac-profile">Profile</h2></div>
+<div class="who"><span class="who-av" aria-hidden="true"></span><div><div class="who-name"></div><div class="who-meta"><span class="badge"></span><span class="note"></span></div></div></div>
+</section>
+<section aria-labelledby="ac-password">
+<div class="section-head"><h2 id="ac-password">Change password</h2></div>
+<form class="form" novalidate>
+<div class="field"><label for="ac-current">Current password</label><input id="ac-current" name="current" type="password" autocomplete="current-password"><span class="field-error" role="alert" hidden></span></div>
+<div class="field"><label for="ac-new">New password</label><input id="ac-new" name="new" type="password" autocomplete="new-password" aria-describedby="ac-new-help"><span class="note" id="ac-new-help">At least 12 characters. Your other sessions are signed out.</span><span class="field-error" role="alert" hidden></span></div>
+<div class="form-row"><button class="btn btn-primary" type="submit">Change password</button><span class="status pw-done" role="status" hidden><span class="dot ok" aria-hidden="true"></span>Password changed</span></div>
+</form>
+</section>
+<section aria-labelledby="ac-playback">
+<div class="section-head"><h2 id="ac-playback">Playback</h2><span class="note ac-saved"></span></div>
+<div class="opt"><div><div class="opt-name" id="ac-leveling">Volume leveling</div><div class="note">Plays every song at a similar loudness. Songs of an album played in order keep the album’s own dynamics.</div></div>
+<div class="seg" role="radiogroup" aria-labelledby="ac-leveling" data-setting="volume_leveling"><button type="button" role="radio" data-value="automatic">Automatic</button><button type="button" role="radio" data-value="off">Off</button></div></div>
+<div class="opt"><div><div class="opt-name" id="ac-single">Single-key shortcuts</div><div class="note">Space always plays and pauses. Turn this on to also use L for lyrics, Q for the queue, S for shuffle, R for repeat and M to mute.</div></div>
+<button class="switch" type="button" role="switch" aria-checked="false" aria-labelledby="ac-single"></button></div>
+<p class="keys-link"><button class="link" type="button">See every keyboard shortcut</button></p>
+</section>
+<section aria-labelledby="ac-look">
+<div class="section-head"><h2 id="ac-look">Appearance</h2></div>
+<div class="opt"><div><div class="opt-name" id="ac-theme">Theme</div><div class="note">Dark is easier at night, light in a bright room.</div></div>
+<div class="seg" role="radiogroup" aria-labelledby="ac-theme" data-setting="theme"><button type="button" role="radio" data-value="dark">Dark</button><button type="button" role="radio" data-value="light">Light</button></div></div>
+</section>
+</div>
+<section aria-labelledby="ac-sessions">
+<div class="section-head"><h2 id="ac-sessions">Where you’re signed in</h2><button class="link danger ac-others" type="button" hidden>Sign out everywhere else</button></div>
+<div class="sessions"></div>
+<p class="note ac-foot">Browser sessions last 30 days, app sign-ins 90 days. Both renew while you use them.</p>
+</section>
+</div></template>
+
+<template id="t-session"><div class="sess"><span class="dev" aria-hidden="true"><svg class="i"><use href="#i-laptop"/></svg></span><div class="sess-text"><div class="sess-name"></div><div class="sess-meta"><span></span><span></span><span></span></div></div><span class="status sess-here" hidden><span class="dot ok" aria-hidden="true"></span>This device</span><button class="btn sess-out" type="button">Sign out</button></div></template>
+
+<template id="t-admin"><div class="admin">
+<section aria-labelledby="ad-library">
+<div class="section-head"><h2 id="ad-library">Library</h2><span class="note">Reads the MusicLib library folder. Nothing here changes your files.</span></div>
+<div class="band">
+<span class="state" role="status"><span class="dot" aria-hidden="true"></span><span class="band-state"></span></span>
+<span class="scanbar" hidden><span class="bar" role="progressbar" aria-label="Albums indexed" aria-valuemin="0"><span class="fl"></span></span><span class="note scan-count"></span></span>
+<span class="note band-note"></span>
+<button class="btn band-scan" type="button"><svg class="i" aria-hidden="true"><use href="#i-refresh"/></svg>Scan library</button>
+</div>
+<div class="stats">
+<div class="stat"><span class="k">Albums</span><span class="v st-albums"></span><span class="note st-albums-note"></span></div>
+<div class="stat"><span class="k">Songs</span><span class="v st-tracks"></span><span class="note st-tracks-note"></span></div>
+<div class="stat"><span class="k">Last scan</span><span class="v st-scan"></span><span class="note st-scan-note"></span></div>
+<div class="stat"><span class="k">MusicLib</span><span class="v st-ml"></span><span class="note st-ml-note"></span></div>
+</div>
+<div class="attention" hidden>
+<div class="section-head"><h3 class="attention-title">Needs attention <span class="note"></span></h3></div>
+<div class="probs"></div>
+</div>
+</section>
+<section aria-labelledby="ad-users" class="admin-users">
+<div class="section-head"><h2 id="ad-users">Users</h2><button class="btn btn-primary new-user" type="button"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>New user</button></div>
+<div class="users" role="table" aria-label="Users">
+<div class="ur hd" role="row"><span role="columnheader">Username</span><span class="c-role" role="columnheader">Role</span><span role="columnheader">Status</span><span class="c-created" role="columnheader">Created</span><span role="columnheader"><span class="sr-only">Actions</span></span></div>
+</div>
+<p class="note">Disabling an account signs it out everywhere. Its playlists and favorites stay until you delete it.</p>
+</section>
+</div></template>
+
+<template id="t-prob"><div class="prob"><span class="dot err" role="img" aria-label="Problem"></span><span class="mono"></span><span class="prob-msg"></span><span class="code"></span></div></template>
+
+<template id="t-user"><div class="ur" role="row"><span class="u-who" role="cell"><span class="u-av" aria-hidden="true"></span><span class="u-text"><span class="u-name"></span><span class="note u-you"></span></span></span><span class="c-role" role="cell"></span><span class="u-state" role="cell"><span class="dot" aria-hidden="true"></span><span class="u-status"></span></span><span class="c-created note" role="cell"></span><span role="cell"><button class="dots" type="button" aria-haspopup="menu"></button></span></div></template>
+
+<template id="t-sheet-new-user"><dialog class="sheet"><form class="sheet-form" method="dialog" novalidate>
+<h2 class="sheet-title">New user</h2>
+<div class="field"><label for="nu-name">Username</label><input id="nu-name" name="username" type="text" maxlength="32" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="anna" aria-describedby="nu-name-help"><span class="note" id="nu-name-help">3 to 32 characters: a–z, 0–9, dot, dash, underscore.</span><span class="field-error" role="alert" hidden></span></div>
+<div class="field"><label for="nu-pw">Password</label><input id="nu-pw" name="password" type="password" autocomplete="new-password" aria-describedby="nu-pw-help"><span class="note" id="nu-pw-help">At least 12 characters. Share it with them yourself.</span><span class="field-error" role="alert" hidden></span></div>
+<div class="field"><span class="field-label" id="nu-role">Role</span><div class="radios" role="radiogroup" aria-labelledby="nu-role"><button class="radio" type="button" role="radio" data-value="user"><b>User</b><span class="note">Listens, keeps favorites and playlists</span></button><button class="radio" type="button" role="radio" data-value="admin"><b>Admin</b><span class="note">Also manages users and the library</span></button></div></div>
+<p class="field-error form-error" role="alert" hidden></p>
+<div class="actions"><button class="btn" type="button" value="cancel" data-close>Cancel</button><button class="btn btn-primary" type="submit" value="create">Create user</button></div>
+</form></dialog></template>
+
+<template id="t-sheet-user-password"><dialog class="sheet"><form class="sheet-form" method="dialog" novalidate>
+<h2 class="sheet-title">Set a new password</h2>
+<p class="sheet-text"></p>
+<div class="field"><label for="up-pw">New password</label><input id="up-pw" name="password" type="password" autocomplete="new-password" aria-describedby="up-pw-help"><span class="note" id="up-pw-help">At least 12 characters. Share it with them yourself.</span><span class="field-error" role="alert" hidden></span></div>
+<div class="actions"><button class="btn" type="button" value="cancel" data-close>Cancel</button><button class="btn btn-primary" type="submit" value="set">Set password</button></div>
 </form></dialog></template>
 
 </body>

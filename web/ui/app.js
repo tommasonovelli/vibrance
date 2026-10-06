@@ -9,6 +9,7 @@ import { initBar } from './bar.js';
 import { initQueue } from './queue.js';
 import { initShortcuts } from './shortcuts.js';
 import { loadSettings } from './settings.js';
+import * as status from './status.js';
 
 // Each path and the module of its view, loaded when first needed.
 const routes = {
@@ -58,6 +59,7 @@ async function boot() {
     return;
   }
   sidebar.init(me);
+  status.init(me); // the library of an admin, and the banner for everyone
   initBar();
   initQueue();
   keys();

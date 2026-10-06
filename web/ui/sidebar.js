@@ -5,6 +5,7 @@
 import { api, coverUrl, optional } from './api.js';
 import { $, clone, openSheet, setIcon, show, toast } from './ui.js';
 import { navigate } from './router.js';
+import { saveSetting } from './settings.js';
 
 const root = document.documentElement;
 const number = new Intl.NumberFormat('en');
@@ -99,14 +100,13 @@ function drop(id) {
 document.addEventListener('playlist:changed', ({ detail }) => update(detail.playlist));
 document.addEventListener('playlist:deleted', ({ detail }) => drop(detail.id));
 
-// Reads the playlists, the number of favorites and, for an admin, the number
-// of problems of the library again. A part the server does not have yet, or
-// cannot answer, is left out: the sidebar is never the reason a page fails.
-export async function reload(isAdmin = !$('#nav-admin').hidden) {
-  const [lists, favorites, library] = await Promise.all([
+// Reads the playlists and the number of favorites again. A part the server
+// does not have yet, or cannot answer, is left out: the sidebar is never the
+// reason a page fails.
+export async function reload() {
+  const [lists, favorites] = await Promise.all([
     api.get('/playlists').catch(() => null),
     optional(api.get('/me/favorites/summary')).catch(() => null),
-    isAdmin ? optional(api.get('/admin/library')).catch(() => null) : null,
   ]);
   if (lists) {
     playlists = lists.playlists;
@@ -116,10 +116,14 @@ export async function reload(isAdmin = !$('#nav-admin').hidden) {
   const count = $('#favorites-count');
   count.hidden = !favorites;
   if (favorites) count.textContent = number.format(favorites.track_count);
-  const problems = $('#admin-count');
-  problems.hidden = !library?.problems.length;
-  if (library) problems.textContent = library.problems.length;
 }
+
+// The badge of Administration counts what needs attention; status.js reads it.
+document.addEventListener('library:status', ({ detail }) => {
+  const badge = $('#admin-count');
+  badge.hidden = !detail.problems.length;
+  badge.textContent = detail.problems.length;
+});
 
 // ---- New playlist ----------------------------------------------------------
 
@@ -176,11 +180,9 @@ export async function init(me) {
   document.addEventListener('route', event => setCurrent(event.detail.path));
 
   $('#new-playlist').addEventListener('click', () => newPlaylist());
-  $('#theme-toggle').addEventListener('click', () => {
-    root.dataset.theme = root.dataset.theme === 'light' ? 'dark' : 'light';
-    remember('vibrance.theme', root.dataset.theme);
-    showTheme();
-  });
+  // Account's Theme row and the server's answer change it too: the label follows.
+  $('#theme-toggle').addEventListener('click', () => saveSetting('theme', root.dataset.theme === 'light' ? 'dark' : 'light'));
+  document.addEventListener('settings:changed', showTheme);
   $('#sidebar-toggle').addEventListener('click', () => {
     if (root.dataset.sidebar === 'collapsed') delete root.dataset.sidebar; else root.dataset.sidebar = 'collapsed';
     remember('vibrance.sidebar', root.dataset.sidebar || 'expanded');
@@ -190,5 +192,5 @@ export async function init(me) {
     try { await api.post('/auth/logout'); } catch { /* signed out already, or the server is away: leave all the same */ }
     location.assign('/login');
   });
-  await reload(me.role === 'admin');
+  await reload();
 }

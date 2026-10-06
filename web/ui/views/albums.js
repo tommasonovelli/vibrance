@@ -2,6 +2,7 @@
 // keeps it, so Back and a reload come back to the same view).
 import { api, optional } from '../api.js';
 import { $, clone, emptyState, errorNotice, pageHead, show } from '../ui.js';
+import { adminLine } from '../status.js';
 import { albumCard, cardActions, grid, listHead, pager } from '../list.js';
 
 const SORTS = [['title', 'Title'], ['artist', 'Artist'], ['year', 'Year'], ['added', 'Recently added']];
@@ -66,7 +67,9 @@ export async function render(main, params, signal) {
       return;
     }
     if (!stop.aborted && !albums.children.length) {
-      host.replaceChildren(emptyState({ icon: 'album', title: 'No albums yet', text: 'Ask the person who runs this server to add music with MusicLib.' }));
+      const state = emptyState({ icon: 'album', title: 'No albums yet', text: 'Ask the person who runs this server to add music with MusicLib.' });
+      adminLine(state);
+      host.replaceChildren(state);
     }
   }
 

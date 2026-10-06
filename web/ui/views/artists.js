@@ -1,6 +1,7 @@
 // The artists, A to Z: a round monogram and the name, as many as there are.
 import { api, optional } from '../api.js';
 import { $, clone, emptyState, pageHead, show } from '../ui.js';
+import { adminLine } from '../status.js';
 import { grid, listHead, pager, personCard } from '../list.js';
 
 const number = new Intl.NumberFormat('en');
@@ -32,6 +33,8 @@ export async function render(main, params, signal) {
   });
   await pg.first;
   if (!people.children.length) {
-    $('.list', view).replaceChildren(emptyState({ icon: 'artist', title: 'No artists yet', text: 'Ask the person who runs this server to add music with MusicLib.' }));
+    const state = emptyState({ icon: 'artist', title: 'No artists yet', text: 'Ask the person who runs this server to add music with MusicLib.' });
+    adminLine(state);
+    $('.list', view).replaceChildren(state);
   }
 }

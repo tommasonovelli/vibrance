@@ -2,7 +2,7 @@
 // the person's (Recently updated, or by name) and stays in the URL. The list
 // is read whole (a person has at most 500), so sorting is done here.
 import { api, optional } from '../api.js';
-import { $, clone, closeMenu, emptyState, formatLength, openMenu, pageHead, show } from '../ui.js';
+import { $, clone, closeMenu, emptyState, formatLength, openMenu, pageHead, pending, show } from '../ui.js';
 import * as act from '../actions.js';
 import { grid, playlistArt } from '../list.js';
 import { newPlaylist } from '../sidebar.js';
@@ -50,10 +50,16 @@ export async function render(main, params, signal) {
   $('.head-tools', head).append(create);
 
   // Both are read at once; Favorites' numbers are a nicety, never a failure.
-  const [lists, favorites] = await Promise.all([
-    api.get('/playlists', null, { signal }),
-    optional(api.get('/me/favorites/summary', null, { signal })).catch(() => null),
-  ]);
+  const done = pending(main, 't-ph-grid');
+  let lists, favorites;
+  try {
+    [lists, favorites] = await Promise.all([
+      api.get('/playlists', null, { signal }),
+      optional(api.get('/me/favorites/summary', null, { signal })).catch(() => null),
+    ]);
+  } finally {
+    done();
+  }
   let playlists = lists.playlists;
   let sort = params.query.get('sort') in SORTS ? params.query.get('sort') : 'updated';
 
@@ -75,7 +81,13 @@ export async function render(main, params, signal) {
     count.textContent = `${plural(playlists.length, 'playlist')} · only you can see them`;
     show(count, true);
     note?.remove();
-    note = playlists.length ? null : emptyState({ icon: 'playlists', title: 'No playlists yet', text: 'Make one with New playlist, or add a song to a new playlist from any menu.' });
+    // With none, the one filled button is the empty page's, not the head's.
+    show(create, playlists.length > 0);
+    show(seg, playlists.length > 1);
+    note = playlists.length ? null : emptyState({
+      icon: 'playlists', title: 'No playlists yet', text: 'Gather songs for a moment of the day, a trip, a dinner. Only you can see your playlists.',
+      action: { label: 'New playlist', run: () => newPlaylist() },
+    });
     if (note) host.append(note);
     for (const button of seg.children) button.setAttribute('aria-checked', String(button.dataset.sort === sort));
   }

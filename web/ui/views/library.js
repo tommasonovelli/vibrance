@@ -2,6 +2,7 @@
 // person (the tab beside it). The list loads page by page as it is scrolled.
 import { api, optional, walk } from '../api.js';
 import { $, clone, emptyState, errorNotice, openMenu, pageHead, setTitle, show } from '../ui.js';
+import { adminLine } from '../status.js';
 import * as act from '../actions.js';
 import { listHead, pager, trackList } from '../list.js';
 
@@ -83,9 +84,11 @@ export async function render(main, params, signal) {
 
   function empty() {
     emptied = true;
-    host.replaceChildren(favorites
+    const state = favorites
       ? emptyState({ icon: 'heart', title: 'No favorites yet', text: 'Select the heart next to a song to keep it here.', link: { href: '/', label: 'Go to Library' } })
-      : emptyState({ icon: 'library', title: 'The library is empty', text: 'Ask the person who runs this server to add music with MusicLib.' }));
+      : emptyState({ icon: 'library', title: 'The library is empty', text: 'Ask the person who runs this server to add music with MusicLib.' });
+    if (!favorites) adminLine(state); // admins also see the scanner's state
+    host.replaceChildren(state);
     for (const control of view.querySelectorAll('.play-xl, .shuffle, .sort, .count')) show(control, false);
   }
 

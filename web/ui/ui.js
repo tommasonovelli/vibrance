@@ -96,7 +96,9 @@ export function pageHead(main, title) {
 }
 
 // A centred state: "No favorites yet", "Page not found.".
-export function emptyState({ icon = 'info', title, text = '', link = null }) {
+// `link` goes elsewhere ({href, label}); `action` is the one filled button that
+// fills the page ({label, run}).
+export function emptyState({ icon = 'info', title, text = '', link = null, action = null }) {
   const el = clone('t-empty');
   setIcon($('.mark', el), icon);
   $('.empty-title', el).textContent = title;
@@ -109,6 +111,12 @@ export function emptyState({ icon = 'info', title, text = '', link = null }) {
     a.href = link.href;
     a.hidden = false;
   }
+  if (action) {
+    const button = $('.empty-action', el);
+    button.textContent = action.label;
+    button.addEventListener('click', action.run);
+    button.hidden = false;
+  }
   return el;
 }
 
@@ -118,14 +126,63 @@ const sentences = {
   library_changing: 'The library is being updated. Try again in a moment.',
   not_ready: 'Vibrance is starting. Try again in a moment.',
 };
+// What to tell a person about an error: the sentence a view has for that code
+// (`table`, by `code`), else the general one for it. Never the server's own
+// words, which are for the Details.
+export function sayError(error, table = {}) {
+  return table[error.code] || sentences[error.code] || (error.status >= 500 ? 'Vibrance had a problem. Try again in a moment.' : 'This didn’t work.');
+}
+
 export function errorNotice(error, retry) {
   const el = clone('t-error');
-  $('.notice-text', el).textContent = sentences[error.code] || (error.status >= 500 ? 'Vibrance had a problem. Try again in a moment.' : 'This didn’t work.');
+  $('.notice-text', el).textContent = sayError(error);
   const lines = [error.request, error.status ? `${error.status} ${error.code}: ${error.message}` : 'Network error, no answer from the server'];
   $('pre', el).textContent = lines.filter(Boolean).join('\n');
   const button = $('.notice-retry', el);
   if (retry) button.addEventListener('click', retry); else button.hidden = true;
   return el;
+}
+
+// ---- Forms -----------------------------------------------------------------
+
+// Says what is wrong beside the field it is about, or takes it away
+// (`text` empty). `where` is the .field, or the error line itself.
+export function fieldError(where, text = '') {
+  const note = where.matches('.field-error') ? where : $('.field-error', where);
+  note.textContent = text;
+  show(note, !!text);
+  const input = $('input', where);
+  if (text) input?.setAttribute('aria-invalid', 'true'); else input?.removeAttribute('aria-invalid');
+}
+
+// A group of buttons with role="radio" (data-value): the checked one is in the
+// tab order, the arrows move and check, as for a radio group. Returns what
+// sets the value from outside; `change(value)` runs on a choice made here.
+export function radioGroup(group, value, change) {
+  const buttons = [...group.querySelectorAll('[role="radio"]')];
+  const set = (next, focus = false) => {
+    for (const button of buttons) {
+      const on = button.dataset.value === next;
+      button.setAttribute('aria-checked', String(on));
+      button.tabIndex = on ? 0 : -1;
+      if (on && focus) button.focus();
+    }
+  };
+  group.addEventListener('click', event => {
+    const button = event.target.closest('[role="radio"]');
+    if (button && button.getAttribute('aria-checked') !== 'true') { set(button.dataset.value); change(button.dataset.value); }
+  });
+  group.addEventListener('keydown', event => {
+    const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
+    if (!step) return;
+    event.preventDefault();
+    const at = buttons.findIndex(button => button.getAttribute('aria-checked') === 'true');
+    const next = buttons[(at + step + buttons.length) % buttons.length].dataset.value;
+    set(next, true);
+    change(next);
+  });
+  set(value);
+  return set;
 }
 
 // ---- Toasts ----------------------------------------------------------------
