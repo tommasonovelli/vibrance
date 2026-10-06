@@ -1,13 +1,14 @@
 # Proposal: API additions for the web and mobile player
 
-Status: **proposal, to be approved by the owner**. Nothing here is part of DESIGN.md yet.
+Status: **approved by the owner on 2026-10-06**, after a review against the contract of release 0.1.0. The owner approved every addition of sections 2 and 3 (A1–A4, B1–B6) and the serving of the web UI (C1, section 3), as a change of scope (I16). The errata of DESIGN.md of the same day turns them into the plan steps W1–W6 (section 6). Section 5 stays out of scope.
 
-This document compares the player mockups (the "Vibrance Player" design canvas: Library, Albums with the queue panel, Album, Artist, Playlists, Playlist, Search, Now playing, Sign in, Account, Administration, sheets and menus, empty, loading and error states, keyboard shortcuts) with `api/openapi.yaml` as of commit `6890c24`. It lists every action the mockups show, the endpoint each one uses, and the endpoints and fields that are missing. Each missing piece is written as the OpenAPI fragment we expect, so that a backend engineer can implement it without guessing.
+This document compares the player mockups (the "Vibrance Player" design canvas: Library, Albums with the queue panel, Album, Artist, Playlists, Playlist, Search, Now playing, Sign in, Account, Administration, sheets and menus, empty, loading and error states, keyboard shortcuts) with `api/openapi.yaml` as of commit `6890c24`; the contract of release 0.1.0 is the same, apart from line breaks. It lists every action the mockups show, the endpoint each one uses, and the endpoints and fields that are missing. Each missing piece is written as the OpenAPI fragment we expect, so that a backend engineer can implement it without guessing.
 
 ## How to use this document
 
 - Every addition is compatible inside `/api/v1` (DESIGN.md §8.1): new operations, new response fields, new error codes. No existing operation changes its behavior.
-- Each addition is a change of scope. Under I16 and DESIGN.md §0.8 the owner approves it, and the orchestrator records it as an errata entry and as a plan step before an engineer implements it. Schema changes are new migrations (I13).
+- Each addition is a change of scope. Under I16 and DESIGN.md §0.8 the owner approves it, and the orchestrator records it as an errata entry and as a plan step before an engineer implements it. Schema changes are new migrations (I13): release 0.1.0 closed `00001` and `00002`.
+- Every operation other than GET and HEAD declares the parameter `XVibranceRequest`, as every such operation of the contract does (I4).
 - Items are ranked:
   - **P1**: a screen of the mockups cannot be built without it.
   - **P2**: the screen can be built today, but only with many requests or a worse experience.
@@ -39,11 +40,12 @@ Legend: **ok** = covered by an existing operation; **new** = needs an addition f
 | Element | Uses | Status |
 |---|---|---|
 | Paginated list of every available song | `GET /tracks` | **new (A1)** |
+| Row "Artist" column and sort | `Track.artist` (the artist of the song); "Go to artist" opens the album artist (4.2) | **new (A1)** / client rule |
 | Sort: Title, Artist, Album, Recently added | `GET /tracks?sort=` | **new (A1)** |
 | "5,120 songs" | `GET /catalog/summary` | **new (A3)** |
 | Tab "Favorites" | `listFavoriteTracks` | ok |
 | "86 favorites" | `GET /me/favorites/summary` | **new (A4)** |
-| Play all | `GET /tracks` paged | **new (A1)** |
+| Play all | `GET /tracks` paged, one page at a time as the queue needs it (4.1) | **new (A1)** |
 | Shuffle the whole library | `GET /tracks/random` | **new (B1)** |
 | Search launcher in the head, Ctrl/Cmd+K (one global search, see 7.5) | `search` | ok |
 | Row thumbnail | `Track.album.cover.url` + `size=256` | ok |
@@ -141,7 +143,7 @@ Legend: **ok** = covered by an existing operation; **new** = needs an addition f
 | Field, chips All / Artists / Albums / Songs | `search?types=` | ok |
 | Top result | chosen by the client (see 4.6) | client rule |
 | Songs, Artists ("2 albums"), Albums | `SearchResult` | ok |
-| "Show all 9" | no total in `SearchResult`: label becomes "Show all" (see 4.6) | client rule |
+| "Show all 9" | no total and no cursor in `search`: "Show all" shows up to 50 (see 4.6) | client rule |
 
 ### Now playing
 
@@ -170,7 +172,7 @@ Legend: **ok** = covered by an existing operation; **new** = needs an addition f
 | "Where you're signed in": device, Browser or App, last use, expiry, "This device" | `listSessions` | ok |
 | Sign out one session | `revokeSession` | ok |
 | Sign out everywhere else | one `revokeSession` per session, or `DELETE /me/sessions` | ok / **new (B3)** |
-| Playback: Volume leveling (Automatic / Off), Single-key shortcuts | stored in the browser; shared with the mobile app only with `GET/PUT /me/settings` | client / **new (B5, P3)** |
+| Playback: Volume leveling (Automatic / Off), Single-key shortcuts | stored in the browser; shared with the mobile app only with `GET`/`PATCH /me/settings` | client / **new (B5, P3)** |
 
 ### Queue panel (Albums board) and Now playing queue
 
@@ -225,10 +227,11 @@ Legend: **ok** = covered by an existing operation; **new** = needs an addition f
   - `title`: by title, then id;
   - `artist`: by the track's artist, then album title, album id, disc, number, id;
   - `album`: by album title, then album id, disc, number, id (the order of the album page, album after album);
-  - `added`: by the moment Vibrance first saw the track, then id.
+  - `added`: by the moment Vibrance first saw the audio of the track, then id. A track that MusicLib moves to another album gets a new id (its playlist items and favorites follow it, DESIGN.md errata "i riferimenti seguono l'audio"), but it keeps the moment of the track it replaces: a move does not make it recently added.
 - `order=desc` reverses the whole order, as for albums.
 - Names and titles sort as in `listArtists` (`x/text/collate`, numeric, §5.5).
 - `artist=<id>` keeps the tracks of the albums of that artist (the album artist, as `listAlbums?artist=`). An id that is no artist's gives an empty list, not an error.
+- **Two meanings of "artist", on purpose.** `sort=artist` orders by `Track.artist`, the artist of the song that the row shows: in a compilation each song sorts under its own artist. `artist=<id>` filters by the album artist, the only artist that is an entity (§5.3), the one "Go to artist" opens. So the Artist page of a guest who sings one song of a compilation does not list that song; that is the limit of §5.3, not of this endpoint.
 - The cursor belongs to the `sort` and the `order` it was read with: with others, `400 invalid_cursor` (§8.5).
 - `favorite` is computed for the user of the request, as everywhere.
 
@@ -245,12 +248,16 @@ Legend: **ok** = covered by an existing operation; **new** = needs an addition f
         - `artist`: by the artist of the track, then album title, album, disc
           and number;
         - `album`: by album title, then album, disc and number;
-        - `added`: by the moment Vibrance first saw the track.
+        - `added`: by the moment Vibrance first saw the audio of the
+          track; a track that MusicLib moves to another album keeps the
+          moment of the track it replaces.
 
-        Titles and names are ordered as for `GET /artists`, and tracks that
-        tie on every key by id, so the order is total. `order=desc` reverses
-        the whole order. `artist` keeps only the tracks of the albums of one
-        artist; an id that is no artist's gives an empty list. A cursor
+        `sort=artist` orders by the artist of each track (`artist` of the
+        track), while the parameter `artist` filters by the artist of the
+        album. Titles and names are ordered as for `GET /artists`, and tracks
+        that tie on every key by id, so the order is total. `order=desc`
+        reverses the whole order. `artist` keeps only the tracks of the
+        albums of one artist; an id that is no artist's gives an empty list. A cursor
         belongs to the `sort` and the `order` it was read with: with others
         it answers `400 invalid_cursor`.
       parameters:
@@ -319,7 +326,7 @@ Legend: **ok** = covered by an existing operation; **new** = needs an addition f
 - `tracks` has no sort keys today. A new migration adds:
   - `title_key BLOB` and `artist_key BLOB`, computed from `tracks.title` and `tracks.artist` with the same collation as `albums.title_key`;
   - `album_key BLOB`, a copy of `albums.title_key` so that keyset pages need no join, as `albums.artist_key` does;
-  - `first_seen_at INTEGER`. For existing rows it can be backfilled with the album's `first_seen_at`.
+  - `first_seen_at INTEGER`. For existing rows it is backfilled with the album's `first_seen_at`. A new row takes the `first_seen_at` of the unavailable row with the same fingerprint whose references it takes over (the same pairing the scanner already makes when references follow the audio), and the moment of the cycle when there is none.
 - The scanner keeps these columns up to date in the same transaction as the rest of the row. The collation rebuild of T26 recomputes them too.
 - Indexes, checked with `EXPLAIN QUERY PLAN` as in §8.5:
   - `tracks(available, title_key, id)`;
@@ -331,6 +338,7 @@ Legend: **ok** = covered by an existing operation; **new** = needs an addition f
   - the property test of §8.5 (pages joined equal the full sorted list) for each `sort` and `order`;
   - `invalid_cursor` across sorts;
   - unavailable tracks never listed;
+  - a moved track keeps its place in `sort=added` (the scenario of S23 with a real move);
   - authorization matrix entry (I6) and OpenAPI conformance (I10).
 
 ### A2. `Playlist.covers`: the covers that make the mosaic
@@ -560,7 +568,8 @@ The route `/me/favorites/summary` sits beside `/me/favorites/tracks` and does no
 
 **Notes.**
 
-- The route `/tracks/random` must be matched before `/tracks/{id}`. `random` is not a UUID, so `{id}` would answer `400` anyway; check the router order with a test.
+- The router is `net/http`'s `ServeMux` (`std-http-server`), which always prefers the more specific pattern: `GET /api/v1/tracks/random` wins over `GET /api/v1/tracks/{id}` whatever the order of registration. A test still checks that `/tracks/random` answers the list and not `400 invalid_request`.
+- The client spreads the songs of each artist and album inside each answer (7.9); it cannot spread across answers, and a later answer may repeat a song.
 - The method of choosing (for example random `seq` values, or `ORDER BY random()` on the available ids) is chosen by measurement (§2.1), with the 50,000-track library of S24.
 
 ### B2 (P2). `POST /me/favorites/tracks`: several favorites at once
@@ -573,7 +582,7 @@ The route `/me/favorites/summary` sits beside `/me/favorites/tracks` and does no
 - All or nothing.
 - Unknown ids answer `422 unknown_track` with the ids in `details`, as `addPlaylistItems` does.
 - Unavailable tracks are accepted, as in `addFavoriteTrack`.
-- The tracks are made favorites in the order given, so the first id ends up the most recent.
+- The favorites list orders by `favorited_at`, then by track id (`sql/favorites.sql`), and `favorited_at` is in milliseconds: one timestamp for the whole request would leave the songs of an album in the order of their random ids. So the new favorites get `favorited_at` one millisecond apart: the first id `now`, the second `now − 1`, and so on. The list, the most recent first, then shows them in the order of the request, as the album shows them. An id repeated in the request counts once, at its first place.
 
 ```yaml
   /me/favorites/tracks:
@@ -584,9 +593,14 @@ The route `/me/favorites/summary` sits beside `/me/favorites/tracks` and does no
       description: |
         Makes every track of `track_ids` a favorite, in one transaction: all
         or nothing. Idempotent: a track that is a favorite already stays one,
-        with the date it had. `422 unknown_track` when an id is no track's;
-        `details.track_ids` lists those ids. A track that is not available
-        can be made a favorite.
+        with the date it had. The new favorites get dates one millisecond
+        apart, the first id the most recent, so the list of favorites shows
+        them in the order of the request; a repeated id counts once, at its
+        first place. `422 unknown_track` when an id is no track's;
+        `details.track_ids` lists those ids, each once, in the order of the
+        request. A track that is not available can be made a favorite.
+      parameters:
+        - $ref: "#/components/parameters/XVibranceRequest"
       requestBody:
         required: true
         content:
@@ -647,6 +661,8 @@ The route `/me/favorites/summary` sits beside `/me/favorites/tracks` and does no
         Revokes every session of the user of the request except the one of
         this request. Idempotent: with no other session the answer is `204`
         all the same.
+      parameters:
+        - $ref: "#/components/parameters/XVibranceRequest"
       responses:
         "204":
           description: The other sessions are revoked.
@@ -729,14 +745,16 @@ The route `/me/favorites/summary` sits beside `/me/favorites/tracks` and does no
 
 It needs an index on `playlist_items(track_id, playlist_id)`, which does not exist today.
 
-### B5 (P3). `GET` and `PUT /me/settings`: the same preferences on every device
+### B5 (P3). `GET` and `PATCH /me/settings`: the same preferences on every device
 
-**Why.** Account has a "Playback" section: volume leveling and single-key shortcuts. In the browser they live in `localStorage`, so they differ between the laptop and the future mobile app. The UI works without this endpoint.
+**Why.** Account has a "Playback" section, volume leveling and single-key shortcuts, and the sidebar has the theme. In the browser they live in `localStorage`, so they differ between the laptop and the future mobile app. The UI works without this endpoint.
 
 **Behavior.**
 
 - `GET` answers the settings of the user of the request. A user who never saved any gets the defaults.
-- `PUT` replaces the whole object: every field is required, and unknown keys are refused (§8.1).
+- `PATCH` changes only the fields it sends; the others keep their value. Unknown keys are refused (§8.1). The answer is the whole object.
+- **Why not `PUT` of the whole object:** with every field required, a later version that adds a setting would refuse with `400` every save of an app that does not know it yet, which is not compatible inside `/api/v1`. With `PATCH` an older client sends only what it knows.
+- A future setting is a new optional field of `SettingsUpdate` and a new required field of `Settings`, with its default for the users who never set it.
 - The settings are not secret, and they are deleted with the account.
 
 ```yaml
@@ -766,16 +784,19 @@ It needs an index on `playlist_items(track_id, playlist_id)`, which does not exi
           $ref: "#/components/responses/Internal"
         "503":
           $ref: "#/components/responses/Unavailable"
-    put:
+    patch:
       operationId: updateSettings
       tags: [Account]
-      summary: Replace the preferences of the user
+      summary: Change some preferences of the user
+      description: The fields sent take their new value; the others keep theirs. The answer is every preference.
+      parameters:
+        - $ref: "#/components/parameters/XVibranceRequest"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/Settings"
+              $ref: "#/components/schemas/SettingsUpdate"
       responses:
         "200":
           description: The preferences as saved.
@@ -792,6 +813,8 @@ It needs an index on `playlist_items(track_id, playlist_id)`, which does not exi
           $ref: "#/components/responses/Unauthorized"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
         "421":
           $ref: "#/components/responses/MisdirectedRequest"
         "500":
@@ -803,16 +826,15 @@ It needs an index on `playlist_items(track_id, playlist_id)`, which does not exi
     Settings:
       type: object
       description: "The preferences of a user, the same on every device."
-      additionalProperties: false
       required: [volume_leveling, single_key_shortcuts, theme]
       properties:
         volume_leveling:
           type: string
-          enum: [automatic, off]
+          enum: [automatic, "off"]
           description: "`automatic`: the album gain for the songs of an album played in order, the track gain otherwise (section 7.10)."
         single_key_shortcuts:
           type: boolean
-          description: Whether L, Q, S, R, M and F work without a modifier (WCAG 2.1.4).
+          description: Whether L, Q, S, R, M, F, `/` and `?` work without a modifier (WCAG 2.1.4).
         theme:
           type: string
           enum: [dark, light]
@@ -820,13 +842,34 @@ It needs an index on `playlist_items(track_id, playlist_id)`, which does not exi
         volume_leveling: automatic
         single_key_shortcuts: false
         theme: dark
+    SettingsUpdate:
+      type: object
+      description: "The preferences to change; the ones left out keep their value."
+      additionalProperties: false
+      properties:
+        volume_leveling:
+          type: string
+          enum: [automatic, "off"]
+        single_key_shortcuts:
+          type: boolean
+        theme:
+          type: string
+          enum: [dark, light]
+      example:
+        theme: light
 ```
+
+`"off"` is quoted: a YAML 1.1 parser reads a bare `off` as the boolean `false`.
+
+The defaults are `automatic`, `false` and `dark`. The settings live in a new table keyed by the user, deleted with the account (`ON DELETE CASCADE`); a user without a row gets the defaults, and the first `PATCH` creates the row.
 
 ### B6 (P3). Gapless playback data on `Track.format`
 
 **Why.** Albums that run one song into the next (live, classical, concept albums) need no gap. DESIGN.md D.3 lists true gapless as a future idea: it needs the encoder delay and padding of each file.
 
-The client can already shorten the gap without this, by fetching the start of the next song during the last 15–20 seconds (section 7.12). The data is needed only to remove the gap completely. MP3 and AAC add silent samples at the start and at the end of each file: LAME adds 576 padding samples, for example. The client removes them only if it knows how many there are. FLAC is sample-exact and needs nothing.
+The client can already shorten the gap without this, by fetching the start of the next song during the last 15–20 seconds (section 7.12). The data is needed only to remove the gap completely. MP3 and AAC add silent samples at the start of each file (the encoder delay: 576 samples for LAME, plus the decoder's 529) and at the end (the padding, which fills the last frame and differs from file to file). The client removes them only if it knows how many there are. FLAC and ALAC are sample-exact and need nothing.
+
+The data alone does not make playback gapless: an `<audio>` element always leaves a gap. The client must decode and join the songs itself, with Media Source Extensions or Web Audio (section 7.12), and that is a client step of its own.
 
 ```yaml
 # components/schemas/AudioFormat: a new optional-valued field, always present
@@ -836,7 +879,7 @@ The client can already shorten the gap without this, by fetching the start of th
           description: |
             The silent samples the encoder added, from the LAME/Xing header of
             an MP3 or the iTunSMPB tag or edit list of an MP4. `null` when the
-            file declares none, which is the case of FLAC.
+            file declares none, which is the case of FLAC and ALAC.
           required: [encoder_delay_samples, padding_samples]
           properties:
             encoder_delay_samples:
@@ -849,11 +892,28 @@ The client can already shorten the gap without this, by fetching the start of th
 
 The scanner would read these values with the pinned `ffprobe` while it indexes the album, and store them in two new columns of `tracks`. Whether the pinned `ffprobe` exposes them for every codec must be checked first, with a spike like S1.
 
+### C1. Serving the web UI
+
+**Why.** The UI of `web/ui` is plain HTML, CSS and ES modules, with no build step, and it uses only the public API (DESIGN.md D.3). Today `/` redirects to `/api/docs` (D20) and nothing serves the UI. These are not operations of the API, so they are not in `api/openapi.yaml`: they are infrastructure routes like `/api/docs` (§8.3), listed by name in the authorization matrix (§12.4).
+
+**Behavior.**
+
+- The files of `web/ui` are embedded in the binary (`go:embed`, package `web`) and served at the root with their path: `/app.js`, `/app.css`, `/views/album.js`, `/fonts/…`. GET and HEAD only; any other method answers `405`.
+- `GET /login` serves `login.html`. Every other `GET` of a path that is not a file of `web/ui` and not under `/api/` or `/health/` serves `index.html` with `200`: the client's router shows the page, or its own "not found". `/` serves `index.html` and no longer redirects to `/api/docs`; the documentation stays at `/api/docs`.
+- No session is needed: the pages hold no data, and the client goes to `/login` when the API answers `401`. The rules of I4 on `Host` and `Origin` apply as on every route.
+- `Content-Type` by extension (`text/html; charset=utf-8`, `text/javascript; charset=utf-8`, `text/css; charset=utf-8`, `image/svg+xml`, `font/woff2`), `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`, an `ETag` that is the SHA-256 of the file with `304` on `If-None-Match`, and `Cache-Control: no-cache`: the file names carry no hash, so a new release must be fetched again.
+- The HTML pages carry `Content-Security-Policy: default-src 'self'; img-src 'self' data:; media-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'` and `X-Frame-Options: DENY`. The UI was written for `default-src 'self'`: no inline script, no inline style attribute, nothing from another host.
+- `THIRD_PARTY_NOTICES.md` and `licenses/` list the vendored Hanken Grotesk font (SIL OFL 1.1), as for every vendored file.
+
+**Tests.** Every file of `web/ui` is served with its type and its `ETag`; a client route (`/albums/<id>`) gives `index.html`; `/api/v1/nothing` stays a JSON `404` of the API, never `index.html`; `/login` gives `login.html`; the CSP header is on the pages; a `POST /` answers `405`; a path with `..` or a percent-encoded slash serves nothing outside `web/ui` (I2: the path chooses only among the embedded files).
+
 ## 4. Client rules (no API change)
 
 ### 4.1 The queue
 
 Play, Play next, Add to queue, Up next, Clear queue, shuffle, repeat and "Playing from …" live in the client. The server streams one track at a time with `Range` (§9.1). Section 7.8 says how the queue behaves.
+
+A context can be the whole library: 50,000 songs in `GET /tracks` are about 50 MB of JSON. So the queue keeps the context as a request (the endpoint, its `sort`, `order` and filter) and the cursor of its next page, and reads the next page when fewer than 20 songs are left. Shuffle of the library or of an artist reads `GET /tracks/random` the same way (B1).
 
 ### 4.2 "Go to artist" from a track
 
@@ -884,7 +944,7 @@ The badge is derived from `AlbumDetail.tracks[].format`:
   1. an artist whose name equals the query, ignoring case and accents;
   2. otherwise an album whose title starts with the query;
   3. otherwise the first track.
-- There are no totals. "Show all 9" becomes "Show all", which asks `types=track&limit=50`.
+- There are no totals and no cursor, and `limit` is at most 50. "Show all 9" becomes "Show all", which asks `types=track&limit=50` and shows up to 50 songs. When 50 come back, the list ends with "Showing the first 50. Type more words to narrow the search." A paginated search is not part of this proposal.
 - Highlighting of the matched words is done in the client.
 
 ### 4.7 Other details
@@ -899,7 +959,7 @@ The badge is derived from `AlbumDetail.tracks[].format`:
 
 ## 5. Out of scope on purpose (DESIGN.md §1.3)
 
-The mockups do not show these, and they need an owner decision before any work:
+The owner's approval of 2026-10-06 covers sections 2 and 3 only. The mockups do not show these, and they still need an owner decision before any work:
 
 - favorites of albums and artists (the album menu has "Add all songs to favorites" instead);
 - listening history, "Recently played", a home page built from history, scrobbling;
@@ -922,12 +982,14 @@ The research of section 7 raises three more decisions for the owner. All three a
 
 ## 6. Suggested order
 
-1. **A1 `GET /tracks`.** It needs a migration with new sort keys and the scanner's upkeep. It is the largest piece and unlocks Library and Artist.
-2. **A2 `Playlist.covers`.** Measure again with 500 playlists.
-3. **A3 and A4,** the summaries. They are small queries.
-4. **B1, B2, B3.**
-5. **B4, B5,** only if wanted.
-6. **B6,** after a spike on what the pinned `ffprobe` reports.
+The errata of DESIGN.md of 2026-10-06 makes these the steps W1–W6 of the plan, on the branch `dev-web-ui`:
+
+1. **W1: A1 `GET /tracks`.** A migration with the new sort keys and `first_seen_at`, and the scanner's upkeep. It is the largest piece and unlocks Library and Artist.
+2. **W2: A2 `Playlist.covers`, A3 and A4,** the summaries. Measure again with 500 playlists.
+3. **W3: B1, B2, B3 and B4,** with the index on `playlist_items(track_id, playlist_id)`.
+4. **W4: B5,** the settings, with their table.
+5. **W5: B6,** after a spike on what the pinned `ffprobe` reports. If the spike shows that it cannot give the values for every codec, the step stops with a `BLOCCO:` and `gapless` is not added.
+6. **W6: C1,** the serving of the web UI.
 
 Each step updates `api/openapi.yaml`, regenerates `internal/api` with `scripts/generate.sh`, and adds:
 
@@ -991,9 +1053,13 @@ The often-quoted 400 ms "Doherty threshold" is **not** in the 1982 IBM report it
 - **Undo of "Remove from this playlist".** Adding the item back would create a new item, with a new `item_id` and a new `added_at`, so it is not used. Instead the client:
   1. hides the row at once;
   2. sends `DELETE /playlists/{id}/items/{item_id}` only when the toast ends;
-  3. on page hide, sends it with `fetch(..., {keepalive: true})`, with `X-Vibrance-Request: 1` and the `If-Match` it holds.
+  3. on page hide (`visibilitychange` to hidden, and `pagehide`), sends it with `fetch(..., {keepalive: true})` and `X-Vibrance-Request: 1`.
 
   Undo then simply shows the row again.
+
+  The deferred `DELETE` is sent **without** `If-Match`. It names the item by its id, not by its position, so a change made in between does not make it wrong; and the client's tag may be old by then (a second removal, a move), which would make it fail with `412` at page hide, where nobody sees the answer, and the song would come back.
+
+  While a removal waits, the client's positions are not the server's: positions count every item (§8.6), the hidden one included. So before any change that sends a position (a move, an insertion at a position) the client first sends the waiting `DELETE`s and waits for their answers; the toasts of those removals then end without Undo.
 
 ### 7.3 Loading
 
@@ -1040,7 +1106,7 @@ Rules:
   - The submenu stays open for about 300 ms after the pointer leaves, or has a safe triangle [21].
   - → opens it and Esc closes it.
 - **Add to playlist.** The submenu adds one song in one click and closes. The sheet with check boxes is only for several selected songs.
-- **One global search** (sidebar Search, Ctrl/Cmd+K, `/`). The fields that were in the heads of Library and Albums became launchers of it.
+- **One global search** (sidebar Search, Ctrl/Cmd+K, and `/` when single-key shortcuts are on, 7.6). The fields that were in the heads of Library and Albums became launchers of it.
   - Results appear while typing, about 200 ms after the last key. The previous results stay until the new ones arrive.
   - The empty state says how search matches: names, from the first letters of each word.
 
@@ -1054,8 +1120,9 @@ WCAG 2.1.4 (Level A) [28]: a shortcut made of a single character key must be pos
   - Ctrl/Cmd+←/→: previous and next song;
   - Esc: close menus, sheets and Now playing;
   - Enter: play from the selected row;
-  - ?: the shortcuts sheet.
-- **Single-key shortcuts,** off by default and turned on in Account › Playback: L lyrics, Q queue, S shuffle, R repeat, M mute, F Now playing on the whole screen.
+  - Ctrl/Cmd+/: the shortcuts sheet.
+- **Single-key shortcuts,** off by default and turned on in Account › Playback: L lyrics, Q queue, S shuffle, R repeat, M mute, F Now playing on the whole screen, `/` search and `?` the shortcuts sheet. `/` and `?` are single character keys too (a symbol, with or without Shift), so 2.1.4 applies to them as to the letters.
+- Space and Enter act only when no field has the focus, and on the element that has it, as the platform does.
 - Spotify's official list [53] is the reference users know: Ctrl/Cmd+K search, Space play/pause, and a help sheet on Ctrl/Cmd+/.
 
 ### 7.7 Control outside the page
@@ -1130,6 +1197,7 @@ The API already gives `replay_gain` with the peaks.
   - Songs without `replay_gain` play unchanged.
 - **Off.**
 - Apply it with a Web Audio `GainNode`, because `audio.volume` can only lower the level. The setting lives in Account › Playback.
+- **To check on the devices.** Sending the `<audio>` element through an `AudioContext` changes how some mobile browsers treat it: Safari on iOS may suspend the context when the page goes to the background or the screen locks. Before the UI is called ready for phones, check background playback and the lock screen with leveling on. If it fails there, that browser plays without leveling, with only the attenuation that `audio.volume` can give, and Account says so.
 
 ### 7.11 Lyrics
 
@@ -1152,7 +1220,7 @@ Rules:
 
 ### 7.12 Gaps between songs
 
-Fetch the start of the next song during the last 15–20 seconds, so it starts without a wait. Removing the gap entirely needs the encoder delay and padding of MP3 and AAC [59], which is B6.
+Fetch the start of the next song during the last 15–20 seconds, so it starts without a wait. Removing the gap entirely needs the encoder delay and padding of MP3 and AAC [59], which is B6, and a player that decodes and joins the songs itself (Media Source Extensions or Web Audio): an `<audio>` element alone always leaves a gap.
 
 Crossfade stays off: it would spoil live and continuous albums, and there is no setting for it.
 
@@ -1170,7 +1238,7 @@ Music–color associations go through emotion: fast music in a major key brings 
 
 For people with normal vision, light mode reads better, and the more so the smaller the text [23]. **Strong.**
 
-Dark stays the reference theme for a player, but the light theme must be complete. Long pages such as Account and Administration must read well in it. The theme is chosen by the person (`Settings.theme`, B5).
+Dark stays the reference theme for a player, but the light theme must be complete. Long pages such as Account and Administration must read well in it. The theme is chosen by the person (`Settings.theme`, B5); the browser keeps a copy in `localStorage`, so the first paint has the right theme before the API answers.
 
 ### 7.15 Empty states
 
