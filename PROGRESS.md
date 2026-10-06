@@ -36,7 +36,7 @@ Design: DESIGN.md (versione 0.1). Orchestratore: aggiorna questo file a ogni pas
 | R1 | Testi: marca a tre campi, righe vuote, tag di intestazione | done | 1 | b46cd60 | 2026-10-06 · passo aggiunto dall'errata dopo le decisioni dell'utente · tre file `.lrc` e un confronto su 400.000 file casuali fatti dal revisore |
 | R2 | Contratto dell'API: header dichiarato, `ETag` sulle playlist, cookie | done | 1 | 7e01c93 | 2026-10-06 · `/api/docs` provata in Chromium dal revisore (l'header parte da solo), confine provato con `curl`, contratto verde |
 | R3 | Ricerca: query in NFC e `vibrance rebuild-search` | done | 1 | 6890c24 | 2026-10-06 · indice rovinato e riparato a mano dal revisore sul server vero; 8.065 ricerche durante 15 ricostruzioni senza un errore; prestazioni della ricerca invariate |
-| R4 | Operatività e cover: `stop_grace_period`, cover enormi, verifica finale | done | 1 | HASH | 2026-10-06 · verifica finale del revisore sull'albero finale: gate, contratto, smoke, prestazioni, `govulncheck` (0 raggiungibili), immagine runtime, migrazioni identiche a S24 · pronto per il tag |
+| R4 | Operatività e cover: `stop_grace_period`, cover enormi, verifica finale | done | 1 | 9cdf780 | 2026-10-06 · verifica finale del revisore sull'albero finale: gate, contratto, smoke, prestazioni, `govulncheck` (0 raggiungibili), immagine runtime, migrazioni identiche a S24 · pronto per il tag |
 
 Stati: `todo`, `in-progress`, `done`, `blocked`.
 
