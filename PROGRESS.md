@@ -38,7 +38,7 @@ Design: DESIGN.md (versione 0.1). Orchestratore: aggiorna questo file a ogni pas
 | R3 | Ricerca: query in NFC e `vibrance rebuild-search` | done | 1 | 6890c24 | 2026-10-06 · indice rovinato e riparato a mano dal revisore sul server vero; 8.065 ricerche durante 15 ricostruzioni senza un errore; prestazioni della ricerca invariate |
 | R4 | Operatività e cover: `stop_grace_period`, cover enormi, verifica finale | done | 1 | 9cdf780 | 2026-10-06 · verifica finale del revisore sull'albero finale: gate, contratto, smoke, prestazioni, `govulncheck` (0 raggiungibili), immagine runtime, migrazioni identiche a S24 · pronto per il tag |
 | W1 | `GET /tracks` (proposta A1) | done | 1 | 288c872 | 2026-10-06 · branch `dev-web-ui` · pagine scorse a mano con `curl` dal revisore su un database 0.1.0 migrato; perf: pagina di 50 p95 ≤ 3,6 ms, `?artist=` dell'artista più grande p95 9,5–10,5 ms (budget 30 ms); contratto A1–A20 verde; N-183 da confermare |
-| F1 | `TestLibraryStatusConcurrently` deterministico | todo | | | branch `dev-web-ui` · prima di W2 |
+| F1 | `TestLibraryStatusConcurrently` deterministico | done | 1 | 41ed37a | 2026-10-06 · branch `dev-web-ui` · causa riprodotta dal revisore (7 su 150 sul vecchio test): un ciclo accodato fra due letture; ora 300/300 senza `-race` e 100/100 con; il server non cambia |
 | W2 | Copertine delle playlist e riepiloghi (A2, A3, A4) | todo | | | branch `dev-web-ui` |
 | W3 | Casuale, preferiti in blocco, sessioni, playlist di una traccia (B1–B4) | todo | | | branch `dev-web-ui` |
 | W4 | Impostazioni (B5) | todo | | | branch `dev-web-ui` |
