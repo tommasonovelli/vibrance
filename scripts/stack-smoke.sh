@@ -194,6 +194,9 @@ check_config() {
     fi
   done
   service_of "${model}" caddy | grep '^    ports:' >/dev/null || die "compose.caddy.yaml publishes no port for Caddy"
+  # Longer than the 10 s the server gives its open requests at a stop.
+  service_of "${model}" vibrance | grep -x '    stop_grace_period: 15s' >/dev/null \
+    || die "the service vibrance has not stop_grace_period: 15s"
 }
 
 check_sync() {

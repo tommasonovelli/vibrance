@@ -26,6 +26,13 @@ const (
 	maxCoverPixels = 40_000_000
 )
 
+// alonePixels is the size over which a cover is decoded alone. Measured
+// (TestPerfThumbnailMemory): one cover of 40 megapixels takes 260 to 440 MB
+// while its thumbnail is made, by its shape and the depth of its samples,
+// so two of them together would take twice that; two of 16 megapixels
+// together take 285 to 410 MB, no more than the one of 40.
+const alonePixels = 16_000_000
+
 // jpegQuality is the quality of the thumbnails.
 const jpegQuality = 85
 
@@ -146,16 +153,20 @@ func (s *Service) generate(ctx context.Context, a album, size Size, path string)
 }
 
 // build is the pipeline of §9.2, with at most decodeSlots covers in memory
-// at once.
+// at once, and a cover of more than alonePixels alone.
 func (s *Service) build(ctx context.Context, a album, size Size, path string) error {
 	// Another flight may have made it since the caller looked.
 	if f, err := openThumb(path, size); err == nil {
 		return f.Close()
 	}
-	if err := s.decodes.Acquire(ctx, 1); err != nil {
+	// The slots are asked for before the file is read whole, so that only
+	// the covers that have them are in memory: the header is enough to know
+	// how many.
+	slots := s.slotsOf(a)
+	if err := s.decodes.Acquire(ctx, slots); err != nil {
 		return err
 	}
-	defer s.decodes.Release(1)
+	defer s.decodes.Release(slots)
 	if s.decoding != nil {
 		s.decoding()
 	}
@@ -163,11 +174,44 @@ func (s *Service) build(ctx context.Context, a album, size Size, path string) er
 	if err != nil {
 		return err
 	}
+	// The header was read from the file as it was then, the bytes are those
+	// of the index: if they ask for more slots than are held, the file was
+	// another one a moment ago, and a large cover is not decoded next to
+	// another for that.
+	if slotsFor(bytes.NewReader(data)) > slots {
+		return stale(a, "changed while its thumbnail was being made")
+	}
 	thumb, err := render(data, int(size))
 	if err != nil {
 		return err
 	}
 	return writeAtomic(path, thumb)
+}
+
+// slotsOf is how many decode slots the cover of a takes, from the header of
+// its file: all of them over alonePixels, otherwise one. A file whose header
+// cannot be read takes one: readCover, which reads the same file next, says
+// what is wrong with it.
+func (s *Service) slotsOf(a album) int64 {
+	f, err := s.root.Open(a.file())
+	if err != nil {
+		return 1
+	}
+	slots := slotsFor(io.LimitReader(f, maxCoverBytes))
+	if err := f.Close(); err != nil {
+		s.log.Warn("a cover file cannot be closed", "path", a.file(), "err", err.Error())
+	}
+	return slots
+}
+
+// slotsFor reads the header of an image and returns the decode slots it
+// takes.
+func slotsFor(r io.Reader) int64 {
+	config, _, err := image.DecodeConfig(r)
+	if err == nil && int64(config.Width)*int64(config.Height) > alonePixels {
+		return decodeSlots
+	}
+	return 1
 }
 
 // readCover reads the whole cover file, at most maxCoverBytes of it, and

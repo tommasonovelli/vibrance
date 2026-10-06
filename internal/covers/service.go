@@ -71,8 +71,8 @@ type Cover struct {
 	SHA256 string
 }
 
-// decodeSlots is how many covers are decoded at once (T20): a decoded cover
-// of 40 megapixels takes 160 MB.
+// decodeSlots is how many covers are decoded at once (T20). A cover of more
+// than alonePixels takes all the slots, so it is decoded alone.
 const decodeSlots = 2
 
 // Service serves the covers of the albums of the index. It is safe for
@@ -95,7 +95,7 @@ type Service struct {
 	wake  chan struct{}
 
 	// decoding, if not nil, is called each time a thumbnail is about to be
-	// made, with a decode slot held. Only the tests set it.
+	// made, with its decode slots held. Only the tests set it.
 	decoding func()
 }
 

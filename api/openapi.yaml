@@ -93,16 +93,17 @@ info:
     of the body (a proxy may weaken or drop the header; the field is always
     right). Every answer that carries one playlist has the header: reading
     it, creating it, a page of its items, and every change of it, with the
-    tag of the new revision. Send it back as `If-Match` to make a change only if nobody changed
-    the playlist in between: a tag of an older revision answers
-    `412 precondition_failed`, and nothing is changed. A `W/` prefix is
-    ignored, and the header may list several tags, separated by commas: one
-    of them must be the current one. `*` is not the tag of a revision, and
-    answers `412` like any other text. `If-Match` is required where a change
-    depends on positions (inserting at a position, moving an item): without
-    it the answer is `428 precondition_required`. Elsewhere it is optional,
-    and checked when sent. A playlist that does not exist, or is of another
-    user, answers `404 playlist_not_found` whatever the header says.
+    tag of the new revision. Send it back as `If-Match` to make a change
+    only if nobody changed the playlist in between: a tag of an older
+    revision answers `412 precondition_failed`, and nothing is changed. A
+    `W/` prefix is ignored, and the header may list several tags, separated
+    by commas: one of them must be the current one. `*` is not the tag of a
+    revision, and answers `412` like any other text. `If-Match` is required
+    where a change depends on positions (inserting at a position, moving an
+    item): without it the answer is `428 precondition_required`. Elsewhere
+    it is optional, and checked when sent. A playlist that does not exist,
+    or is of another user, answers `404 playlist_not_found` whatever the
+    header says.
 
     ## Outside this document
 
@@ -2067,8 +2068,8 @@ components:
         `origin_not_allowed`: `Origin` was sent and is not the public origin
         of the server. `request_header_required`: a request other than GET
         and HEAD without `X-Vibrance-Request: 1`, or with another value or
-        with the header twice. `forbidden`: the operation
-        is for admins and the user is not one.
+        with the header twice. `forbidden`: the operation is for admins and
+        the user is not one.
       headers:
         X-Request-Id:
           $ref: "#/components/headers/X-Request-Id"

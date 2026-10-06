@@ -561,6 +561,164 @@ func TestAtMostTwoCoversAreDecodedAtOnce(t *testing.T) {
 	}
 }
 
+// The decode slots a cover takes are read from its header alone (§9.2): all
+// of them over 16 megapixels, one otherwise, and one when the header cannot
+// be read.
+func TestSlotsOfACover(t *testing.T) {
+	jpeg := encodeJPEG(t, halves(1200, 800, red, blue))
+	for _, tc := range []struct {
+		name string
+		data []byte
+		want int64
+	}{
+		{"a small JPEG", jpeg, 1},
+		{"exactly 16 megapixels", blackPNG(t, 4000, 4000, false), 1},
+		{"one row over 16 megapixels", blackPNG(t, 4000, 4001, false), decodeSlots},
+		{"40 megapixels", blackPNG(t, 8000, 5000, false), decodeSlots},
+		{"more than a thumbnail is made of", blackPNG(t, 65_535, 65_535, false), decodeSlots},
+		{"a JPEG cut before its size", jpeg[:10], 1},
+		{"not an image", []byte("not an image at all"), 1},
+		{"an empty file", nil, 1},
+	} {
+		if got := slotsFor(bytes.NewReader(tc.data)); got != tc.want {
+			t.Errorf("%s: %d decode slots, want %d", tc.name, got, tc.want)
+		}
+	}
+}
+
+// A cover of more than 16 megapixels is decoded alone: while it is, no other
+// cover is, and the two that waited are then decoded together.
+func TestALargeCoverIsDecodedAlone(t *testing.T) {
+	e := newEnv(t)
+	release := make(chan struct{})
+	e.s.decoding = func() {
+		e.made.add()
+		<-release
+	}
+	var wg sync.WaitGroup
+	request := func(a testAlbum) {
+		wg.Go(func() {
+			if _, mime := e.open(a, Thumb256); mime != "image/jpeg" {
+				t.Errorf("%s was served %s", a.rel, mime)
+			}
+		})
+	}
+	request(e.addAlbum("large", "cover.png", blackPNG(t, 4000, 4001, true)))
+	eventually(t, "the large cover is being decoded", func() bool { return e.made.get() == 1 })
+	for i := range 2 {
+		request(e.addAlbum(string(rune('a'+i)), "cover.jpg", encodeJPEG(t, halves(300+i, 300, red, blue))))
+	}
+	// The others have the time to begin, if anything let them.
+	time.Sleep(300 * time.Millisecond)
+	if n := e.made.get(); n != 1 {
+		t.Errorf("%d covers were being decoded with the large one, want it alone", n-1)
+	}
+	release <- struct{}{}
+	eventually(t, "the two small covers are being decoded together", func() bool { return e.made.get() == 3 })
+	close(release)
+	wg.Wait()
+}
+
+// A large cover waits for both slots, and the covers asked for after it do
+// not pass it: the slots are given in the order they were asked for.
+func TestALargeCoverWaitsForBothSlotsAndIsNotPassed(t *testing.T) {
+	e := newEnv(t)
+	release := make(chan struct{})
+	e.s.decoding = func() {
+		e.made.add()
+		<-release
+	}
+	var wg sync.WaitGroup
+	request := func(name string, data []byte) {
+		a := e.addAlbum(name, "cover.png", data)
+		wg.Go(func() {
+			if _, mime := e.open(a, Thumb256); mime != "image/jpeg" {
+				t.Errorf("%s was served %s", a.rel, mime)
+			}
+		})
+	}
+	// still fails the test if more than want covers have begun after a pause
+	// in which anything that could begin would have.
+	still := func(want int, when string) {
+		t.Helper()
+		time.Sleep(300 * time.Millisecond)
+		if n := e.made.get(); n != want {
+			t.Fatalf("%s: %d covers have begun to be decoded, want %d", when, n, want)
+		}
+	}
+	small := func(i int) []byte { return encodePNG(t, halves(300+i, 300, red, blue)) }
+
+	request("first", small(1))
+	request("second", small(2))
+	eventually(t, "two small covers are being decoded", func() bool { return e.made.get() == 2 })
+	request("large", blackPNG(t, 4001, 4000, true))
+	still(2, "a large cover asked for while two are being decoded")
+	request("third", small(3))
+	still(2, "a small cover asked for after the large one")
+	release <- struct{}{}
+	still(2, "one slot is free, behind a large cover that waits for both")
+	release <- struct{}{}
+	eventually(t, "the large cover is being decoded", func() bool { return e.made.get() == 3 })
+	still(3, "the large cover is being decoded")
+	release <- struct{}{}
+	eventually(t, "the last small cover is being decoded", func() bool { return e.made.get() == 4 })
+	close(release)
+	wg.Wait()
+}
+
+// Two covers of exactly 16 megapixels are decoded together: the limit is
+// "more than".
+func TestTwoCoversAtTheLimitAreDecodedTogether(t *testing.T) {
+	e := newEnv(t)
+	release := make(chan struct{})
+	e.s.decoding = func() {
+		e.made.add()
+		<-release
+	}
+	var wg sync.WaitGroup
+	for i, name := range []string{"wide", "tall"} {
+		// Two covers, not one twice: 3200 x 5000 and 5000 x 3200.
+		a := e.addAlbum(name, "cover.png", blackPNG(t, 3200+1800*i, 5000-1800*i, true))
+		wg.Go(func() {
+			if _, mime := e.open(a, Thumb256); mime != "image/jpeg" {
+				t.Errorf("%s was served %s", a.rel, mime)
+			}
+		})
+	}
+	eventually(t, "the two covers are being decoded together", func() bool { return e.made.get() == 2 })
+	close(release)
+	wg.Wait()
+}
+
+// The slots are chosen from the header of the file as it was before the
+// wait, and the cover is decoded from the bytes read after it. A file that
+// was a small image then and is the large cover of the index now is not
+// decoded with one slot: it is refused as a file that is changing, and the
+// next request makes its thumbnail.
+func TestACoverThatBecameLargeWhileItWaitedIsNotDecoded(t *testing.T) {
+	e := newEnv(t)
+	a := e.addAlbum("album", "cover.png", blackPNG(t, 4000, 4001, true))
+	if err := os.WriteFile(a.file, encodePNG(t, halves(300, 300, red, blue)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	e.s.decoding = func() {
+		e.made.add()
+		if err := os.WriteFile(a.file, a.data, 0o644); err != nil {
+			t.Error(err)
+		}
+	}
+	_, err := e.s.Open(t.Context(), a.id, Thumb256)
+	wantCode(t, err, CodeStale)
+	e.wantNoThumb(a.sha, Thumb256)
+	if n := e.made.get(); n != 1 {
+		t.Fatalf("%d thumbnails begun, want 1", n)
+	}
+
+	if _, mime := e.open(a, Thumb256); mime != "image/jpeg" {
+		t.Fatalf("the next request was served %s", mime)
+	}
+}
+
 // A request that gives up while it waits for its turn to decode does not
 // take with it the requests that were waiting for the same thumbnail.
 func TestARequestThatEndsDoesNotFailTheOthers(t *testing.T) {

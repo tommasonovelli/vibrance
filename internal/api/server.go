@@ -105,7 +105,8 @@ func Access(doc *openapi3.T) map[string]auth.Access {
 // is not well formed is refused before anyone asks who sent it. A request
 // the generated code cannot bind (a path id that is not a UUID, a parameter
 // of the wrong type or sent twice) answers 400 invalid_request before
-// both. A path of the specification asked with a method it does not have
+// both; it binds X-Vibrance-Request too, which the boundary in front of
+// the router has already required. A path of the specification asked with a method it does not have
 // answers 405 method_not_allowed, with Allow. Every other path is left to
 // mux.
 func Register(mux *http.ServeMux, doc *openapi3.T, srv StrictServerInterface, authenticate MiddlewareFunc, log *slog.Logger) {

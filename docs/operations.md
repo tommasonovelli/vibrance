@@ -114,6 +114,8 @@ Run them from `~/musiclib`:
 
 Vibrance works with MusicLib stopped: `docker compose stop app`, which MusicLib's backups use, does not touch it. It goes on serving what it has indexed; only the files MusicLib is rewriting at that moment may answer `503 library_changing` for a few seconds.
 
+Stopping Vibrance is safe at any moment. It stops at once when nothing is being served. A request that is still open, such as a track that is playing, gets 10 seconds to end; then Vibrance closes it, closes its database and exits. `compose.yaml` gives the container 15 seconds for all of this (`stop_grace_period`) before Docker kills it, and a Vibrance that is killed loses nothing: the next start recovers.
+
 > **Never run `docker compose down -v`: it deletes your library, both databases and the backup volumes.** To stop the stack, use `docker compose stop`. Plain `docker compose down` removes the containers (not the volumes); `docker compose up -d --wait` creates them again.
 
 ## Configuration
@@ -479,7 +481,8 @@ When Vibrance refuses to start, the process exits and Docker starts it again (`r
 | The state of the library is `maintenance` | MusicLib is rebuilding or restoring its library | nothing: the index stays as it is until MusicLib is done |
 | An album is missing, with a problem such as `probe_failed` | Vibrance could not read it | render it again in MusicLib; the problems of the last scan are in `GET /api/v1/admin/library` |
 | A track answers `503 library_changing` | MusicLib has just rewritten its album | try again after the seconds of `Retry-After` |
-| `docker compose stop` takes 10 seconds, or Vibrance's log ends without `stopped` | a long request, such as an audio stream, was open: Vibrance waits up to 10 seconds, then closes it | nothing: the next start recovers |
+| `docker compose stop` takes 10 seconds | a long request, such as an audio stream, was open: Vibrance waits up to 10 seconds, then closes it and exits | nothing: the log ends with `stopped` |
+| Vibrance's log ends without `stopped`, and `docker compose ps -a` shows it `Exited (137)` | the stop took more than the 15 seconds of `stop_grace_period` and Docker killed it: a request was open and, after it, the database could not be closed at once (a `backup` or a `doctor` was reading it), or `compose.yaml` is not the released one | nothing: the next start recovers |
 
 ### What Vibrance does when it starts
 
@@ -527,7 +530,8 @@ docker compose up -d --wait
 docker compose exec vibrance vibrance doctor
 ```
 
-- The second line prints `Search index rebuilt. Run vibrance doctor to check it.` It took 2.5 seconds for a library of 200,000 tracks on the machine it was measured on.
+- The second line prints `Search index rebuilt. Run vibrance doctor to check it.` It took 2.4 seconds for a library of 200,000 tracks on the machine it was measured on.
+- If you run it while Vibrance is running and writing (a scan of many new albums), it may not get its turn: it waits 5 seconds for it, then fails with `rebuild_search_failed`, and can take up to 15 seconds to exit, because it waits again to close the database.
 - The last line must print `Doctor complete: no damage found.` If it still reports a `doctor_search_` or `doctor_integrity` finding, the file itself is damaged: [restore a backup](#restoring-vibrance-only).
 - A rebuild that fails or is interrupted has changed nothing: run it again. It refuses to run without a database, or on a database of another version of Vibrance (see [the table below](#errors-of-the-maintenance-commands)).
 - Vibrance never rebuilds the search by itself, and you never need to after an update or a restore: the scanner keeps the index in step with the library. Run the command only when `doctor` says so.
