@@ -186,10 +186,10 @@ The block backs up both products first, and updates nothing if a backup fails. `
 - keep the id of a track through every change MusicLib makes to it, so that playlists and favorites never lose it; albums that leave the library are shown as unavailable, never deleted, and come back as they were;
 - give each person an account (`admin` or `user`), with sign-in by cookie for browsers and by token for apps;
 - serve artists, albums and tracks, sorted and paged; the original audio files with ranges (**FLAC**, **MP3**, **M4A** with AAC or ALAC, as MusicLib writes them); the album covers, as they are or as thumbnails; the **LRC lyrics** as structured lines, synchronised or plain with their stanzas;
-- search artists, albums and tracks as you type, without regard to case and accents;
+- search artists, albums and tracks as you type, without regard to case, accents and the way a system writes accented letters;
 - keep favorites and private playlists for each user;
 - document its API with OpenAPI, serve that document and a page to try it;
-- back up, restore and check its database.
+- back up, restore and check its database, and rebuild its search index if it is ever damaged.
 
 **It doesn't:** have a web player or an app of its own yet; convert audio (a browser plays only the formats it supports: ALAC only in Safari); change your music or its metadata (that is MusicLib's work); share playlists between users; scrobble, recommend or download anything; let people sign up by themselves. Search does not split Chinese or Japanese text into words and does not forgive typing mistakes. The documentation is in English.
 

@@ -24,14 +24,21 @@ const (
 	CodeDoctorNoAdmin       = "doctor_no_admin"
 )
 
-// The advice of the findings. Doctor repairs nothing, and nothing in
-// Vibrance repairs these: the database is written only by the server, so
-// each of them is a fault of the server or of the disk.
+// The advice of the findings. Doctor repairs nothing. The database is
+// written only by the server, so each of them is a fault of the server or
+// of the disk. What is wrong in the search is repaired by vibrance
+// rebuild-search, which makes the full-text tables again from the index of
+// the library; nothing in Vibrance repairs the rest of the file.
+//
+// PRAGMA integrity_check reads the full-text indexes too, so damage that is
+// only theirs is found twice, as doctor_integrity and as doctor_search_index:
+// the advice of the first names the case.
 const (
 	adviceDamage = "the database file is damaged: stop the server, keep the file for investigation, " +
-		"and restore the latest backup that vibrance doctor finds sound into a new state volume"
-	adviceSearch = "searches that meet this row fail or miss it; it is a fault of the index, not of the library: " +
-		"keep the database for investigation and restore the latest backup that vibrance doctor finds sound"
+		"and restore the latest backup that vibrance doctor finds sound into a new state volume; " +
+		"if every line of the damage names a search_ table, run vibrance rebuild-search and vibrance doctor again first"
+	adviceSearch = "searches that meet this row fail or miss it; it is a fault of the search index, not of the library: " +
+		"stop the server, run vibrance rebuild-search, start the server and run vibrance doctor again"
 	adviceCounters = "the lists show a wrong number of tracks or a wrong duration for this album until the scanner indexes it again"
 	adviceNoAdmin  = "nobody can administer the server: run vibrance user create --role admin, " +
 		"or vibrance user reset-password for a disabled admin and enable it again over the API"

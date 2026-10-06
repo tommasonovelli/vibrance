@@ -8,6 +8,7 @@
 //	vibrance backup       copy the database into a new, verified backup under /backup
 //	vibrance restore      put a backup in place as the database of an empty state folder
 //	vibrance doctor       inspect the database; change nothing
+//	vibrance rebuild-search  make the search index again from the index of the library
 //
 // Configuration comes only from the environment (§11.1). Logs are JSON
 // lines on stdout (§11.5).
@@ -65,10 +66,12 @@ func run(args []string, getenv func(string) string, euid int, stdin io.Reader, s
 		return restore(args[1:], euid, stdout, stateDir, backupDir, log)
 	case len(args) >= 1 && args[0] == "doctor":
 		return doctor(args[1:], euid, stdout, stateDir, log)
+	case len(args) >= 1 && args[0] == "rebuild-search":
+		return rebuildSearch(args[1:], euid, stdout, stateDir, log)
 	default:
 		// Only the number of the arguments: a mistyped command line can hold
 		// a password, and the log is kept (I5).
-		log.Error("usage: vibrance serve|healthcheck|version|user|backup|restore|doctor", "code", "usage", "args", len(args))
+		log.Error("usage: vibrance serve|healthcheck|version|user|backup|restore|doctor|rebuild-search", "code", "usage", "args", len(args))
 		return exitUsage
 	}
 }

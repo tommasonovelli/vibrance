@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -215,8 +216,11 @@ func TestBackupAndRestoreKeepEverything(t *testing.T) {
 
 // writeIndexAndUsers changes the database of w, as the server does, until
 // stop is closed: album B leaves and comes back with its full-text rows in
-// the same transaction (§10.1), and anna adds and removes a favorite.
-func (w *world) writeIndexAndUsers(stop <-chan struct{}, trackID string) (*sync.WaitGroup, *atomic.Int64) {
+// the same transaction (§10.1), and anna adds and removes a favorite. Each
+// of the two waits for pause between two writes: without a pause they hold
+// the write lock almost always, and another program that waits for it, as
+// SQLite waits, by trying again now and then, may never find it free.
+func (w *world) writeIndexAndUsers(stop <-chan struct{}, trackID string, pause time.Duration) (*sync.WaitGroup, *atomic.Int64) {
 	var running sync.WaitGroup
 	var writes atomic.Int64
 	ctx := context.Background()
@@ -248,6 +252,7 @@ func (w *world) writeIndexAndUsers(stop <-chan struct{}, trackID string) (*sync.
 				return
 			}
 			writes.Add(1)
+			time.Sleep(pause)
 		}
 	})
 	running.Go(func() {
@@ -269,6 +274,7 @@ func (w *world) writeIndexAndUsers(stop <-chan struct{}, trackID string) (*sync.
 				return
 			}
 			writes.Add(1)
+			time.Sleep(pause)
 		}
 	})
 	return &running, &writes
@@ -283,7 +289,7 @@ func TestBackupWhileTheServerWrites(t *testing.T) {
 	trackID := w.fixtureTracks(w.anna)[3].Id
 	backups := t.TempDir()
 	stop := make(chan struct{})
-	running, writes := w.writeIndexAndUsers(stop, trackID)
+	running, writes := w.writeIndexAndUsers(stop, trackID, 0)
 	var names []string
 	for i := range 4 {
 		// Some writes between two copies.
@@ -738,5 +744,234 @@ func TestBackupOfADamagedDatabase(t *testing.T) {
 	names := dirNames(t, backups)
 	if len(names) != 1 || !strings.HasPrefix(names[0], backupTemporaryPrefix) || !strings.HasSuffix(names[0], temporarySuffix) {
 		t.Fatalf("the backup folder has %v, want only the temporary folder", names)
+	}
+}
+
+// rebuildSearch runs RebuildSearch on the database of w, as the command
+// does while the server runs.
+func (w *world) rebuildSearch() {
+	w.t.Helper()
+	if err := RebuildSearch(w.t.Context(), w.stateDir, slog.New(slog.DiscardHandler)); err != nil {
+		w.t.Fatal(err)
+	}
+}
+
+// searchPaths are searches that, together, read rows of the three full-text
+// tables of the fixture library, by short beginnings that many names have.
+var searchPaths = []string{
+	"/search?q=a&limit=50", "/search?q=alpha", "/search?q=bravo", "/search?q=echo&types=track", "/search?q=e&limit=50",
+	"/search?q=t&limit=50", "/search?q=o&limit=50&types=artist,album", "/search?q=s&limit=50", "/search?q=b&limit=50",
+}
+
+// The erratum R3 to §11.4: what the doctor finds wrong in the search, rows
+// that are stale, extra or missing and a damaged index, each in a table of
+// its own, is repaired by RebuildSearch on the database of a running server.
+// Afterwards the doctor finds nothing, the server answers every search as
+// it did before the damage, and nothing else of the database has changed.
+func TestRebuildSearch(t *testing.T) {
+	w := newWorld(t, apiOrigin)
+	w.indexFixture()
+	playlistID := w.userData()
+	as := map[string]credential{"admin": w.as(w.admin), "anna": w.as(w.anna), "bob": w.as(w.bob)}
+	paths := append(restorePaths(playlistID), searchPaths...)
+	before := w.answers(w.s.http.Handler, w.host, paths, as)
+	path := filepath.Join(w.stateDir, databaseFile)
+	doctor := func() []string {
+		t.Helper()
+		findings, err := Doctor(t.Context(), w.stateDir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, f := range findings {
+			if !strings.Contains(f.Advice, "vibrance rebuild-search") {
+				t.Fatalf("the advice of %s does not name the command: %s", f.Code, f.Advice)
+			}
+		}
+		return findingCodes(findings)
+	}
+	wantRepaired := func(where string) {
+		t.Helper()
+		w.rebuildSearch()
+		if codes := doctor(); len(codes) != 0 {
+			t.Fatalf("%s: the doctor after the rebuild: %v", where, codes)
+		}
+		after := w.answers(w.s.http.Handler, w.host, paths, as)
+		if !slices.Equal(after, before) {
+			for i := range before {
+				if i < len(after) && after[i] != before[i] {
+					t.Errorf("%s: after the rebuild:\n%s\nbefore:\n%s", where, redact(after[i]), redact(before[i]))
+				}
+			}
+			t.FailNow()
+		}
+	}
+
+	// A sound index is rebuilt as it is.
+	wantRepaired("a sound index")
+
+	// Extra: a row that describes nothing. Missing: the rows of the tracks
+	// of an album. Stale: an album under another title.
+	w.execOn(`INSERT INTO search_artists (rowid, name) VALUES (99999, 'ghost')`)
+	w.execOn(`DELETE FROM search_tracks WHERE rowid IN (SELECT seq FROM tracks WHERE album_id = ?)`, albumA)
+	w.execOn(`DELETE FROM search_albums WHERE rowid = (SELECT seq FROM albums WHERE id = ?)`, albumB)
+	w.execOn(`INSERT INTO search_albums (rowid, title, artist) SELECT seq, 'ghost', 'nobody' FROM albums WHERE id = ?`, albumB)
+	want := []string{CodeDoctorSearchExtra, CodeDoctorSearchMissing, CodeDoctorSearchStale}
+	if codes := doctor(); !slices.Equal(codes, want) {
+		t.Fatalf("the doctor on the broken rows: %v, want %v", codes, want)
+	}
+	// The debt of step S17: a search that meets the extra row fails.
+	wantCode(t, "a search that meets an extra row", w.get("/search?q=ghost&types=artist", w.anna), http.StatusInternalServerError, "internal")
+	wantRepaired("rows that are stale, extra and missing")
+	if got := w.search("q=ghost", w.anna); len(got.Artists)+len(got.Albums)+len(got.Tracks) != 0 {
+		t.Fatalf("the rows of the test are still found: %+v", got)
+	}
+
+	// A damaged index, in each table: content that is not the indexed one,
+	// pages overwritten, pages gone. Written as another program would.
+	execRaw(t, path, `UPDATE search_artists_content SET c0 = 'nothing like it'`)
+	execRaw(t, path, `UPDATE search_albums_data SET block = zeroblob(8)`)
+	execRaw(t, path, `DELETE FROM search_tracks_data`)
+	want = []string{CodeDoctorIntegrity, CodeDoctorSearchIndex}
+	if codes := doctor(); !slices.Equal(codes, want) {
+		t.Fatalf("the doctor on the damaged index: %v, want %v", codes, want)
+	}
+	wantCode(t, "a search on a damaged index", w.get("/search?q=alpha", w.anna), http.StatusInternalServerError, "internal")
+	wantRepaired("a damaged index")
+
+	// Idempotent: again, and again.
+	wantRepaired("a second rebuild")
+	wantRepaired("a third rebuild")
+}
+
+// The erratum R3: the command is correct while the server reads and writes.
+// The writes of the full-text rows that the scanner makes and the changes of
+// the users run with the rebuilds, and the searches of the clients with
+// both: no search fails, none answers with half an index, and at the end the
+// doctor finds nothing.
+func TestRebuildSearchWhileTheServerWrites(t *testing.T) {
+	w := newWorld(t, apiOrigin)
+	w.indexFixture()
+	trackID := w.fixtureTracks(w.anna)[3].Id
+	// Album A is never touched by the writes: every search finds it whole.
+	whole := w.get("/search?q=alpha", w.anna).Body.String()
+	stop := make(chan struct{})
+	// The writes leave the lock free most of the time, as a scan does between
+	// two albums. Two writers that never pause hold it always, each commit
+	// being a sync of the disk, and the rebuild then fails as the guide says.
+	running, writes := w.writeIndexAndUsers(stop, trackID, 100*time.Millisecond)
+	var searches atomic.Int64
+	for range 2 {
+		running.Go(func() {
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				rec := w.get("/search?q=alpha", w.anna)
+				if rec.Code != http.StatusOK || rec.Body.String() != whole {
+					t.Errorf("a search during a rebuild: %d %s", rec.Code, rec.Body)
+					return
+				}
+				// Album B comes and goes: found whole or not at all.
+				if rec := w.get("/search?q=bravo&limit=50", w.anna); rec.Code != http.StatusOK {
+					t.Errorf("a search during a rebuild: %d %s", rec.Code, rec.Body)
+					return
+				}
+				searches.Add(1)
+			}
+		})
+	}
+	for range 8 {
+		// Some writes and some searches between two rebuilds.
+		for n, m := writes.Load(), searches.Load(); (writes.Load() < n+5 || searches.Load() < m+2) && !t.Failed(); {
+			time.Sleep(time.Millisecond)
+		}
+		if err := RebuildSearch(t.Context(), w.stateDir, slog.New(slog.DiscardHandler)); err != nil {
+			close(stop)
+			running.Wait()
+			t.Fatal(err)
+		}
+	}
+	close(stop)
+	running.Wait()
+	if writes.Load() < 40 || searches.Load() < 16 {
+		t.Fatalf("only %d writes and %d searches ran with the rebuilds", writes.Load(), searches.Load())
+	}
+	if findings, err := Doctor(t.Context(), w.stateDir); err != nil || len(findings) != 0 {
+		t.Fatalf("the doctor after the rebuilds: %+v, %v", findings, err)
+	}
+	if got := w.get("/search?q=alpha", w.anna).Body.String(); got != whole {
+		t.Fatalf("the search after the rebuilds:\n%s\nwant:\n%s", got, whole)
+	}
+}
+
+// RebuildSearch refuses what the doctor refuses, before it writes anything:
+// a state folder without a database, creating none, and a schema this
+// binary does not read as it is, which it does not migrate.
+func TestRebuildSearchRefusals(t *testing.T) {
+	empty, older, newer := t.TempDir(), t.TempDir(), t.TempDir()
+	olderDatabaseIn(t, older)
+	newerDatabase(t, newer)
+	log := slog.New(slog.DiscardHandler)
+	for _, tc := range []struct{ name, state, code string }{
+		{"no database", empty, CodeDatabaseMissing},
+		{"an older schema", older, store.CodeSchemaOld},
+		{"a newer schema", newer, store.CodeSchemaTooNew},
+	} {
+		wantAppError(t, tc.name, RebuildSearch(t.Context(), tc.state, log), tc.code, true)
+	}
+	if got := dirNames(t, empty); len(got) != 0 {
+		t.Fatalf("the rebuild created %v", got)
+	}
+	// The older database is still the older one: only the server migrates.
+	r, err := store.OpenReader(t.Context(), filepath.Join(older, databaseFile), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	version := r.SchemaVersion()
+	if err := r.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if version != 1 {
+		t.Fatalf("the rebuild migrated the older database to version %d", version)
+	}
+}
+
+// A rebuild that cannot take the write lock, because another program holds
+// it for longer than the rebuild may wait, fails (1, not a refusal) and has
+// changed nothing: this is why the operator is told to stop the server.
+func TestRebuildSearchFailsWhenItCannotWrite(t *testing.T) {
+	w := newWorld(t, apiOrigin)
+	w.indexFixture()
+	w.execOn(`INSERT INTO search_artists (rowid, name) VALUES (99999, 'ghost')`)
+	db, err := sqlOpen(filepath.Join(w.stateDir, databaseFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(1)
+	if _, err := db.ExecContext(t.Context(), `BEGIN IMMEDIATE`); err != nil {
+		t.Fatal(err)
+	}
+	// The rebuild may wait for 300 ms. The lock is held for longer, and then
+	// let go, so that closing the database does not wait for it too.
+	ctx, cancel := context.WithTimeout(t.Context(), 300*time.Millisecond)
+	defer cancel()
+	released := make(chan error, 1)
+	time.AfterFunc(1500*time.Millisecond, func() {
+		_, err := db.ExecContext(context.Background(), `ROLLBACK`)
+		released <- err
+	})
+	err = RebuildSearch(ctx, w.stateDir, slog.New(slog.DiscardHandler))
+	if cerr := errors.Join(<-released, db.Close()); cerr != nil {
+		t.Fatal(cerr)
+	}
+	wantAppError(t, "a rebuild that cannot write", err, CodeRebuildSearchFailed, false)
+	findings, err := Doctor(t.Context(), w.stateDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if codes := findingCodes(findings); !slices.Equal(codes, []string{CodeDoctorSearchExtra}) {
+		t.Fatalf("the doctor after the rebuild that failed: %v", codes)
 	}
 }

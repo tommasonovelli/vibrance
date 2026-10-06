@@ -383,7 +383,7 @@ What to know about Vibrance's backup:
 - **The default backup volume is on the same disk as everything else**: set `VIBRANCE_BACKUP` (and `MUSICLIB_BACKUP`) to a folder on another disk, keep several backups, and copy them to an external device with `sudo cp -a`, which keeps their owner, uid 1000.
 - The two backups need not be made at the same moment. Vibrance finds the library as it is whenever it starts: an album missing from the library is shown as unavailable, never deleted, and comes back with the same ids when MusicLib publishes it again.
 
-To check Vibrance's database at any time, also while it runs (it changes nothing): `docker compose exec vibrance vibrance doctor`. It prints one line per finding and `Doctor complete: no damage found.` (exit 0), or the number of problems (exit 1): see [Errors of the maintenance commands](#errors-of-the-maintenance-commands).
+To check Vibrance's database at any time, also while it runs (it changes nothing): `docker compose exec vibrance vibrance doctor`. It prints one line per finding and `Doctor complete: no damage found.` (exit 0), or the number of problems (exit 1): see [Errors of the maintenance commands](#errors-of-the-maintenance-commands). What it finds wrong in the search is repaired without a backup: see [Repairing the search](#repairing-the-search).
 
 ### Restore into a new installation
 
@@ -408,7 +408,7 @@ Vibrance's restore must run **before** Vibrance's first start in the new install
 
 ### Restoring Vibrance only
 
-To put back Vibrance's database on an installation that runs (after a damage that `doctor` found, for example), set the current database aside in the same volume, restore, and start:
+To put back Vibrance's database on an installation that runs (after a damage that `doctor` found and that is not [of the search alone](#repairing-the-search), for example), set the current database aside in the same volume, restore, and start:
 
 ```sh
 docker compose stop vibrance
@@ -514,27 +514,46 @@ It is ready whatever the state of MusicLib: with MusicLib stopped, or with an em
 
 At the stop, `store_close` means that the database could not be closed cleanly (another process was reading it); nothing is lost, and the next start recovers.
 
+### Repairing the search
+
+Searches go through an index of their own inside Vibrance's database, a copy of the names of the artists, albums and tracks. If it ever disagrees with the library, searches answer `500 internal` or miss what is there, and `vibrance doctor` reports findings whose code begins with `doctor_search_` (and `doctor_integrity` lines that name a `search_` table). `vibrance rebuild-search` makes that index again from the library index, and changes nothing else: accounts, favorites, playlists and track ids are not touched.
+
+**Stop Vibrance first.** The rebuild is one transaction: while it runs, everything else that writes to the database waits, and fails after 5 seconds. On a large library or a slow disk the rebuild can last longer than that.
+
+```sh
+docker compose stop vibrance
+docker compose run --rm --no-deps vibrance rebuild-search
+docker compose up -d --wait
+docker compose exec vibrance vibrance doctor
+```
+
+- The second line prints `Search index rebuilt. Run vibrance doctor to check it.` It took 2.5 seconds for a library of 200,000 tracks on the machine it was measured on.
+- The last line must print `Doctor complete: no damage found.` If it still reports a `doctor_search_` or `doctor_integrity` finding, the file itself is damaged: [restore a backup](#restoring-vibrance-only).
+- A rebuild that fails or is interrupted has changed nothing: run it again. It refuses to run without a database, or on a database of another version of Vibrance (see [the table below](#errors-of-the-maintenance-commands)).
+- Vibrance never rebuilds the search by itself, and you never need to after an update or a restore: the scanner keeps the index in step with the library. Run the command only when `doctor` says so.
+
 ### Errors of the maintenance commands
 
-`backup`, `restore` and `doctor` exit with 0 when done, 2 when they refused before writing anything (bad arguments, root, the codes marked *refusal*), and 1 when they failed or found damage. A failure is logged with its `code` and an `advice`.
+`backup`, `restore`, `doctor` and `rebuild-search` exit with 0 when done, 2 when they refused before writing anything (bad arguments, root, the codes marked *refusal*), and 1 when they failed or found damage. A failure is logged with its `code` and an `advice`.
 
 | `code` | Command | What it means | What to do |
 |---|---|---|---|
 | `backup_outside_backup` (refusal) | backup | the destination is not a plain absolute path of a new folder under `/backup` | use `/backup/NAME` |
 | `backup_exists` (refusal) | backup | a file or folder with that name exists | choose another name; backups are never overwritten |
 | `backup_destination` (refusal) | backup | the parent folder does not exist or cannot be written | check `VIBRANCE_BACKUP` and its owner (uid 1000) |
-| `database_missing` (refusal) | backup, doctor | there is no `vibrance.db` in the state volume | start Vibrance once, or restore |
-| `store_schema_old` (refusal) | backup, doctor | the database was written by an older Vibrance | start the server once, which upgrades it |
-| `store_schema_too_new`, `store_open` (refusal) | backup, doctor | the database is newer than this version, or is not a database | use the newer version; restore a backup |
+| `database_missing` (refusal) | backup, doctor, rebuild-search | there is no `vibrance.db` in the state volume | start Vibrance once, or restore |
+| `store_schema_old` (refusal) | backup, doctor, rebuild-search | the database was written by an older Vibrance | start the server once, which upgrades it |
+| `store_schema_too_new`, `store_open` (refusal) | backup, doctor, rebuild-search | the database is newer than this version, or is not a database | use the newer version; restore a backup |
 | `backup_failed`, `backup_verify` | backup | the copy could not be written, or is damaged | delete the temporary folder `.vibrance-backup-….tmp`, run `doctor`, retry |
 | `restore_outside_backup` (refusal) | restore | the backup is not a folder under `/backup` | use `/backup/NAME` |
 | `restore_database_exists` (refusal) | restore | the state volume has a database, or what is left of one | restore into a [new installation](#restore-into-a-new-installation), or [set it aside](#restoring-vibrance-only) |
 | `restore_manifest_invalid`, `restore_hash`, `restore_schema_too_new` (refusal) | restore | the backup does not pass its checks, or a newer Vibrance made it | use another backup, or that version |
 | `restore_destination` (refusal), `restore_failed` | restore | the state volume cannot be written, or writing failed; nothing was restored | check the volume and its owner, retry |
 | `doctor_failed` | doctor | the inspection could not be completed | read the message, retry |
-| `doctor_integrity`, `doctor_foreign_key`, `doctor_search_index` | doctor | the database file is damaged | keep it, and [restore](#restoring-vibrance-only) the latest backup that `doctor` finds sound |
-| `doctor_search_extra`, `doctor_search_missing`, `doctor_search_stale` | doctor | the search index does not agree with the library index: searches that meet such a row fail or miss it | restore a sound backup; nothing in Vibrance repairs it |
+| `doctor_integrity`, `doctor_foreign_key` | doctor | the database file is damaged | if every `doctor_integrity` line names a `search_` table, [repair the search](#repairing-the-search) and run `doctor` again; otherwise keep the file, and [restore](#restoring-vibrance-only) the latest backup that `doctor` finds sound |
+| `doctor_search_index`, `doctor_search_extra`, `doctor_search_missing`, `doctor_search_stale` | doctor | the search index is damaged, or does not agree with the library index: searches that meet such a row fail or miss it | [repair the search](#repairing-the-search) with `rebuild-search` |
 | `doctor_album_counters` | doctor | an album shows a wrong number of tracks or duration | nothing urgent: it is right again when the album is indexed again |
 | `doctor_no_admin` | doctor | no admin is enabled | `vibrance user create --role admin`, [as above](#the-passwords-and-the-accounts) |
+| `rebuild_search_failed` | rebuild-search | the search index could not be rebuilt, for example because Vibrance was running and writing; nothing was changed | stop Vibrance and [retry](#repairing-the-search) |
 
 MusicLib's codes are in [MusicLib's guide, "Troubleshooting"](https://github.com/tommasonovelli/vibrance-musiclib/blob/v1.2.0/docs/operations.md#troubleshooting).

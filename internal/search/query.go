@@ -4,6 +4,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"golang.org/x/text/unicode/norm"
 )
 
 // The limits of a query (DESIGN.md §10.2): the words beyond the eighth and
@@ -41,7 +43,16 @@ type Query struct {
 // the index: a word of several tokens is a phrase, and a word of none (an
 // em dash, an accent alone) is an empty phrase, which FTS5 leaves out of
 // the other words and which alone finds nothing. No word is dropped here.
+//
+// q is first put in NFC, the form of every name of the index, which the
+// scanner writes through names.Normalize. unicode61 takes away the Latin
+// accents only: a kana with its combining voiced mark, or a Greek letter with
+// its combining breathing, sent decomposed as some clients do, would be other
+// tokens than the composed name. NFC and not NFKC, which would make H₂O the
+// H2O that the index does not hold. The bytes that are not UTF-8 stay as
+// they are, and separate; the 64 characters of a word are counted after it.
 func Parse(q string) Query {
+	q = norm.NFC.String(q)
 	var b strings.Builder
 	words, start := 0, -1
 	end := func(at int) {

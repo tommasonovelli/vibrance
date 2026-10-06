@@ -15,25 +15,32 @@ import (
 // is available, written again from the tables it copies. So the full-text
 // tables are a function of artists, albums and tracks, and a statement here
 // reads no value from its caller but an id.
+//
+// The first three statements write that function whole, one table each:
+// they are what Rebuild runs, and the statements of an album and of an
+// artist are the same with an id, so the two cannot write different rows.
 const (
-	deleteAlbum = `DELETE FROM search_albums WHERE rowid IN (SELECT seq FROM albums WHERE id = ?)`
-	insertAlbum = `INSERT INTO search_albums (rowid, title, artist)
-SELECT albums.seq, albums.title, artists.name
-FROM albums JOIN artists ON artists.id = albums.artist_id
-WHERE albums.id = ? AND albums.available = 1`
-
-	deleteTracks = `DELETE FROM search_tracks WHERE rowid IN (SELECT seq FROM tracks WHERE album_id = ?)`
-	insertTracks = `INSERT INTO search_tracks (rowid, title, artist, album)
-SELECT tracks.seq, tracks.title, tracks.artist, albums.title
-FROM tracks JOIN albums ON albums.id = tracks.album_id
-WHERE tracks.album_id = ? AND tracks.available = 1`
-
-	deleteArtist = `DELETE FROM search_artists WHERE rowid IN (SELECT seq FROM artists WHERE id = ?)`
-	insertArtist = `INSERT INTO search_artists (rowid, name)
+	insertAllArtists = `INSERT INTO search_artists (rowid, name)
 SELECT artists.seq, artists.name
 FROM artists
-WHERE artists.id = ?
-  AND EXISTS (SELECT 1 FROM albums WHERE albums.artist_id = artists.id AND albums.available = 1)`
+WHERE EXISTS (SELECT 1 FROM albums WHERE albums.artist_id = artists.id AND albums.available = 1)`
+	insertAllAlbums = `INSERT INTO search_albums (rowid, title, artist)
+SELECT albums.seq, albums.title, artists.name
+FROM albums JOIN artists ON artists.id = albums.artist_id
+WHERE albums.available = 1`
+	insertAllTracks = `INSERT INTO search_tracks (rowid, title, artist, album)
+SELECT tracks.seq, tracks.title, tracks.artist, albums.title
+FROM tracks JOIN albums ON albums.id = tracks.album_id
+WHERE tracks.available = 1`
+
+	deleteAlbum = `DELETE FROM search_albums WHERE rowid IN (SELECT seq FROM albums WHERE id = ?)`
+	insertAlbum = insertAllAlbums + ` AND albums.id = ?`
+
+	deleteTracks = `DELETE FROM search_tracks WHERE rowid IN (SELECT seq FROM tracks WHERE album_id = ?)`
+	insertTracks = insertAllTracks + ` AND tracks.album_id = ?`
+
+	deleteArtist = `DELETE FROM search_artists WHERE rowid IN (SELECT seq FROM artists WHERE id = ?)`
+	insertArtist = insertAllArtists + ` AND artists.id = ?`
 )
 
 // SyncAlbum makes the full-text rows of an album and of its tracks what

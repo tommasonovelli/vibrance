@@ -71,7 +71,7 @@ type Error struct {
 	Msg  string
 	Err  error
 	// Advice tells the operator what to do, for the failures of the
-	// operational commands (backup, restore, doctor).
+	// operational commands (backup, restore, doctor, rebuild-search).
 	Advice string
 	// Refusal: an operational command refused before it did anything.
 	Refusal bool

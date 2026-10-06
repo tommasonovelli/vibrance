@@ -6,6 +6,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"golang.org/x/text/unicode/norm"
+
 	"vibrance/internal/store"
 )
 
@@ -19,10 +21,13 @@ import (
 //     ASCII character that is no letter and no digit, a space or a control:
 //     there is no place where an operator, a column or a quote of the text
 //     could be;
-//   - the words of the expression are those of the text, in order;
+//   - the words of the expression are those of the text in NFC, in order;
+//   - a text in NFD and the same text in NFC are one query: a client that
+//     sends decomposed text finds what one that sends composed text finds
+//     (the erratum R3 to §10.2);
 //   - a text without words finds nothing.
 func FuzzSearchQuery(f *testing.F) {
-	const acute = string(rune(0x301))
+	const acute, voiced = string(rune(0x301)), string(rune(0x3099))
 	for _, seed := range []string{
 		"", " ", "mil dav", "beyoncé", "Beyoncé", "AC/DC", "坂本龍一", "千のナイフ",
 		`"`, `""`, `"a`, `a"`, `"a" "b"`, `a""b`, "*", "a*", "a *", "*a", "-", "-a", "a -b", "a - b", "+a", "^a",
@@ -35,6 +40,9 @@ func FuzzSearchQuery(f *testing.F) {
 		"a" + acute, "Beyonce" + acute, acute + "a", "a " + acute + " b", strings.Repeat(acute, 64) + "a", strings.Repeat("e"+acute, 40), "कि", "ไม้",
 		"A🤝B", "🫶Love", "🫶", "Disco🪩Ball", "Old💔Heart", "A\ue000B", "Apple\uf8ffMusic", "₺ ₽ ₿", "Sigur—Rós", "«miles»", "miles、davis",
 		"don’t", "miles — davis", "… miles", "—", "— …", "a\u00a0b", "a\u2028b\u2029c", "a\u0085b", "a\u200bb", "a\ufffdb", "a\xe2\x82b", "\u2e3c",
+		"か" + voiced + "くや", "α" + string(rune(0x313)) + "θη" + acute + "να", string([]rune{0x1112, 0x1161, 0x11ab}),
+		"a" + string(rune(0x37e)) + "b", "a" + string(rune(0x1fef)) + "b", string(rune(0x2126)), "a" + acute + string(rune(0x323)),
+		strings.Repeat(acute, 31), "e" + strings.Repeat(string(rune(0x323)), 30) + acute, "ǘ" + strings.Repeat(acute, 30), "\xffe" + acute,
 	} {
 		f.Add(seed)
 	}
@@ -47,11 +55,18 @@ func FuzzSearchQuery(f *testing.F) {
 		entry{"Écho Café", "H₂O", list("x²", "½", "Ⅷ")},
 		entry{"A🤝B", "🫶Love", list("Disco🪩Ball", "Old💔Heart", "Don’t Stop")},
 		entry{"A\ue000B", "Apple\uf8ffMusic", list("Sigur—Rós")},
+		entry{"がくや", "Ἀθήνα", list("한국")},
 	)
 	f.Fuzz(func(t *testing.T, text string) {
 		q := Parse(text)
-		want := wordsOf(text)
+		want := wordsOf(norm.NFC.String(text))
 		checkExpression(t, text, q.match, want)
+		if utf8.ValidString(text) {
+			nfd, nfc := Parse(norm.NFD.String(text)), Parse(norm.NFC.String(text))
+			if nfd != nfc || nfc != q {
+				t.Fatalf("Parse(%+q) = %+q, of its NFD %+q, of its NFC %+q", text, q.match, nfd.match, nfc.match)
+			}
+		}
 		var res Results
 		err := s.Read(t.Context(), func(tx *store.Queries) (err error) {
 			res, err = Find(t.Context(), tx, "", q, everything, 50)
@@ -80,7 +95,8 @@ func ends(r rune) bool {
 }
 
 // wordsOf is the rule of §10.2 written again, one character at a time: the
-// oracle of the fuzz target. A word is a run of characters that do not end
+// oracle of the fuzz target, which gives it the text in NFC, as Parse reads
+// it. A word is a run of characters that do not end
 // one, cut to 64 characters; eight count. A byte that is not UTF-8 ends a
 // word: ranging over the text gives U+FFFD for it, as for a real U+FFFD,
 // which does not, so the bytes tell them apart.

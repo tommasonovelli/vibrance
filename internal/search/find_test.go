@@ -10,6 +10,9 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"golang.org/x/text/unicode/norm"
+
+	"vibrance/internal/names"
 	"vibrance/internal/store"
 )
 
@@ -28,6 +31,10 @@ func testID(kind byte, n int) string {
 // index writes the entries, in order, with their full-text rows: the
 // albums, the tracks and the artists get growing seqs in the order given.
 // An artist of two entries is one artist.
+//
+// The names are written as the scanner writes them, through
+// names.Normalize: no name of the index is in another form than NFC, and a
+// test that wrote one would fix a behavior no library has.
 func index(t testing.TB, s *store.Store, entries ...entry) {
 	t.Helper()
 	ctx := t.Context()
@@ -35,22 +42,23 @@ func index(t testing.TB, s *store.Store, entries ...entry) {
 	tracks := 0
 	err := s.WithWriteTx(ctx, func(q *store.Queries) error {
 		for i, e := range entries {
-			artistID, ok := artists[e.artist]
+			artist := names.Normalize(e.artist)
+			artistID, ok := artists[artist]
 			if !ok {
 				artistID = testID('a', len(artists))
-				artists[e.artist] = artistID
-				if err := q.UpsertArtist(ctx, store.UpsertArtistParams{ID: artistID, Name: e.artist, SortKey: []byte{1}}); err != nil {
+				artists[artist] = artistID
+				if err := q.UpsertArtist(ctx, store.UpsertArtistParams{ID: artistID, Name: artist, SortKey: []byte{1}}); err != nil {
 					return err
 				}
 			}
 			albumID := testID('b', i)
-			a := album(albumID, artistID, e.album)
+			a := album(albumID, artistID, names.Normalize(e.album))
 			a.RelPath = albumID
 			if err := q.UpsertAlbum(ctx, a); err != nil {
 				return err
 			}
 			for n, title := range e.tracks {
-				if err := q.UpsertTrack(ctx, track(testID('c', tracks), albumID, title, e.artist, int64(n+1))); err != nil {
+				if err := q.UpsertTrack(ctx, track(testID('c', tracks), albumID, names.Normalize(title), artist, int64(n+1))); err != nil {
 					return err
 				}
 				tracks++
@@ -436,14 +444,18 @@ func TestFindCJK(t *testing.T) {
 // look for the beginning of a token that does not exist: H₂O would be H and
 // O, and would not find the album it names.
 func TestFindNumbersAndMarks(t *testing.T) {
-	const acute, circumflex, dotBelow = string(rune(0x301)), string(rune(0x302)), string(rune(0x323))
+	const acute, circumflex, dotBelow = "\u0301", "\u0302", "\u0323"
+	// The names the index holds for the tags of the third album, which are
+	// written in decomposed form.
+	const zoe, resume, amelie = "Zo\u00e9", "R\u00e9sum\u00e9", "Am\u00e9lie"
 	s := newStore(t)
 	index(t, s,
 		entry{"Écho Café", "H₂O", list("x² + y²", "½ Full")},
 		entry{"Việt", "Ⅷ Symphony", list("Hà Nội")},
-		// The names of a library written in decomposed form.
 		entry{"Zoe" + acute, "Re" + acute + "sume" + acute, list("Ame" + acute + "lie")},
 	)
+	// The scanner writes every name in NFC, and so does the helper.
+	want(t, s, `SELECT name FROM search_artists WHERE rowid = 3`, zoe)
 	for text, want := range map[string][]string{
 		"H₂O": list("H₂O"),
 		"h₂":  list("H₂O"),
@@ -455,13 +467,13 @@ func TestFindNumbersAndMarks(t *testing.T) {
 		"Ⅷ":                           list("Ⅷ Symphony"),
 		"ⅷ symph":                     list("Ⅷ Symphony"),
 		"viii":                        nil,
-		"resume":                      list("Re" + acute + "sume" + acute),
-		"résumé":                      list("Re" + acute + "sume" + acute),
-		"re" + acute:                  list("Re" + acute + "sume" + acute),
-		"re" + acute + "sume" + acute: list("Re" + acute + "sume" + acute),
+		"resume":                      list(resume),
+		resume:                        list(resume),
+		"re" + acute:                  list(resume),
+		"re" + acute + "sume" + acute: list(resume),
 		// Marks alone have no token: the other words still count.
-		acute + " resume " + circumflex:     list("Re" + acute + "sume" + acute),
-		acute + "resume":                    list("Re" + acute + "sume" + acute),
+		acute + " resume " + circumflex:     list(resume),
+		acute + "resume":                    list(resume),
 		acute:                               nil,
 		acute + circumflex + " " + dotBelow: nil,
 	} {
@@ -476,8 +488,9 @@ func TestFindNumbersAndMarks(t *testing.T) {
 		"vie" + circumflex + dotBelow:       list("Việt"),
 		"việt":                              list("Việt"),
 		"viet":                              list("Việt"),
-		"zoé":                               list("Zoe" + acute),
-		"zo" + acute + "e":                  list("Zoe" + acute),
+		zoe:                                 list(zoe),
+		"zoe" + acute:                       list(zoe),
+		"zo" + acute + "e":                  list(zoe),
 		"E" + acute + " cho":                nil,
 	} {
 		wantFound(t, text, "artists", findAll(t, s, text).artists, want)
@@ -490,11 +503,65 @@ func TestFindNumbersAndMarks(t *testing.T) {
 		"½ fu": list("½ Full"),
 		"1":    nil,
 		"ha" + string(rune(0x300)) + " no" + circumflex + dotBelow + "i": list("Hà Nội"),
-		"ame" + acute + "lie zoe": list("Ame" + acute + "lie"),
-		"amélie":                  list("Ame" + acute + "lie"),
+		"ame" + acute + "lie zoe": list(amelie),
+		amelie:                    list(amelie),
 		"lie":                     nil,
 	} {
 		wantFound(t, text, "tracks", findAll(t, s, text).tracks, want)
+	}
+}
+
+// The erratum R3 to §10.2: a query in decomposed form, as some clients send
+// it, finds the name whatever unicode61 does with its marks, because the
+// query is put in NFC and the names of the index are in NFC. The kana with a
+// combining voiced mark and the polytonic Greek are the cases unicode61 does
+// not cover by itself: it takes away the Latin accents only.
+func TestFindDecomposedQueries(t *testing.T) {
+	const (
+		gakuya = "\u304c\u304f\u3084"             // がくや
+		athina = "\u1f08\u03b8\u03ae\u03bd\u03b1" // Ἀθήνα
+		odi    = "\u1f60\u03b4\u03ae"             // ὠδή
+		hangul = "\ud55c\uad6d"                   // 한국
+		pasta  = "\u30d1\u30b9\u30bf"             // パスタ
+		viet   = "Vi\u1ec7t"
+	)
+	s := newStore(t)
+	index(t, s,
+		entry{gakuya, athina, list(hangul, odi)},
+		// The same names as tags in decomposed form: the index holds them
+		// composed, so they are found in the same way.
+		entry{norm.NFD.String(pasta), norm.NFD.String(viet), list(norm.NFD.String("\u30d7\u30ea\u30f3"))},
+	)
+	type kind func(found) []string
+	artists, albums, tracks := kind(func(f found) []string { return f.artists }), kind(func(f found) []string { return f.albums }),
+		kind(func(f found) []string { return f.tracks })
+	for _, c := range []struct {
+		name string
+		of   kind
+		want string
+	}{
+		{gakuya, artists, gakuya}, {athina, albums, athina}, {hangul, tracks, hangul}, {odi, tracks, odi},
+		{pasta, artists, pasta}, {viet, albums, viet}, {"\u30d7\u30ea\u30f3", tracks, "\u30d7\u30ea\u30f3"},
+	} {
+		nfd := norm.NFD.String(c.name)
+		if nfd == c.name {
+			t.Fatalf("%q has no decomposed form: the case proves nothing", c.name)
+		}
+		for _, text := range []string{c.name, nfd, strings.ToLower(nfd)} {
+			if got := c.of(findAll(t, s, text)); !slices.Equal(got, list(c.want)) {
+				t.Errorf("searching %+q: found %q, want %q", text, got, c.want)
+			}
+		}
+	}
+	// While the user types: the beginning of a decomposed name, cut after a
+	// mark.
+	wantFound(t, "ka + mark", "artists", findAll(t, s, "\u304b\u3099").artists, list(gakuya))
+	wantFound(t, "alpha + mark + theta", "albums", findAll(t, s, "\u03b1\u0313\u03b8").albums, list(athina))
+	// What NFC does not join stays apart: the half-width kana and its mark
+	// are compatibility characters, which only NFKC would make the full-width
+	// one, and NFKC would also make H₂O the H2O no name holds.
+	if got := findAll(t, s, "\uff8a\uff9f\uff7d\uff80"); got.artists != nil {
+		t.Errorf("the half-width form finds %q", got.artists)
 	}
 }
 
@@ -522,9 +589,26 @@ func TestParse(t *testing.T) {
 		// their word, as unicode61 keeps them in a token of the index.
 		{"H₂O", `"H₂O"*`},
 		{"x² ½ Ⅷ", `"x²"* "½"* "Ⅷ"*`},
-		{"é", "\"é\"*"},
-		{"Écho Café", "\"Écho\"* \"Café\"*"},
-		{"Việt", "\"Việt\"*"},
+		// A decomposed text is put in NFC, the form of the names of the
+		// index: a letter and its mark are the one character the index holds.
+		{"e\u0301", "\"\u00e9\"*"},
+		{"E\u0301cho Cafe\u0301", "\"\u00c9cho\"* \"Caf\u00e9\"*"},
+		{"Vie\u0323\u0302t", "\"Vi\u1ec7t\"*"},
+		{"\u00e9 \u00c9cho Vi\u1ec7t", "\"\u00e9\"* \"\u00c9cho\"* \"Vi\u1ec7t\"*"},
+		// The kana with its voiced mark and the Greek letter with its
+		// breathing, whose marks unicode61 does not take away; Hangul.
+		{"\u304b\u3099\u304f\u3084", "\"\u304c\u304f\u3084\"*"},
+		{"\u03b1\u0313\u03b8\u03b7\u0301\u03bd\u03b1", "\"\u1f00\u03b8\u03ae\u03bd\u03b1\"*"},
+		{"\u1112\u1161\u11ab", "\"\ud55c\"*"},
+		// The marks are put in their canonical order.
+		{"a\u0301\u0323", "\"\u1ea1\u0301\"*"},
+		// NFC, not NFKC: no compatibility character becomes another.
+		{"H\u2082O \ufb01 \uff76\uff9e \u2460", "\"H\u2082O\"* \"\ufb01\"* \"\uff76\uff9e\"* \"\u2460\"*"},
+		// The few characters whose NFC is another character: the ohm and
+		// angstrom signs are their letters, and the Greek question mark and
+		// the Greek varia are the ASCII semicolon and grave, which separate.
+		{"\u2126 \u212b", "\"\u03a9\"* \"\u00c5\"*"},
+		{"a\u037eb c\u1fefd", `"a"* "b"* "c"* "d"*`},
 		// So does everything that is not ASCII, a space or a control: SQLite
 		// decides what is in a token, and the recent emoji and the private
 		// use characters are.
@@ -556,9 +640,15 @@ func TestParse(t *testing.T) {
 		{"́ 1 2 3 4 5 6 7 8 9", "\"́\"* \"1\"* \"2\"* \"3\"* \"4\"* \"5\"* \"6\"* \"7\"*"},
 		{"— — — — — — — — miles", `"—"* "—"* "—"* "—"* "—"* "—"* "—"* "—"*`},
 		{"́a", "\"́a\"*"},
-		// The marks count among the 64 characters.
-		{strings.Repeat("é", 40), `"` + strings.Repeat("é", 32) + `"*`},
-		{strings.Repeat("́", 64) + "a b", `"` + strings.Repeat("́", 64) + `"* "b"*`},
+		// The 64 characters are counted after NFC: a letter and its mark that
+		// have a composed form are one, and the marks that have none count.
+		{strings.Repeat("e\u0301", 40), `"` + strings.Repeat("\u00e9", 40) + `"*`},
+		{strings.Repeat("e\u0301", 70), `"` + strings.Repeat("\u00e9", 64) + `"*`},
+		{strings.Repeat("x\u0301", 40), `"` + strings.Repeat("x\u0301", 32) + `"*`},
+		// A run of more than thirty marks is no text of a name: NFC, as
+		// golang.org/x/text computes it, puts U+034F after every thirtieth,
+		// in the query as in the names of the index.
+		{strings.Repeat("\u0301", 64) + "a b", `"` + strings.Repeat(strings.Repeat("\u0301", 30)+"\u034f", 2) + "\u0301\u0301" + `"* "b"*`},
 		// The spaces that are not ASCII, the line and paragraph separators
 		// and the controls of both ranges separate.
 		{"a b c d e f　g", `"a"* "b"* "c"* "d"* "e"* "f"* "g"*`},
@@ -682,10 +772,12 @@ func TestFindPhrasesAndWordsWithoutTokens(t *testing.T) {
 		"Rós—Sigur":   nil,
 		"davis、miles": nil,
 		"mil、davis":   nil,
-		// The known limit (§10.3): unicode61 does not take these marks away,
-		// so the decomposed form does not find the composed name.
-		"がくや":      list("がくや"),
-		"がくや":     nil,
+		"がくや":         list("がくや"),
+		// Decomposed, as some clients send it: the query is put in NFC, the
+		// form of the index. unicode61 does not take these marks away, so
+		// without it the decomposed form would not find the composed name.
+		"がくや":     list("がくや"),
+		"が":       list("がくや"),
 		"̓ sigur—": list("Sigur Rós"),
 	} {
 		wantFound(t, text, "artists", findAll(t, s, text).artists, want)
@@ -704,9 +796,10 @@ func TestFindPhrasesAndWordsWithoutTokens(t *testing.T) {
 		wantFound(t, text, "tracks", findAll(t, s, text).tracks, want)
 	}
 	for text, want := range map[string][]string{
-		"Ἀθήνα":  list("Ἀθήνα"),
-		"ἀθήνα":  list("Ἀθήνα"),
-		"ἀθήνα": nil,
+		"Ἀθήνα": list("Ἀθήνα"),
+		"ἀθήνα": list("Ἀθήνα"),
+		// Decomposed: the breathing as a combining mark, on the lower case letter.
+		"ἀθήνα": list("Ἀθήνα"),
 	} {
 		wantFound(t, text, "albums", findAll(t, s, text).albums, want)
 	}
@@ -737,6 +830,7 @@ func TestFindAcrossEverySeparator(t *testing.T) {
 		0xad, 0x200b, 0x200d, 0xfeff, // format characters
 		'₂', '²', '½', 'Ⅷ', '٣', 'é', 'ß', '龍', 'か', // numbers and letters
 		0x378, 0x50000, 0xe0080, 0xfffd, 0xffff, 0x10ffff, // not assigned, or no character
+		0x37e, 0x1fef, 0x2126, 0x212b, 0x340, 0x341, 0x344, 0xf73, 0x1d15e, // their NFC is other characters
 	}
 	var separators, others []rune
 	for r := rune(0); r <= unicode.MaxRune; r++ {
@@ -765,7 +859,7 @@ func TestFindAcrossEverySeparator(t *testing.T) {
 	index(t, s, entries...)
 	artists := Kinds{Artists: true}
 	for _, r := range all {
-		name := sweepName(r)
+		name := names.Normalize(sweepName(r))
 		got, err := findIn(t.Context(), s, name, artists, 5)
 		if err != nil {
 			t.Fatalf("%U: searching %q: %v", r, name, err)

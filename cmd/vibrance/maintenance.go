@@ -16,9 +16,10 @@ import (
 
 // The usage of the operational commands of the database (DESIGN.md §11.4).
 const (
-	backupUsage  = "usage: vibrance backup --to /backup/NAME"
-	restoreUsage = "usage: vibrance restore --from /backup/NAME"
-	doctorUsage  = "usage: vibrance doctor"
+	backupUsage        = "usage: vibrance backup --to /backup/NAME"
+	restoreUsage       = "usage: vibrance restore --from /backup/NAME"
+	doctorUsage        = "usage: vibrance doctor"
+	rebuildSearchUsage = "usage: vibrance rebuild-search"
 )
 
 // backup is `vibrance backup --to /backup/NAME`: a new, verified backup of
@@ -96,6 +97,30 @@ func doctor(args []string, euid int, stdout io.Writer, stateDir string, log *slo
 		return status
 	}
 	return exitFailure
+}
+
+// rebuildSearch is `vibrance rebuild-search`: it makes the full-text tables
+// of the search again from the index of the library, in one transaction. It
+// is the repair of what the doctor finds wrong in the search. Exit codes: 0
+// the tables are rebuilt; 2 refused, nothing was changed; 1 it failed, and
+// nothing was changed.
+func rebuildSearch(args []string, euid int, stdout io.Writer, stateDir string, log *slog.Logger) int {
+	if len(args) != 0 {
+		log.Error(rebuildSearchUsage, "code", "usage")
+		return exitUsage
+	}
+	if refused := refuseRoot(euid, log); refused {
+		return exitUsage
+	}
+	// With the server stopped, opening the database creates the files of
+	// its write-ahead log: they get the mode the server gives them.
+	syscall.Umask(0o022)
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	defer stop()
+	if err := app.RebuildSearch(ctx, stateDir, log); err != nil {
+		return operationFailed(log, err)
+	}
+	return report(stdout, log, "Search index rebuilt. Run vibrance doctor to check it.\n")
 }
 
 // parsePathFlag accepts exactly one flag, --name PATH, and nothing else.

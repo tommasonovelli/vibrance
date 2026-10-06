@@ -18,7 +18,8 @@ import (
 	"vibrance/internal/store"
 )
 
-// The commands backup, restore and doctor (DESIGN.md §11.4, step S21):
+// The commands backup, restore, doctor and rebuild-search (DESIGN.md §11.4,
+// step S21 and the erratum R3):
 // their arguments, their output and their exit codes. What they do to the
 // database is proved in internal/app.
 
@@ -37,6 +38,8 @@ func runMaintenance(t *testing.T, euid int, state, backups, command string, args
 		code = restore(args, euid, &stdout, state, backups, log)
 	case "doctor":
 		code = doctor(args, euid, &stdout, state, log)
+	case "rebuild-search":
+		code = rebuildSearch(args, euid, &stdout, state, log)
 	default:
 		t.Fatalf("no command %s", command)
 	}
@@ -158,9 +161,12 @@ func TestMaintenanceRefusals(t *testing.T) {
 		{"restore", nil, nonRoot, "usage"},
 		{"restore", []string{"--to", backups + "/x"}, nonRoot, "usage"},
 		{"doctor", []string{"--deep"}, nonRoot, "usage"},
+		{"rebuild-search", []string{"--force"}, nonRoot, "usage"},
+		{"rebuild-search", []string{"now"}, nonRoot, "usage"},
 		{"backup", []string{"--to", backups + "/x"}, 0, app.CodeRunAsRoot},
 		{"restore", []string{"--from", backups + "/x"}, 0, app.CodeRunAsRoot},
 		{"doctor", nil, 0, app.CodeRunAsRoot},
+		{"rebuild-search", nil, 0, app.CodeRunAsRoot},
 	} {
 		code, out, logs := runMaintenance(t, tc.euid, state, backups, tc.command, tc.args...)
 		if code != exitUsage || out != "" {
@@ -209,7 +215,8 @@ func resetBackups(t *testing.T) string {
 	return binary.backup
 }
 
-// §3.4: backup and doctor run while the server runs, as processes.
+// §3.4: backup, doctor and rebuild-search run while the server runs, as
+// processes.
 func TestProcessBackupAndDoctorWhileTheServerRuns(t *testing.T) {
 	resetState(t)
 	backups := resetBackups(t)
@@ -220,6 +227,15 @@ func TestProcessBackupAndDoctorWhileTheServerRuns(t *testing.T) {
 	}
 	if code, out := runCommand(t, "doctor"); code != exitOK || out != "Doctor complete: no damage found.\n" {
 		t.Fatalf("doctor: exit %d\n%s", code, out)
+	}
+	if code, out := runCommand(t, "rebuild-search"); code != exitOK || out != rebuiltLine {
+		t.Fatalf("rebuild-search: exit %d\n%s", code, out)
+	}
+	if code, out := runCommand(t, "doctor"); code != exitOK || out != "Doctor complete: no damage found.\n" {
+		t.Fatalf("doctor after the rebuild: exit %d\n%s", code, out)
+	}
+	if status, _, err := p.get(t, "/health/ready"); err != nil || status != 200 {
+		t.Fatalf("the server after the rebuild: %d, %v", status, err)
 	}
 	p.signal(t, syscall.SIGTERM)
 	p.wantExit(t, exitOK)
@@ -313,4 +329,53 @@ func wantWholeBackup(t *testing.T, dir string) {
 	if got, err := os.Stat(filepath.Join(dir, "vibrance.db")); err != nil || got.Size() != m.Database.Size {
 		t.Fatalf("the backup %s has a copy of %v bytes, its manifest says %d", dir, got, m.Database.Size)
 	}
+}
+
+// rebuiltLine is the line `vibrance rebuild-search` prints when it is done.
+const rebuiltLine = "Search index rebuilt. Run vibrance doctor to check it.\n"
+
+// `vibrance rebuild-search` (the erratum R3 to §11.4): the doctor exits 1
+// on a search index that disagrees with the library and names the command;
+// the command exits 0 and prints its line; then the doctor exits 0.
+func TestRebuildSearchCommand(t *testing.T) {
+	state := newDatabase(t, true)
+	if code, out, logs := runMaintenance(t, nonRoot, state, "", "rebuild-search"); code != exitOK || out != rebuiltLine || logs != "" {
+		t.Fatalf("rebuild-search of a sound database: exit %d, stdout %q, log %s", code, out, logs)
+	}
+	db, err := sql.Open("sqlite", filepath.Join(state, "vibrance.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, execErr := db.ExecContext(t.Context(), `INSERT INTO search_tracks (rowid, title, artist, album) VALUES (7, 'ghost', 'nobody', 'none')`)
+	if err := errors.Join(execErr, db.Close()); err != nil {
+		t.Fatal(err)
+	}
+	code, out, _ := runMaintenance(t, nonRoot, state, "", "doctor")
+	if code != exitFailure || !strings.HasPrefix(out, "doctor_search_extra search_tracks rowid 7: ") ||
+		!strings.Contains(out, "run vibrance rebuild-search") || !strings.HasSuffix(out, "Doctor complete: 1 problems found. Nothing was changed.\n") {
+		t.Fatalf("doctor of a broken search index: exit %d, stdout %q", code, out)
+	}
+	if code, out, logs := runMaintenance(t, nonRoot, state, "", "rebuild-search"); code != exitOK || out != rebuiltLine || logs != "" {
+		t.Fatalf("rebuild-search: exit %d, stdout %q, log %s", code, out, logs)
+	}
+	if code, out, logs := runMaintenance(t, nonRoot, state, "", "doctor"); code != exitOK || out != "Doctor complete: no damage found.\n" || logs != "" {
+		t.Fatalf("doctor after the rebuild: exit %d, stdout %q, log %s", code, out, logs)
+	}
+
+	// Without a database there is nothing to rebuild, and none is created.
+	empty := t.TempDir()
+	code, out, logs := runMaintenance(t, nonRoot, empty, "", "rebuild-search")
+	if code != exitUsage || out != "" {
+		t.Fatalf("rebuild-search without a database: exit %d, stdout %q", code, out)
+	}
+	wantAdvice(t, logs, app.CodeDatabaseMissing)
+	if entries, err := os.ReadDir(empty); err != nil || len(entries) != 0 {
+		t.Fatalf("rebuild-search created %v, %v", entries, err)
+	}
+	// A line that cannot be written is a failure, never a success.
+	var failed bytes.Buffer
+	if code := rebuildSearch(nil, nonRoot, failingWriter{}, state, newLogger(&failed)); code != exitFailure {
+		t.Fatalf("rebuild-search that cannot write its line: exit %d", code)
+	}
+	wantLog(t, failed.Bytes(), "report_output")
 }

@@ -981,14 +981,19 @@ paths:
         emoji and symbols that the tokenizer of SQLite does not know as such
         (most recent emoji) are part of the word they touch, in the names
         and in `q`: Disco🪩Ball is found by `disco🪩` and not by `disco ball`.
-        An accent sent as a separate character is found like the letter
-        that carries it for Latin letters, not for every script (a kana with
-        a separate voicing mark does not find the composed name).
+
+        `q` is read in Unicode normalization form C, the form of every name
+        of the library: a letter and an accent sent as two characters (as
+        some systems write them) find what the single character finds, in
+        every script, a kana with a separate voicing mark and Greek with
+        separate breathings and accents included. Compatibility characters
+        are not replaced: `H2O` does not find H₂O, and half-width kana do
+        not find full-width ones.
       parameters:
         - name: q
           in: query
           required: true
-          description: What to search for, 1 to 100 characters as sent (an accent sent as a separate character counts); anything else answers `400 invalid_request`.
+          description: What to search for, 1 to 100 characters as sent, before any normalization (an accent sent as a separate character counts); anything else answers `400 invalid_request`.
           schema:
             type: string
             minLength: 1

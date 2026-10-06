@@ -73,19 +73,21 @@ The server keeps everything in one SQLite file, `/var/lib/vibrance/vibrance.db`,
 
 A server that is killed needs no repair: the next start recovers from the write-ahead log.
 
-### Backup, restore and doctor
+### Backup, restore, doctor and rebuild-search
 
-The whole database is precious: the ids of the tracks, which playlists and favorites point to, cannot be rebuilt from the library. Three commands of the image save, restore and check it; [docs/operations.md](operations.md) shows them in the Compose stack. `/backup` is the backup folder (`VIBRANCE_BACKUP`); the thumbnails are a cache and are not saved.
+The whole database is precious: the ids of the tracks, which playlists and favorites point to, cannot be rebuilt from the library. Three commands of the image save, restore and check it, and a fourth repairs its search index; [docs/operations.md](operations.md) shows them in the Compose stack. `/backup` is the backup folder (`VIBRANCE_BACKUP`); the thumbnails are a cache and are not saved.
 
 ```sh
 docker exec <container> vibrance backup --to "/backup/$(date +%F-%H%M)"   # while the server runs
 docker exec <container> vibrance doctor                                   # while the server runs; changes nothing
 vibrance restore --from /backup/2026-10-05-2130                           # in a one-off container, server stopped, empty state volume
+vibrance rebuild-search                                                   # in a one-off container, server stopped
 ```
 
 - `backup` copies the database with `VACUUM INTO`, a consistent copy also while the server writes, into a new folder: `vibrance.db` (mode 0600: it holds the password hashes) and `manifest.json` (the version of Vibrance and of the schema, the date, the size and SHA-256 of the copy, the number of users, playlists, playlist items, favorites, artists, albums and tracks). It checks the copy with `PRAGMA integrity_check` and reads it again for its SHA-256. It writes under `.vibrance-backup-*.tmp` and gives the folder its name only when it is complete: a backup that fails or is killed leaves only that temporary folder, which you remove. It prints `Backup completed: /backup/NAME`.
 - `restore` puts the copy in place as `/var/lib/vibrance/vibrance.db` only when the state folder has no database (nor a `-wal`, `-shm` or `-journal` file). It checks the manifest strictly and the SHA-256 of the copy, refuses a copy made by a newer Vibrance, writes and syncs a temporary file and gives it its name without ever overwriting one. A copy of an older schema is migrated by the server when it starts. It prints `Restore completed: /backup/NAME. Start the server.`
 - `doctor` reads the database in one transaction: `PRAGMA integrity_check`, `PRAGMA foreign_key_check`, the integrity of each full-text table, every full-text row against an available artist, album or track with the same names and the other way round, `track_count` and `duration_ms` of every album against its available tracks, and at least one enabled admin. It prints one line per finding, `code entity: message. Advice: ...`, and a last line: `Doctor complete: no damage found.` (exit 0) or `Doctor complete: N problems found. Nothing was changed.` (exit 1). It repairs nothing.
+- `rebuild-search` makes the three full-text tables again from `artists`, `albums` and `tracks`, in one write transaction: it drops them, creates them with the statements of `migrations/00002_search.sql` and fills them with the rows the scanner writes (`search.Rebuild`; the `INSERT ... SELECT` statements are the scanner's own, without the id). It is the repair of every `doctor_search_*` finding, and of a `doctor_integrity` finding that names only `search_` tables: a `DROP` does not read the index it removes. It changes nothing else, refuses what `doctor` refuses and never migrates. It is correct while the server runs (the server finds the old tables until the commit), but the other writes wait for the transaction and fail after 5 seconds (`busy_timeout`), and on a large library or a slow disk it may last longer (measured: 2.4 s for 200,000 tracks): stop the server first. Nothing rebuilds the index by itself, at the start or ever. It prints `Search index rebuilt. Run vibrance doctor to check it.`
 
 Exit codes: 0 done; 2 refused before anything was written (bad arguments, root, the codes marked *refusal* below); 1 failed or damage found. A failure is logged with its `code` and an `advice`.
 
@@ -94,19 +96,21 @@ Exit codes: 0 done; 2 refused before anything was written (bad arguments, root, 
 | `backup_outside_backup` (refusal) | backup | The destination is not a plain absolute path of a new folder under `/backup`. |
 | `backup_exists` (refusal) | backup | A file or folder with that name exists: backups are never overwritten. |
 | `backup_destination` (refusal) | backup | The parent folder does not exist or cannot be written. |
-| `database_missing` (refusal) | backup, doctor | There is no `vibrance.db` in the state folder. |
-| `store_schema_old` (refusal) | backup, doctor | The database was written by an older Vibrance: start the server once, which migrates it. |
-| `store_schema_too_new`, `store_open` (refusal) | backup, doctor | The database is newer than this binary, or is not a database. |
+| `database_missing` (refusal) | backup, doctor, rebuild-search | There is no `vibrance.db` in the state folder. |
+| `store_schema_old` (refusal) | backup, doctor, rebuild-search | The database was written by an older Vibrance: start the server once, which migrates it. |
+| `store_schema_too_new`, `store_open` (refusal) | backup, doctor, rebuild-search | The database is newer than this binary, or is not a database. |
 | `backup_failed`, `backup_verify` | backup | The copy could not be written, or is damaged: remove the temporary folder, run `doctor`, retry. |
 | `restore_outside_backup` (refusal) | restore | The backup is not a folder under `/backup`. |
 | `restore_database_exists` (refusal) | restore | The state folder has a database, or what is left of one: restore into a new, empty volume. |
 | `restore_manifest_invalid`, `restore_hash`, `restore_schema_too_new` (refusal) | restore | The backup does not pass its checks, or a newer Vibrance made it: use another backup, or that version. |
 | `restore_destination` (refusal), `restore_failed` | restore | The state folder cannot be written, or writing failed: nothing was restored. |
 | `doctor_failed` | doctor | The inspection could not be completed. |
-| `doctor_integrity`, `doctor_foreign_key`, `doctor_search_index` | doctor | The file is damaged: keep it, and restore the latest backup that `doctor` finds sound. |
-| `doctor_search_extra`, `doctor_search_missing`, `doctor_search_stale` | doctor | A full-text row does not agree with the index: searches that meet it fail or miss it. Nothing in Vibrance repairs it; restore a sound backup. |
+| `doctor_integrity`, `doctor_foreign_key` | doctor | The file is damaged: keep it, and restore the latest backup that `doctor` finds sound. If every `doctor_integrity` line names a `search_` table, the damage is in the search index: run `rebuild-search` first. |
+| `doctor_search_index` | doctor | The full-text index of a table is damaged: run `rebuild-search`. |
+| `doctor_search_extra`, `doctor_search_missing`, `doctor_search_stale` | doctor | A full-text row does not agree with the index: searches that meet it fail or miss it. Run `rebuild-search`. |
 | `doctor_album_counters` | doctor | An album shows a wrong number of tracks or duration until it is indexed again. |
 | `doctor_no_admin` | doctor | No admin is enabled: `vibrance user create --role admin`. |
+| `rebuild_search_failed` | rebuild-search | The rebuild failed, for example because the server held the write lock for too long. Nothing was changed: stop the server and retry. |
 
 ## The API specification
 
@@ -238,7 +242,8 @@ The original is served in place of the thumbnail when the cover file is larger t
 - Words joined by punctuation that is not ASCII are a phrase, in their order: `Sigur—Rós` finds Sigur Rós and `Rós—Sigur` does not, while `rós sigur` does.
 - A word made only of such punctuation is left out; alone, it finds nothing, without an error.
 - The emoji and symbols the tokenizer does not know as such (most recent emoji) are part of the word they touch, in the names and in `q`: Disco🪩Ball is found by `disco🪩` and not by `disco ball`.
-- An accent sent as a separate character is found like the letter that carries it for Latin letters, not for every script: a kana with a separate voicing mark does not find the composed name.
+- `q` is put in Unicode normalization form C before it is split (`search.Parse`), which is the form of every name of the index: the scanner writes each name through `names.Normalize`. So a letter and its accent sent as two characters, as some systems write them, find what the single character finds, in every script: a kana with a separate voicing mark, Greek with separate breathings and accents, Hangul sent as jamo. The tokenizer alone would do this only for the Latin accents, which it takes away. The limit of 100 characters counts `q` as sent, and the 64 characters of a word are counted after the normalization.
+- It is form C, not KC: compatibility characters are not replaced. `H2O` does not find H₂O, and half-width kana do not find full-width ones.
 - There is no tolerance for typing mistakes, and a run of Chinese or Japanese characters is one word, found only from its beginning.
 
 ## The playlists

@@ -216,6 +216,50 @@ func TestSearchQueries(t *testing.T) {
 	}
 }
 
+// The erratum R3 to §10.2, over the API: a q in decomposed form finds the
+// names of scripts whose marks SQLite's tokenizer does not take away, a kana
+// with a separate voiced mark and Greek with a separate breathing, because q
+// is put in NFC, the form of the names. The limit of 100 characters still
+// counts q as it is sent.
+func TestSearchDecomposedQuery(t *testing.T) {
+	w := newWorld(t, apiOrigin)
+	w.indexFixture()
+	// An album as the scanner writes it: its names through names.Normalize,
+	// from tags in decomposed form.
+	const voiced, breathing, acute = string(rune(0x3099)), string(rune(0x313)), string(rune(0x301))
+	artist := names.Normalize("か" + voiced + "くや")
+	title := names.Normalize("Α" + breathing + "θη" + acute + "να")
+	if artist != "がくや" || title != "Ἀθήνα" {
+		t.Fatalf("the names of the index are %+q and %+q", artist, title)
+	}
+	ctx := t.Context()
+	artistID, albumID := names.ArtistID(artist), "0192a5f0-0000-7000-8000-0000000000d1"
+	err := w.store.WithWriteTx(ctx, func(q *store.Queries) error {
+		return errors.Join(
+			q.UpsertArtist(ctx, store.UpsertArtistParams{ID: artistID, Name: artist, SortKey: names.SortKey(artist)}),
+			q.UpsertAlbum(ctx, store.UpsertAlbumParams{ID: albumID, ArtistID: artistID, ArtistKey: names.SortKey(artist),
+				Title: title, TitleKey: names.SortKey(title), YearKey: 10000, RelPath: "decomposed", AlbumRevision: 1,
+				RenderVersion: "r", ReceiptHash: "h", FirstSeenAt: 1, UpdatedAt: 1}),
+			search.SyncAlbum(ctx, q.Conn(), albumID), search.SyncArtist(ctx, q.Conn(), artistID))
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{"がくや", "か" + voiced + "くや", "か" + voiced, "ἀθήνα", "α" + breathing + "θη" + acute + "να", "α" + breathing + "θ",
+		// Both words decomposed, 100 characters as sent.
+		strings.Repeat(" ", 90) + "か" + voiced + " α" + breathing + "θη" + acute + "να"} {
+		got := w.search("q="+url.QueryEscape(q), w.anna)
+		if len(got.Albums) != 1 || got.Albums[0].Title != title || got.Albums[0].Artist.Name != artist {
+			t.Errorf("%+q finds the albums %+v, want %s", q, got.Albums, title)
+		}
+	}
+	if got := w.search("q="+url.QueryEscape("か"+voiced+"くや")+"&types=artist", w.anna); len(got.Artists) != 1 || got.Artists[0].Id != artistID {
+		t.Errorf("the decomposed name finds the artists %+v", got.Artists)
+	}
+	wantCode(t, "101 characters as sent", w.get("/search?q="+url.QueryEscape(strings.Repeat(" ", 91)+"か"+voiced+" α"+breathing+"θη"+acute+"να"), w.anna),
+		http.StatusBadRequest, "invalid_request")
+}
+
 // A full-text row that describes nothing available is a fault of the index:
 // the search answers 500 internal, says nothing of it to the client, and
 // the log has the cause.
