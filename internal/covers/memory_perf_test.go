@@ -17,12 +17,14 @@ import (
 	"time"
 )
 
-// TestPerfThumbnailMemory measures the memory one thumbnail takes while it is
-// made of the largest covers a thumbnail is made of, 40 megapixels (T20):
-// what the process holds more than before, at its highest. Two covers are
-// decoded at once at most (decodeSlots), so the worst case of the server is
-// twice the largest figure. It is part of the performance suite
-// (scripts/perf.sh), which reports the figures; nothing is a budget here.
+// TestPerfThumbnailMemory measures the memory the making of thumbnails takes
+// in the two worst cases the decode slots allow (T20): one cover of 40
+// megapixels, the largest a thumbnail is made of, which is decoded alone,
+// and two square covers of 16 megapixels (alonePixels), the largest that
+// are decoded together. A figure is what the process holds more than before, at
+// its highest; the worst case of the server is the largest of them. It is
+// part of the performance suite (scripts/perf.sh), which reports the
+// figures; nothing is a budget here.
 func TestPerfThumbnailMemory(t *testing.T) {
 	for _, c := range []struct {
 		name          string
@@ -33,35 +35,58 @@ func TestPerfThumbnailMemory(t *testing.T) {
 		{"8 bits, RGBA", 8, 6, 4},
 		{"16 bits, RGBA", 16, 6, 4},
 	} {
-		data := flatPNG(t, 8000, 5000, c.depth, c.colors, c.samples)
-		runtime.GC()
-		debug.FreeOSMemory()
-		before := residentKB(t)
-		peak := before
-		var sampler sync.WaitGroup
-		stop := make(chan struct{})
-		sampler.Go(func() {
-			for {
-				select {
-				case <-stop:
-					return
-				case <-time.After(2 * time.Millisecond):
-					peak = max(peak, residentKB(t))
-				}
+		for _, m := range []struct {
+			what          string
+			width, height int
+			together      int
+		}{
+			{"one thumbnail of a 40-megapixel PNG", 8000, 5000, 1},
+			// A square is the worst shape: the scaling keeps a buffer of
+			// the width of the thumbnail by the height of the cover.
+			{"one thumbnail of a square 40-megapixel PNG", 6324, 6324, 1},
+			{"two thumbnails of 16-megapixel PNGs at once", 4000, 4000, decodeSlots},
+		} {
+			data := flatPNG(t, m.width, m.height, c.depth, c.colors, c.samples)
+			if got := slotsFor(bytes.NewReader(data)) * int64(m.together); got != decodeSlots {
+				t.Fatalf("%s: %d of them take %d decode slots, want all %d", m.what, m.together, got, decodeSlots)
 			}
-		})
-		began := time.Now()
-		thumb, err := render(data, int(Thumb640))
-		took := time.Since(began)
-		close(stop)
-		sampler.Wait()
-		if err != nil || len(thumb) == 0 {
-			t.Fatalf("%s: %v", c.name, err)
+			runtime.GC()
+			debug.FreeOSMemory()
+			before := residentKB(t)
+			peak := before
+			var sampler sync.WaitGroup
+			stop := make(chan struct{})
+			sampler.Go(func() {
+				for {
+					select {
+					case <-stop:
+						return
+					case <-time.After(2 * time.Millisecond):
+						peak = max(peak, residentKB(t))
+					}
+				}
+			})
+			began := time.Now()
+			var renders sync.WaitGroup
+			for range m.together {
+				renders.Go(func() {
+					if thumb, err := render(data, int(Thumb640)); err != nil || len(thumb) == 0 {
+						t.Errorf("%s, %s: %v", m.what, c.name, err)
+					}
+				})
+			}
+			renders.Wait()
+			took := time.Since(began)
+			close(stop)
+			sampler.Wait()
+			if t.Failed() {
+				t.FailNow()
+			}
+			fmt.Printf("PERF | %-58s | %5s | %10s | %10.1f %-2s | %10s | %9s | %s\n",
+				m.what+", "+c.name+": memory", "1", "", float64(peak-before)/1024, "MB", "", "-", "-")
+			fmt.Printf("PERF | %-58s | %5s | %10s | %10.1f %-2s | %10s | %9s | %s\n",
+				m.what+", "+c.name+": time", "1", "", took.Seconds(), "s", "", "-", "-")
 		}
-		fmt.Printf("PERF | %-58s | %5s | %10s | %10.1f %-2s | %10s | %9s | %s\n",
-			"thumbnail of a 40-megapixel PNG, "+c.name+": memory", "1", "", float64(peak-before)/1024, "MB", "", "-", "-")
-		fmt.Printf("PERF | %-58s | %5s | %10s | %10.1f %-2s | %10s | %9s | %s\n",
-			"thumbnail of a 40-megapixel PNG, "+c.name+": time", "1", "", took.Seconds(), "s", "", "-", "-")
 	}
 }
 

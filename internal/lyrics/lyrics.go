@@ -295,7 +295,8 @@ func small(digits string) int64 {
 }
 
 // stripWordTags removes the word time tags of "enhanced" LRC, <mm:ss.xx>
-// in any form of a time tag, from a text. Angle brackets around anything else are text.
+// in any form of a time tag, from a text. Angle brackets around anything
+// else are text.
 func stripWordTags(s string) string {
 	var b strings.Builder
 	for {

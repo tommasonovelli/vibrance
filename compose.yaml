@@ -217,6 +217,10 @@ services:
       # MusicLib's owner. Vibrance runs with MusicLib stopped.
       app:
         condition: service_started
+    # Open requests, such as an audio stream, get 10 s to end; then the
+    # server closes them and its database. Docker's default of 10 s would
+    # kill it at that very moment.
+    stop_grace_period: 15s
     # The slim image has no curl: the subcommand asks /health/ready on
     # VIBRANCE_HTTP_ADDR and exits 0 or 1.
     healthcheck:

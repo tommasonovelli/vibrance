@@ -4,11 +4,11 @@
 
 Only the latest release of Vibrance receives security fixes. Each release names the Vibrance MusicLib version it runs with ([docs/compat.md](docs/compat.md)); update the stack only with Vibrance's releases ([Upgrading](docs/operations.md#upgrading)).
 
+Vibrance 0.1.0 is built with Go 1.25.14, the toolchain Vibrance MusicLib 1.2.0 is built with. It is the last release of the Go 1.25 series, which the Go project no longer supports: a vulnerability found in Go's standard library from now on is fixed only in newer series. Vibrance stays on MusicLib's pinned versions for this release and will move to a supported Go in a later one. Before the release, `govulncheck` found no known vulnerability that Vibrance's code reaches; if one is found later, it is fixed by a new release of Vibrance built with a newer Go.
+
 ## Reporting a vulnerability
 
-**Do not open a public issue, and do not publish details, for a vulnerability.** Report it privately to:
-
-> **SECURITY CONTACT: TO BE SET BY THE OWNER** (a private e-mail address, or GitHub's "Report a vulnerability" button under the repository's **Security** tab once private vulnerability reporting is enabled). Until this line is replaced there is no private channel: open an issue that only says you have a security report, with no details, and wait to be contacted.
+**Do not open a public issue, and do not publish details, for a vulnerability.** Report it privately with GitHub's private vulnerability reporting: on the repository, open the **Security** tab and select **Report a vulnerability** (<https://github.com/tommasonovelli/vibrance/security/advisories/new>). Only the maintainer sees the report.
 
 Please include:
 
