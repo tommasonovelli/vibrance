@@ -1840,3 +1840,10 @@ Le voci `TO CONFIRM` si riportano all'utente (§0.11) e, una volta decise, diven
   1. I file di `web/ui` incorporati nel binario e serviti alla radice; `/login` e i percorsi del client come la proposta; intestazioni, `ETag` e CSP come la proposta; `/` serve l'interfaccia. `THIRD_PARTY_NOTICES.md` e `licenses/` con il font Hanken Grotesk (OFL 1.1); l'immagine contiene `web/ui`.
   - Test: quelli della proposta C1, nella matrice di autorizzazione come percorsi infrastrutturali. Mutazione: il ripiego su `index.html` anche sotto `/api/`.
   - Accettazione: il revisore apre l'interfaccia in Chromium sul server vero, entra, apre una pagina di album, fa partire una traccia e verifica nella console che la CSP non blocchi nulla.
+
+- **2026-10-06 · F1 (passo nuovo, sul branch `dev-web-ui`, prima di W2) · un test instabile del gate.** Il revisore di W1 ha trovato che `TestLibraryStatusConcurrently` (`internal/app/status_test.go`) fallisce in circa il 6% delle esecuzioni, con e senza W1 (2–3 su 40): aspetta lo stato `idle` e poi rilegge lo stato, ma fra le due letture può partire un ciclo accodato, e la seconda lettura vede `scanning`. Un gate che fallisce a caso costa round a ogni passo seguente. L'utente ha lasciato la scelta all'orchestratore.
+
+  **F1 — `TestLibraryStatusConcurrently` deterministico.** Persona: ingegnere Go esperto di test concorrenti. Leggere: §6.5 e §8.7 (lo stato della libreria e i cicli richiesti), §12, il test e il codice dello stato che esercita.
+  1. Trovare la causa con prove (log, ripetizioni) e correggere il test perché controlli la stessa garanzia senza dipendere dall'ordine dei cicli. Se la causa è nel server e non nel test (uno stato che la specifica non permette), è un difetto: correggerlo con il suo test, e dirlo in NOTES.md.
+  - Test: `scripts/dev.sh go test -race -count=100 -run TestLibraryStatusConcurrently ./internal/app` senza un fallimento, e lo stesso senza `-race`. Mutazione: rompere la garanzia che il test protegge (per esempio uno stato `scanning` senza `progress`) e vederlo fallire.
+
