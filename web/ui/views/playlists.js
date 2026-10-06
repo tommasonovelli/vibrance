@@ -2,13 +2,11 @@
 // the person's (Recently updated, or by name) and stays in the URL. The list
 // is read whole (a person has at most 500), so sorting is done here.
 import { api, optional } from '../api.js';
-import { $, clone, closeMenu, emptyState, formatLength, openMenu, pageHead, pending, show } from '../ui.js';
+import { $, clone, closeMenu, emptyState, formatLength, openMenu, pageHead, pending, plural, show } from '../ui.js';
 import * as act from '../actions.js';
 import { grid, playlistArt } from '../list.js';
 import { newPlaylist } from '../sidebar.js';
 
-const number = new Intl.NumberFormat('en');
-const plural = (n, word) => `${number.format(n)} ${word}${n === 1 ? '' : 's'}`;
 const names = new Intl.Collator('en', { sensitivity: 'base', numeric: true });
 const SORTS = {
   updated: (a, b) => (a.updated_at < b.updated_at ? 1 : a.updated_at > b.updated_at ? -1 : 0), // the stamps have a fixed width
@@ -70,7 +68,16 @@ export async function render(main, params, signal) {
   cards.classList.add('grid-pl');
   host.append(cards);
   const tile = clone('t-fav-tile');
-  if (favorites) $('.cm', tile).textContent = `${plural(favorites.track_count, 'song')} · ${formatLength(favorites.duration_ms)}`;
+  const showTile = () => { if (favorites) $('.cm', tile).textContent = `${plural(favorites.track_count, 'song')} · ${formatLength(favorites.duration_ms)}`; };
+  showTile();
+  // A heart pressed anywhere (the bar, a menu, a row) changes the tile at once.
+  document.addEventListener('track:favorite', ({ detail: { track } }) => {
+    if (!favorites) return;
+    const step = track.favorite ? 1 : -1;
+    favorites.track_count = Math.max(0, favorites.track_count + step);
+    favorites.duration_ms = Math.max(0, favorites.duration_ms + step * track.duration_ms);
+    showTile();
+  }, { signal });
 
   let note = null;
   function draw() {

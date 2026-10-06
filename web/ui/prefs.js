@@ -12,4 +12,7 @@
     if (localStorage.getItem('vibrance.sidebar') === 'collapsed') root.dataset.sidebar = 'collapsed';
     if (localStorage.getItem('vibrance.queue') === 'open') root.dataset.queue = 'open';
   } catch { /* no storage: the defaults */ }
+  // Now playing takes the whole window: the sidebar and the bar are never drawn
+  // there, so a reload on it does not draw them first and then take them away.
+  if (location.pathname === '/now-playing') root.dataset.now = '';
 })();

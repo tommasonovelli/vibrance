@@ -8,6 +8,20 @@
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="preload" href="/fonts/hanken-grotesk-v12-latin.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/app.css">
+<!-- The modules app.js imports, and list.js that most pages import, are asked for
+     now, side by side, not one level of imports at a time. Keep in step with the imports. -->
+<link rel="modulepreload" href="/api.js">
+<link rel="modulepreload" href="/ui.js">
+<link rel="modulepreload" href="/router.js">
+<link rel="modulepreload" href="/sidebar.js">
+<link rel="modulepreload" href="/player.js">
+<link rel="modulepreload" href="/bar.js">
+<link rel="modulepreload" href="/queue.js">
+<link rel="modulepreload" href="/shortcuts.js">
+<link rel="modulepreload" href="/settings.js">
+<link rel="modulepreload" href="/status.js">
+<link rel="modulepreload" href="/actions.js">
+<link rel="modulepreload" href="/list.js">
 <script type="module" src="/app.js"></script>
 </head>
 <body>
@@ -188,7 +202,7 @@
 
 <template id="t-track-head"><div class="tr hd" role="row"><span class="grip"></span><span class="no">#</span><span>Title</span><span class="c-album">Album</span><span class="c-genre">Genre</span><span class="c-added">Added</span><span class="heart-col"></span><span class="tm"><svg class="i sm" role="img" aria-label="Duration"><use href="#i-clock"/></svg></span><span></span></div></template>
 
-<template id="t-selbar"><div class="selbar" role="toolbar" aria-label="Selected songs">
+<template id="t-selbar"><x-selbar class="selbar" role="toolbar" aria-label="Selected songs">
 <span class="sel-count"></span>
 <button class="btn" type="button" data-act="next"><svg class="i" aria-hidden="true"><use href="#i-play-next"/></svg>Play next</button>
 <button class="btn" type="button" data-act="queue"><svg class="i" aria-hidden="true"><use href="#i-queue"/></svg>Add to queue</button>
@@ -196,7 +210,7 @@
 <button class="btn" type="button" data-act="remove" hidden><svg class="i" aria-hidden="true"><use href="#i-remove"/></svg>Remove from playlist</button>
 <button class="btn sel-fav" type="button" data-act="fav"><svg class="i" aria-hidden="true"><use href="#i-heart"/></svg><span>Add to favorites</span></button>
 <button class="iconbtn" type="button" data-act="clear" aria-label="Clear selection"><svg class="i sm" aria-hidden="true"><use href="#i-close"/></svg></button>
-</div></template>
+</x-selbar></template>
 
 <template id="t-ghost"><span class="ghost" aria-hidden="true"><svg class="i sm"><use href="#i-plus"/></svg><span></span></span></template>
 

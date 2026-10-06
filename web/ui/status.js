@@ -17,8 +17,6 @@ let onAdmin = false; // the Administration page shows the library itself
 let unreachable = false;
 let probe = 0;
 
-export const library = () => status;
-
 // The words of each state, here and in Administration: [dot, state, note, what the empty Library tells an admin].
 export const STATES = {
   idle: ['ok', 'Up to date', 'The last scan went through every album folder.', 'Nothing was found by the last scan.'],

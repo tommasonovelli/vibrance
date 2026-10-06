@@ -10,13 +10,12 @@
 // again and says so. The page's requests go one after another, each with the
 // tag the one before gave.
 import { api, coverUrl, isStale } from '../api.js';
-import { $, announce, clone, emptyState, formatAgo, formatDate, formatLength, formatTime, setCover, setTitle, show, staleToast, toast, openMenu } from '../ui.js';
+import { $, announce, clone, emptyState, formatAgo, formatDate, formatLength, openMenu, plural, setCover, setTitle, show, staleToast, toast } from '../ui.js';
 import * as act from '../actions.js';
 import { pager, playlistArt, trackList } from '../list.js';
 import { navigate } from '../router.js';
 
 const PAGE = 100;
-const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 // Songs taken out wait for the end of their toast before the server hears
 // of it; one toast at a time, so at most one removal waits. If the page

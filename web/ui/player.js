@@ -686,7 +686,13 @@ function setupSession() {
 // The queue, the song and the second it was at, the modes and the volume.
 // The current song is asked for once more: it may be gone, and its heart may
 // have changed on another device.
-export async function restore() {
+let restoring = Promise.resolve();
+// Resolves when what restore() brought back is in place: Now playing, opened
+// by a reload, waits for it instead of finding nothing playing.
+export const restored = () => restoring;
+export const restore = () => (restoring = bringBack());
+
+async function bringBack() {
   const level = read(VOLUME);
   if (level) { volume = clamp(+level.volume || 0, 0, 1); muted = !!level.muted; }
   emit('player:volume', { volume, muted });

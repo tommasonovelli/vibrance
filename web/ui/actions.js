@@ -3,13 +3,11 @@
 // change shows at once and ends in a toast with Undo, not in a question
 // (proposal 7.2); a failure puts things back and says so in one sentence.
 import { api, coverUrl, isMissing, isStale, optional, walk } from './api.js';
-import { $, clone, confirmSheet, openSheet, setCover, show, staleToast, toast, whenClosed, formatTime } from './ui.js';
+import { $, clone, confirmSheet, formatTime, number, openSheet, plural, setCover, show, staleToast, toast, whenClosed } from './ui.js';
 import * as player from './player.js';
 import { getPlaylists, newPlaylist } from './sidebar.js';
 
 const emit = (name, detail) => document.dispatchEvent(new CustomEvent(name, { detail }));
-const number = new Intl.NumberFormat('en');
-const plural = (n, word) => `${number.format(n)} ${word}${n === 1 ? '' : 's'}`;
 
 // The second line and the cover of a toast: "Title · Artist", or the count.
 function about(tracks) {

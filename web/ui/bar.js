@@ -17,7 +17,7 @@ const clamp = (value, low, high) => Math.min(Math.max(value, low), high);
 let back = '/';
 document.addEventListener('route', ({ detail }) => {
   const now = detail.path === '/now-playing';
-  document.body.toggleAttribute('data-now', now);
+  document.documentElement.toggleAttribute('data-now', now);
   if (!now) back = detail.path + (detail.query.size ? `?${detail.query}` : '');
 });
 export const lastPage = () => back;

@@ -5,9 +5,8 @@
 // server says no.
 import { api, optional } from '../api.js';
 import * as status from '../status.js';
-import { $, announce, clone, confirmSheet, fieldError, formatDate, formatLength, openMenu, openSheet, pageHead, radioGroup, sayError, show, toast } from '../ui.js';
+import { $, announce, clone, confirmSheet, fieldError, formatDate, formatLength, number, openMenu, openSheet, pageHead, plural, radioGroup, sayError, show, toast } from '../ui.js';
 
-const number = new Intl.NumberFormat('en');
 const clock = new Intl.DateTimeFormat('en', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 
 const WORDS = {
@@ -85,7 +84,7 @@ export async function render(main, params, signal) {
     }
 
     const set = (key, value, text) => { $(`.st-${key}`, view).textContent = value; $(`.st-${key}-note`, view).textContent = text; };
-    set('albums', number.format(state.albums.available), [summary && `${number.format(summary.artists)} ${summary.artists === 1 ? 'artist' : 'artists'}`, available(state.albums)].filter(Boolean).join(' · '));
+    set('albums', number.format(state.albums.available), [summary && plural(summary.artists, 'artist'), available(state.albums)].filter(Boolean).join(' · '));
     set('tracks', number.format(state.tracks.available), [summary && formatLength(summary.duration_ms), available(state.tracks)].filter(Boolean).join(' · '));
     const scan = state.last_scan;
     if (!scan) set('scan', '–', 'No scan yet');

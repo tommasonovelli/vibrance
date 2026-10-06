@@ -17,6 +17,8 @@ const remember = (key, on) => { try { localStorage.setItem(key, on ? 'on' : 'off
 export async function render(main, params, signal) {
   setTitle('Now playing');
   main.dataset.glow = 'now';
+  await player.restored(); // a reload on this page: the song comes back from the browser first
+  if (signal.aborted) return;
   if (!player.current()) {
     main.append(emptyState({ icon: 'queue', title: 'Nothing is playing', text: 'Choose a song and it shows here, with its lyrics.', link: { href: '/', label: 'Go to Library' } }));
     return;

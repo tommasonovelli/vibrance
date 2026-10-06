@@ -6,13 +6,12 @@
 // Undo. At the end of the context the music stops, and the list says so.
 import * as player from './player.js';
 import { coverUrl } from './api.js';
-import { $, clone, emptyState, formatLength, formatTime, setCover, show, toast } from './ui.js';
+import { $, clone, emptyState, formatLength, formatTime, plural, setCover, show, toast } from './ui.js';
 import { newPlaylist } from './sidebar.js';
 import { navigate } from './router.js';
 import { appendTracks } from './actions.js';
 
 const root = document.documentElement;
-const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const touch = () => matchMedia('(hover: none)').matches; // no double-click: a tap plays
 const clamp = (value, length) => Math.min(Math.max(value, 0), length - 1);
 

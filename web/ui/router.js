@@ -48,6 +48,7 @@ async function show(href, restore) {
     const late = setTimeout(() => { if (!main.children.length) main.append(clone('t-ph-page')); }, 1000);
     try {
       const view = await (found ? found.route.load() : import('./views/not-found.js'));
+      if (signal.aborted) return; // the reader went elsewhere while the module came: it would draw into the next page
       await view.render(main, params, signal);
     } catch (error) {
       if (signal.aborted || error.name === 'AbortError') return;
@@ -78,12 +79,18 @@ async function show(href, restore) {
   first = false;
 }
 
+// Starts loading the module of a path before the router starts: the code of
+// the first page travels while the session is checked.
+export function warm(table, path) {
+  for (const route of Object.entries(table).map(compile)) {
+    if (route.regex.test(path)) { route.load().catch(() => {}); return; }
+  }
+}
+
 export function navigate(href, { replace = false } = {}) {
   history[replace ? 'replaceState' : 'pushState']({ y: 0 }, '', href);
   return show(href, null);
 }
-
-export const reload = () => show(location.pathname + location.search, null);
 
 export function start(table, element) {
   routes = Object.entries(table).map(compile);

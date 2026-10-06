@@ -480,7 +480,7 @@ input[type="checkbox"] { width: 1rem; height: 1rem; min-height: 0; margin: 0; ac
 .details summary { width: fit-content; color: var(--graphite); font: var(--type-note); cursor: pointer; }
 .details pre { margin: var(--s2) 0 0; color: var(--graphite); font: var(--type-note); font-family: var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
 
-.blk { border-radius: var(--r-cover); background: var(--fill-strong); }
+.blk { display: block; border-radius: var(--r-cover); background: var(--fill-strong); }
 
 /* 10. Rows and cards. A song is a row of a grid: its columns change with the
    page (--cols and --areas on .tl), its cells are always the same. Rows and
@@ -519,8 +519,10 @@ a.ar:where([href]) { color: var(--graphite); }
 .tr {
   position: relative; display: grid; grid-template-columns: var(--cols); grid-template-areas: var(--areas); align-items: center; gap: var(--s3);
   min-height: 56px; padding: 0 var(--s2); border-top: 1px solid var(--hairline); user-select: none;
-  content-visibility: auto; contain-intrinsic-size: auto 56px;
 }
+.tl { --row: 56px; }
+.tl.is-album { --row: 44px; }
+.tl-chunk { content-visibility: auto; contain-intrinsic-size: auto calc(var(--n, 1) * var(--row)); }
 .tr > .no { grid-area: no; } .tr > .t { grid-area: t; } .tr > .c-artist { grid-area: artist; } .tr > .c-album { grid-area: album; }
 .tr > .c-genre { grid-area: genre; } .tr > .grip { grid-area: grip; } .tr > .c-added { grid-area: added; } .tr > .lyr { grid-area: lyr; } .tr > .heart, .tr > .heart-col { grid-area: heart; } .tr > .tm { grid-area: tm; } .tr > .dots { grid-area: dots; }
 .tl.is-playlist { --cols: 1.25rem 2rem minmax(0, 4fr) minmax(0, 3fr) minmax(0, 1.4fr) 2rem 3.25rem 2rem; --areas: "grip no t album added heart tm dots"; position: relative; margin-top: 0; }
@@ -533,12 +535,12 @@ a.ar:where([href]) { color: var(--graphite); }
 .is-playlist .tr.is-off { opacity: 1; }
 .is-playlist .tr.is-off .th { opacity: .35; filter: grayscale(1); }
 .is-playlist .tr.is-off :is(.nm, .c) { color: var(--graphite); }
-.is-album .tr { min-height: 44px; padding: 0 var(--s1); contain-intrinsic-size: auto 44px; }
+.is-album .tr { min-height: 44px; padding: 0 var(--s1); }
 .is-album .th, .is-album .tt .ar { display: none; }
 .is-album .no { justify-items: end; }
 .tl.is-album .c-album, .tl:not(.is-album) .c-artist, .tl:not(.is-album) .lyr, :is(.is-artist, .is-search) .c-genre, .tl.is-search .no { display: none; }
 .is-album .c-artist:not([href]) { pointer-events: none; }
-.tr.hd { min-height: 36px; border-top: 0; color: var(--graphite); font: 500 .8125rem/1.125rem var(--family); content-visibility: visible; }
+.tr.hd { min-height: 36px; border-top: 0; color: var(--graphite); font: 500 .8125rem/1.125rem var(--family); }
 .tr.hd .tm { display: grid; justify-items: end; }
 .tr:not(.hd):hover, .tr.hov { background: var(--hover); border-radius: var(--r-control); }
 .tr.is-sel, .tr.is-sel:hover { background: color-mix(in srgb, var(--ink) 13%, transparent); border-radius: var(--r-control); }
@@ -576,7 +578,9 @@ a.c:where([href]) { color: var(--graphite); }
   display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); width: max-content; max-width: calc(100vw - var(--sidebar) - 2rem);
   padding: 6px 6px 6px var(--s4); border: 1px solid var(--hairline); border-radius: var(--r-panel); background: var(--paper);
 }
-body:has(.selbar) .toasts { bottom: calc(var(--player) + 4.75rem); }
+/* x-selbar (list.js) says when one is on screen; a :has() rule for this was
+   checked against every row each time a page of rows arrived. */
+.toasts[data-lifted] { bottom: calc(var(--player) + 4.75rem); }
 .sel-count { margin-right: var(--s3); font-weight: 600; }
 
 /* The pill that follows the pointer while songs are dragged to the sidebar. */
@@ -599,7 +603,6 @@ body:has(.selbar) .toasts { bottom: calc(var(--player) + 4.75rem); }
 .ph-card .blk:first-child { aspect-ratio: 1; }
 .ph-card .blk:nth-child(2) { height: 14px; width: 80%; }
 .ph-card .blk:nth-child(3) { height: 10px; width: 55%; }
-.blk { display: block; }
 
 /* Cards: album covers and round artists in a grid. */
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: var(--s6) var(--s5); }
@@ -612,10 +615,11 @@ body:has(.selbar) .toasts { bottom: calc(var(--player) + 4.75rem); }
   border-radius: var(--r-pill); background: var(--accent); color: var(--on-accent); cursor: pointer;
   opacity: 0; transform: translateY(6px); transition: opacity var(--quick) var(--ease), transform var(--quick) var(--ease);
 }
+/* Over a cover, in both themes: a dark pill and a light icon, not tokens. */
 .cdots { position: absolute; right: 8px; top: 8px; background: rgb(0 0 0 / .55); color: #f5f5f7; opacity: 0; transition: opacity var(--quick) var(--ease); }
 .cdots:hover, .cdots.is-open { background: rgb(0 0 0 / .75); color: #f5f5f7; }
 .card:hover :is(.cplay, .cdots), .card:focus-within :is(.cplay, .cdots) { opacity: 1; transform: none; }
-.card:has(.is-open) .cdots { opacity: 1; }
+.cdots.is-open { opacity: 1; }
 @media (hover: none) { .cplay, .cdots { opacity: 1; transform: none; } }
 .ct { overflow: hidden; color: var(--ink); font: var(--type-head); text-overflow: ellipsis; white-space: nowrap; }
 .cm { display: flex; justify-content: space-between; gap: var(--s2); margin-top: -11px; color: var(--graphite); font: var(--type-note); font-variant-numeric: tabular-nums; }
@@ -841,8 +845,8 @@ dl.facts dd { margin: 0; font-variant-numeric: tabular-nums; }
    the corner reads the same size. Pills and circles stay round. */
 @supports (corner-shape: squircle) {
   .np-cover, .np-cover img, .qcov, .now-cover, .side-cover, .fav-ic, .tcov-img, .ticon, .mi-cover, .blk, .th, .art img, .cover, .pl-cover, .mosaic, .empty-art, .glowtile, .top-art img, .pick img, .pick .new, .sd-cover { corner-shape: squircle; border-radius: calc(var(--r-cover) * 1.6); }
-  .btn, input, textarea, .nav-item, .brand, .mi, .undo, .qi:hover, .qi:focus-visible, .reveal, .skip-link, kbd, .searchlink, .pick, .tr:not(.hd):hover, .tr.is-sel { corner-shape: squircle; border-radius: calc(var(--r-control) * 1.6); }
-  .menu, .sheet, .toast, .notice, .login-card, .topcard, .selbar, .bigsearch input, .now-queue { corner-shape: squircle; border-radius: calc(var(--r-panel) * 1.6); }
+  .btn, input, textarea, .nav-item, .brand, .mi, .undo, .qi:hover, .qi:focus-visible, .reveal, .skip-link, kbd, .searchlink, .pick, .tr:not(.hd):hover, .tr.is-sel, .dev, .ur:not(.hd):hover, .radio { corner-shape: squircle; border-radius: calc(var(--r-control) * 1.6); }
+  .menu, .sheet, .toast, .notice, .login-card, .topcard, .selbar, .bigsearch input, .now-queue, .band, .stats { corner-shape: squircle; border-radius: calc(var(--r-panel) * 1.6); }
 }
 
 /* 15. Sign in (login.html): the sidebar's lockup, larger, over a solid card
@@ -930,9 +934,9 @@ dl.facts dd { margin: 0; font-variant-numeric: tabular-nums; }
    of this page. Links here are ink. The field is still: nothing animates
    the blur. */
 
-body[data-now] :is(.sidebar, .player, #queue) { display: none; }
-body[data-now] .app { grid-template-columns: minmax(0, 1fr); }
-body[data-now] .toasts { left: 0; }
+[data-now] :is(.sidebar, .player, #queue) { display: none; }
+[data-now] .app { grid-template-columns: minmax(0, 1fr); }
+[data-now] .toasts { left: 0; }
 .page[data-glow="now"] { color-scheme: dark; margin-left: 0; padding: 0; min-height: 100vh; min-height: 100dvh; color: var(--ink); }
 .page[data-glow="now"]::before, .page[data-glow="now"]::after { position: fixed; inset: -10%; height: auto; mask: none; }
 .page[data-glow="now"]::before {
@@ -945,9 +949,9 @@ body[data-now] .toasts { left: 0; }
 .now a { color: var(--ink); }
 .now :focus-visible { outline-color: var(--ink); }
 .now .iconbtn, .now .dots { width: 2.5rem; height: 2.5rem; color: var(--ink); }
-.now :is(.iconbtn, .dots):hover { background: rgb(255 255 255 / .1); }
+.now :is(.iconbtn, .dots):hover { background: color-mix(in srgb, var(--ink) 10%, transparent); }
 .now .iconbtn:is(.is-on, [aria-pressed="true"]) { color: var(--accent); }
-.now .iconbtn.is-shown { background: rgb(255 255 255 / .14); }
+.now .iconbtn.is-shown { background: color-mix(in srgb, var(--ink) 14%, transparent); }
 .now .iconbtn:disabled, .now .iconbtn[aria-disabled="true"] { opacity: .45; }
 .now .iconbtn .one { right: 6px; bottom: 6px; }
 .now .qi .x { width: 2rem; height: 2rem; }
@@ -957,7 +961,7 @@ body[data-now] .toasts { left: 0; }
   display: inline-flex; align-items: center; gap: 6px; min-height: 2.5rem; padding: 0 12px 0 var(--s2);
   border: 0; border-radius: var(--r-pill); background: none; color: var(--ink); font-weight: 500; cursor: pointer;
 }
-.now-close:hover { background: rgb(255 255 255 / .1); }
+.now-close:hover { background: color-mix(in srgb, var(--ink) 10%, transparent); }
 .now-close .i { stroke-width: 2; }
 .now-from { text-align: center; }
 .now-from .cap { font: var(--type-caption); letter-spacing: .06em; text-transform: uppercase; opacity: .85; }
@@ -981,7 +985,7 @@ body[data-now] .toasts { left: 0; }
 .now-artist { font: 500 1.375rem/1.75rem var(--family); }
 .now-album { margin-top: var(--s1); opacity: .85; }
 .now-badges { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: 14px; }
-.now-badges span { padding: 3px 6px; border: 1px solid rgb(255 255 255 / .35); border-radius: 4px; font: var(--type-caption); letter-spacing: .06em; text-transform: uppercase; }
+.now-badges span { padding: 3px 6px; border: 1px solid color-mix(in srgb, var(--ink) 35%, transparent); border-radius: 4px; font: var(--type-caption); letter-spacing: .06em; text-transform: uppercase; }
 .now .heart .i { width: 24px; height: 24px; }
 
 /* A scrim under the lyrics keeps 4.5:1 on light covers. The column scrolls
@@ -997,10 +1001,10 @@ body[data-now] .toasts { left: 0; }
   height: min(34rem, calc(100dvh - 17rem)); overflow-y: auto; scrollbar-width: none; padding: var(--s2) 0 30%;
   mask: linear-gradient(transparent, #000 12%, #000 80%, transparent);
 }
-.ly { margin: 0; padding: 0; border: 0; background: none; color: rgb(245 245 247 / .6); font: 700 1.875rem/2.375rem var(--family); letter-spacing: -.015em; text-align: left; }
+.ly { margin: 0; padding: 0; border: 0; background: none; color: color-mix(in srgb, var(--ink) 60%, transparent); font: 700 1.875rem/2.375rem var(--family); letter-spacing: -.015em; text-align: left; }
 button.ly { cursor: pointer; }
 button.ly:hover, .ly.is-current { color: var(--ink); }
-.ly-list.is-plain .ly { color: rgb(245 245 247 / .85); font: 600 1.375rem/2rem var(--family); letter-spacing: 0; }
+.ly-list.is-plain .ly { color: color-mix(in srgb, var(--ink) 85%, transparent); font: 600 1.375rem/2rem var(--family); letter-spacing: 0; }
 .ly-gap { flex: none; height: .5rem; }
 .ly-foot { display: flex; align-items: center; gap: var(--s3); margin-top: var(--s3); font-size: .8125rem; }
 .ly-note { opacity: .85; }
@@ -1011,24 +1015,24 @@ button.ly:hover, .ly.is-current { color: var(--ink); }
 .now-pill .i { stroke-width: 2; }
 
 .now-queue {
-  padding: var(--s4); border: 1px solid rgb(255 255 255 / .14); border-radius: var(--r-panel);
+  padding: var(--s4); border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent); border-radius: var(--r-panel);
   background: rgb(0 0 0 / .34); backdrop-filter: blur(20px);
-  max-height: calc(100dvh - 12rem); overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgb(255 255 255 / .3) transparent;
+  max-height: calc(100dvh - 12rem); overflow-y: auto; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--ink) 30%, transparent) transparent;
 }
-.now-queue :is(.ar, .qcap, .qi .tm, .note, .ended p) { color: rgb(245 245 247 / .78); }
-.now-queue .qi:hover { background: rgb(255 255 255 / .08); }
-.now-queue .qend, .now-queue .qcap { border-color: rgb(255 255 255 / .14); }
+.now-queue :is(.ar, .qcap, .qi .tm, .note, .ended p) { color: color-mix(in srgb, var(--ink) 78%, transparent); }
+.now-queue .qi:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.now-queue .qend, .now-queue .qcap { border-color: color-mix(in srgb, var(--ink) 14%, transparent); }
 .now-queue .qh .link { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
 .now-queue .qcap .link { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
-.now-queue .btn, .now-queue .undo { background: rgb(255 255 255 / .14); }
-.now-queue .btn:hover { background: rgb(255 255 255 / .2); }
+.now-queue .btn, .now-queue .undo { background: color-mix(in srgb, var(--ink) 14%, transparent); }
+.now-queue .btn:hover { background: color-mix(in srgb, var(--ink) 20%, transparent); }
 
 .now-transport { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: var(--s5); padding: var(--s3) 2.5rem 1.75rem; }
 .now-prog { grid-column: 1 / -1; display: flex; align-items: center; gap: var(--s3); font-size: .8125rem; font-variant-numeric: tabular-nums; }
-.now .bar { height: 5px; background: rgb(255 255 255 / .22); }
+.now .bar { height: 5px; background: color-mix(in srgb, var(--ink) 22%, transparent); }
 .now .bar:hover .fl { background: var(--ink); }
 .now .bar .kn { width: 13px; height: 13px; margin: -6.5px 0 0 -6.5px; }
-.now .bar:hover .tip { color: var(--ink); background: rgb(0 0 0 / .6); border-color: rgb(255 255 255 / .2); }
+.now .bar:hover .tip { color: var(--ink); background: rgb(0 0 0 / .6); border-color: color-mix(in srgb, var(--ink) 20%, transparent); }
 .now-btns { display: flex; align-items: center; gap: var(--s4); }
 .now-btns .skip .i { width: 26px; height: 26px; }
 .bigplay {
@@ -1229,11 +1233,6 @@ button.ly:hover, .ly.is-current { color: var(--ink); }
   .banner { padding-inline: var(--s4); }
   .radios { flex-direction: column; }
   .opt { gap: var(--s4); }
-}
-
-@supports (corner-shape: squircle) {
-  .dev, .ur:not(.hd):hover, .radio { corner-shape: squircle; border-radius: calc(var(--r-control) * 1.6); }
-  .band, .stats { corner-shape: squircle; border-radius: calc(var(--r-panel) * 1.6); }
 }
 
 /* Links of text in rows and cards are 24px tall, as the rest of the targets. */

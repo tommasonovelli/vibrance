@@ -3,12 +3,11 @@
 // collapsed state were put on <html> by prefs.js before the first paint;
 // this module keeps them in step with the buttons.
 import { api, coverUrl, optional } from './api.js';
-import { $, clone, openSheet, setIcon, show, toast } from './ui.js';
+import { $, clone, number, openSheet, setIcon, show, toast } from './ui.js';
 import { navigate } from './router.js';
 import { saveSetting } from './settings.js';
 
 const root = document.documentElement;
-const number = new Intl.NumberFormat('en');
 let playlists = [];
 let playingFrom = null; // the id of the playlist the music comes from
 
@@ -71,8 +70,6 @@ function renderPlaylists() {
   setCurrent(location.pathname);
 }
 
-const changed = () => document.dispatchEvent(new CustomEvent('playlists:changed'));
-
 // A playlist was made or changed (a rename, songs added or taken out): its
 // row follows, and nothing else is read again. Every answer that changes a
 // playlist carries it whole, so this is all the sidebar ever needs.
@@ -87,13 +84,11 @@ function update(playlist) {
   fillPlaylist(li, playlist);
   setPlayingFrom(playingFrom);
   setCurrent(location.pathname);
-  changed();
 }
 
 function drop(id) {
   playlists = playlists.filter(p => p.id !== id);
   document.querySelector(`#side-playlists [data-playlist="${CSS.escape(id)}"]`)?.remove();
-  changed();
 }
 
 // Playlists change from many places; they say so, and the sidebar listens.
@@ -111,7 +106,6 @@ export async function reload() {
   if (lists) {
     playlists = lists.playlists;
     renderPlaylists();
-    changed();
   }
   const count = $('#favorites-count');
   count.hidden = !favorites;

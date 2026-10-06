@@ -21,7 +21,17 @@ export function listHead(head) {
 
 // ---- Rows of songs ---------------------------------------------------------------
 
+// The selection bar lifts the toasts above it (app.css §8). A custom element
+// knows when its bar comes and goes, however it goes: a list made again, a
+// page left.
+let bars = 0;
+customElements.define('x-selbar', class extends HTMLElement {
+  connectedCallback() { $('#toasts').toggleAttribute('data-lifted', ++bars > 0); }
+  disconnectedCallback() { $('#toasts').toggleAttribute('data-lifted', --bars > 0); }
+});
+
 const inside = 'a, button';
+const CHUNK = 20; // rows to a block that skips its rendering off screen
 const touch = () => matchMedia('(hover: none)').matches; // no hover, no double-click: a tap plays
 
 function heartOf(row) {
@@ -285,7 +295,17 @@ export function trackList(kind, label, context, { skip = [], only = null, menu =
     const first = rows.length;
     const fresh = tracks.map((track, i) => makeRow(track, numbered(track, first + i)));
     for (const row of fresh) { rows.push(row); row.querySelectorAll(inside).forEach(control => { control.tabIndex = -1; }); }
-    page.append(...fresh);
+    // A page of rows is one block that skips its layout and paint while it is
+    // far off screen (app.css §10): the browser watches one block per page,
+    // not one per row, which is what keeps a list of thousands scrolling.
+    for (let i = 0; i < fresh.length; i += CHUNK) {
+      const chunk = document.createElement('div');
+      chunk.className = 'tl-chunk';
+      chunk.setAttribute('role', 'rowgroup');
+      chunk.style.setProperty('--n', Math.min(CHUNK, fresh.length - i));
+      chunk.append(...fresh.slice(i, i + CHUNK));
+      page.append(chunk);
+    }
     el.append(page);
     if (!active && fresh.length) activate(fresh[0]);
     markPlaying();

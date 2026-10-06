@@ -51,6 +51,7 @@ function keys() {
 
 async function boot() {
   const main = $('#main');
+  router.warm(routes, location.pathname);
   let me;
   try {
     me = await api.get('/me'); // a 401 sends the browser to /login by itself
@@ -64,11 +65,11 @@ async function boot() {
   initQueue();
   keys();
   initShortcuts();
-  router.start(routes, main);
   // What was playing comes back paused, and the preferences of this person
-  // arrive; neither holds up the page.
+  // arrive; neither holds up the page (only Now playing waits for the song).
   player.restore();
   loadSettings();
+  router.start(routes, main);
 }
 
 boot();

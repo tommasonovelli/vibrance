@@ -1,13 +1,12 @@
 // The Library: every song (GET /tracks, sorted), or the favorites of the
 // person (the tab beside it). The list loads page by page as it is scrolled.
 import { api, optional, walk } from '../api.js';
-import { $, clone, emptyState, errorNotice, openMenu, pageHead, setTitle, show } from '../ui.js';
+import { $, clone, emptyState, errorNotice, number, openMenu, pageHead, setTitle, show } from '../ui.js';
 import { adminLine } from '../status.js';
 import * as act from '../actions.js';
 import { listHead, pager, trackList } from '../list.js';
 
 const SORTS = [['title', 'Title'], ['artist', 'Artist'], ['album', 'Album'], ['added', 'Recently added']];
-const number = new Intl.NumberFormat('en');
 // "Recently added" reads newest first; the others, A to Z.
 const firstOrder = sort => (sort === 'added' ? 'desc' : 'asc');
 

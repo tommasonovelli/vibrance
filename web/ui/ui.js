@@ -5,6 +5,10 @@ import { coverUrl } from './api.js';
 
 export const $ = (selector, root = document) => root.querySelector(selector);
 
+// Counts as they are written everywhere: 1,204 songs, 1 album.
+export const number = new Intl.NumberFormat('en');
+export const plural = (n, word) => `${number.format(n)} ${word}${n === 1 ? '' : 's'}`;
+
 // A fresh copy of the one element a <template> holds.
 export const clone = id => document.getElementById(id).content.firstElementChild.cloneNode(true);
 
@@ -70,6 +74,14 @@ export function announce(text) {
 export function setCover(img, cover, size = 256) {
   img.src = coverUrl(cover, size) || '/no-cover.svg';
 }
+
+// A cover that cannot be loaded (offline, a file gone) becomes the same quiet
+// disc, not the browser's broken icon. One listener serves every image; an
+// error does not bubble, so it is caught on its way down.
+document.addEventListener('error', event => {
+  const img = event.target;
+  if (img instanceof HTMLImageElement && img.getAttribute('src') !== '/no-cover.svg') img.src = '/no-cover.svg';
+}, true);
 
 // What stands in for a list that is loading: nothing during the first
 // second, a quick answer needs no sign; then still blocks, no spinner and no
