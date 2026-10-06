@@ -97,6 +97,22 @@ exec `+media.FFprobePath+` "$@"`)
 	return path, started, open
 }
 
+// waitProbing waits until the gated ffprobe of r waits at its gate: from
+// then on the cycle that runs cannot end until the gate is opened.
+func waitProbing(t *testing.T, r *running, started string) {
+	t.Helper()
+	deadline := time.Now().Add(60 * time.Second)
+	for {
+		if _, err := os.Stat(started); err == nil {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the scanner examined no file within 60s; logs:\n%s", r.logs)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 // The state while a cycle runs and after it, and the requests for a scan:
 // each one answers 202 with the state as it is, and however many arrive
 // while a cycle runs, one more cycle follows, not one each (§6.1, §8.7).
@@ -106,16 +122,7 @@ func TestLibraryStatusThroughACycle(t *testing.T) {
 	r := startServer(t, func(s *server) { s.musiclibDir, s.ffprobePath = musiclib, probe })
 	waitReady(t, "http://"+r.addr)
 	o := newOperator(t, r)
-	deadline := time.Now().Add(60 * time.Second)
-	for {
-		if _, err := os.Stat(started); err == nil {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("the scanner examined no file within 60s; logs:\n%s", r.logs)
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	waitProbing(t, r, started)
 
 	// While the first cycle runs.
 	during := o.status()
@@ -286,41 +293,62 @@ func TestLibraryStatusBeforeTheFirstCycle(t *testing.T) {
 // Many admins read the state and ask for scans while the scanner runs its
 // cycles: every answer is whole and conforms, and the cycles stay one at a
 // time (the race detector watches the state the scanner and the requests
-// share).
+// share). The first requests arrive while the first cycle is held open, so
+// they surely see a cycle running; the others arrive while it ends and the
+// cycles they ask for come and go.
 func TestLibraryStatusConcurrently(t *testing.T) {
 	musiclib := fixtureLibrary(t)
-	r := startServer(t, func(s *server) { s.musiclibDir = musiclib })
+	probe, started, open := gatedProbe(t)
+	r := startServer(t, func(s *server) { s.musiclibDir, s.ffprobePath = musiclib, probe })
 	waitReady(t, "http://"+r.addr)
 	o := newOperator(t, r)
-	var clients sync.WaitGroup
-	for range 8 {
-		clients.Go(func() {
-			for range 25 {
-				if got := o.scan(); !got.State.Valid() {
-					t.Errorf("a request for a scan answered the state %q", got.State)
-				}
-				got := o.status()
-				if scanning := got.State == api.LibraryStatusStateScanning; scanning != (got.Progress != nil) ||
-					scanning && (got.LastScan == nil || got.LastScan.FinishedAt != nil) {
-					t.Errorf("state %s with progress %v and last scan %+v", got.State, got.Progress, got.LastScan)
-				}
-			}
-		})
+	// whole checks a state: a cycle runs exactly when there is a progress,
+	// and then the last scan is that cycle, not finished.
+	whole := func(got api.LibraryStatus) {
+		if scanning := got.State == api.LibraryStatusStateScanning; !got.State.Valid() || scanning != (got.Progress != nil) ||
+			scanning && (got.LastScan == nil || got.LastScan.FinishedAt != nil) {
+			t.Errorf("state %s with progress %v and last scan %+v", got.State, got.Progress, got.LastScan)
+		}
 	}
-	clients.Wait()
-	// The last request is served by a cycle that starts after it.
-	asked := len(eventsOf(t, r.logs, "scan finished"))
+	clients := func(scanning bool) {
+		var wg sync.WaitGroup
+		for range 8 {
+			wg.Go(func() {
+				for range 25 {
+					for _, got := range []api.LibraryStatus{o.scan(), o.status()} {
+						whole(got)
+						if scanning && got.State != api.LibraryStatusStateScanning {
+							t.Errorf("the state %s while the first cycle is held open", got.State)
+						}
+					}
+				}
+			})
+		}
+		wg.Wait()
+	}
+	waitProbing(t, r, started)
+	clients(true)
+	open()
+	clients(false)
+	// The last request is followed by a cycle that starts after it, and the
+	// state at rest after that cycle is checked in the very read that finds
+	// it: a cycle that a request of the clients left waiting may start at any
+	// moment, so a second read could find it running (NOTES.md N-186). The
+	// API gives times to the millisecond, so the start of a cycle after the
+	// request is no earlier than the time of the request truncated.
+	sent := time.Now().Truncate(time.Millisecond)
 	o.scan()
-	waitEvents(t, r, "scan finished", asked+1)
 	deadline := time.Now().Add(60 * time.Second)
-	for o.status().State != api.LibraryStatusStateIdle {
+	got := o.status()
+	for got.State != api.LibraryStatusStateIdle || got.LastScan == nil || parseTime(t, got.LastScan.StartedAt).Before(sent) {
 		if time.Now().After(deadline) {
-			t.Fatalf("the scanner is not idle within 60s; logs:\n%s", r.logs)
+			t.Fatalf("no cycle after the last request is over within 60s: %+v; logs:\n%s", got, r.logs)
 		}
 		time.Sleep(10 * time.Millisecond)
+		got = o.status()
 	}
-	got := o.status()
-	if got.Albums != (api.LibraryCounts{Available: 6}) || got.Tracks != (api.LibraryCounts{Available: 14}) || !got.LastScan.Ok {
+	if got.Albums != (api.LibraryCounts{Available: 6}) || got.Tracks != (api.LibraryCounts{Available: 14}) || got.Progress != nil ||
+		got.LastScan.FinishedAt == nil || !got.LastScan.Ok || got.LastScan.Error != nil {
 		t.Fatalf("after the requests: %+v (last scan %+v)", got, got.LastScan)
 	}
 	if err := r.stop(t); err != nil {
