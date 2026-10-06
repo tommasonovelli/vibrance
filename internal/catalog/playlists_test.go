@@ -103,7 +103,7 @@ func stateOf(t *testing.T, st *store.Store, svc *Service, userID, id string) pla
 }
 
 func (s playlistState) equal(o playlistState) bool {
-	return s.playlist == o.playlist && slices.Equal(s.items, o.items)
+	return reflect.DeepEqual(s.playlist, o.playlist) && slices.Equal(s.items, o.items)
 }
 
 // allItems reads every page of the items of a playlist, and checks that
@@ -232,14 +232,14 @@ func TestPlaylistCRUD(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := Playlist{ID: p.ID, Name: "Sunday morning", Description: "slow", Revision: 1,
-		CreatedAt: time.UnixMilli(1000).UTC(), UpdatedAt: time.UnixMilli(1000).UTC()}
-	if id, perr := uuid.Parse(p.ID); perr != nil || id.Version() != 7 || p != want || p.CreatedAt.Location() != time.UTC {
+		CreatedAt: time.UnixMilli(1000).UTC(), UpdatedAt: time.UnixMilli(1000).UTC(), Covers: []AlbumCover{}}
+	if id, perr := uuid.Parse(p.ID); perr != nil || id.Version() != 7 || !reflect.DeepEqual(p, want) || p.CreatedAt.Location() != time.UTC {
 		t.Fatalf("created: %+v, want %+v", p, want)
 	}
 	if p.ETag() != `"playlist:`+p.ID+`:1"` {
 		t.Fatalf("the entity tag of a new playlist: %s", p.ETag())
 	}
-	if got, err := svc.GetPlaylist(ctx, userA, p.ID); err != nil || got != want {
+	if got, err := svc.GetPlaylist(ctx, userA, p.ID); err != nil || !reflect.DeepEqual(got, want) {
 		t.Fatalf("read: %+v, %v", got, err)
 	}
 
@@ -249,7 +249,7 @@ func TestPlaylistCRUD(t *testing.T) {
 	clock.set(1500)
 	third := newPlaylist(t, svc, userA, "Earlier")
 	list, err := svc.ListPlaylists(ctx, userA)
-	if err != nil || len(list) != 3 || list[0] != want || list[1].ID != third.ID || list[2].ID != second.ID {
+	if err != nil || len(list) != 3 || !reflect.DeepEqual(list[0], want) || list[1].ID != third.ID || list[2].ID != second.ID {
 		t.Fatalf("the list: %+v, %v", list, err)
 	}
 
@@ -257,7 +257,7 @@ func TestPlaylistCRUD(t *testing.T) {
 	clock.set(3000)
 	got, added := appendTracks(t, svc, userA, p.ID, tracks[0], tracks[1])
 	want.ItemCount, want.DurationMS, want.Revision, want.UpdatedAt = 2, 2000, 2, time.UnixMilli(3000).UTC()
-	if got != want || len(added) != 2 {
+	if !reflect.DeepEqual(got, want) || len(added) != 2 {
 		t.Fatalf("after adding: %+v, want %+v", got, want)
 	}
 
@@ -265,16 +265,16 @@ func TestPlaylistCRUD(t *testing.T) {
 	clock.set(4000)
 	got, err = svc.UpdatePlaylist(ctx, userA, p.ID, "Monday", "", nil)
 	want.Name, want.Description, want.Revision, want.UpdatedAt = "Monday", "", 3, time.UnixMilli(4000).UTC()
-	if err != nil || got != want {
+	if err != nil || !reflect.DeepEqual(got, want) {
 		t.Fatalf("renamed: %+v, %v; want %+v", got, err, want)
 	}
 	clock.set(5000)
 	got, err = svc.UpdatePlaylist(ctx, userA, p.ID, "Monday", "", nil)
 	want.Revision, want.UpdatedAt = 4, time.UnixMilli(5000).UTC()
-	if err != nil || got != want {
+	if err != nil || !reflect.DeepEqual(got, want) {
 		t.Fatalf("renamed to the same: %+v, %v; want %+v", got, err, want)
 	}
-	if got, err := svc.GetPlaylist(ctx, userA, p.ID); err != nil || got != want {
+	if got, err := svc.GetPlaylist(ctx, userA, p.ID); err != nil || !reflect.DeepEqual(got, want) {
 		t.Fatalf("read after the changes: %+v, %v", got, err)
 	}
 
@@ -357,7 +357,7 @@ func TestPlaylistNameAndDescription(t *testing.T) {
 		}
 		wantCode(t, c.where+", created", err, http.StatusUnprocessableEntity, CodeInvalidRequest)
 		wantCode(t, c.where+", updated", uerr, http.StatusUnprocessableEntity, CodeInvalidRequest)
-		if !slices.Equal(before, after) {
+		if !reflect.DeepEqual(before, after) {
 			t.Fatalf("%s: a refused name changed the playlists", c.where)
 		}
 	}
@@ -832,7 +832,7 @@ func TestUnavailableTracksStayInAPlaylist(t *testing.T) {
 		t.Fatalf("with two unavailable items: %+v, %v", got, err)
 	}
 	list, err := svc.ListPlaylists(ctx, userA)
-	if err != nil || len(list) != 1 || list[0] != got {
+	if err != nil || len(list) != 1 || !reflect.DeepEqual(list[0], got) {
 		t.Fatalf("the list says %+v, the playlist %+v (%v)", list, got, err)
 	}
 	items := allItems(t, svc, userA, p.ID, 3)
@@ -921,7 +921,7 @@ func TestPlaylistLimits(t *testing.T) {
 		http.StatusUnprocessableEntity, CodeTooManyItems)
 	wantCode(t, "10001 items, at a position", errOf2(svc.AddPlaylistItems(ctx, userA, p.ID, tracks[:2], ptr(0), ptr(p.ETag()))),
 		http.StatusUnprocessableEntity, CodeTooManyItems)
-	if got, err := svc.GetPlaylist(ctx, userA, p.ID); err != nil || got != p {
+	if got, err := svc.GetPlaylist(ctx, userA, p.ID); err != nil || !reflect.DeepEqual(got, p) {
 		t.Fatalf("after the refusals: %+v, %v; want %+v", got, err, p)
 	}
 	// The item 10000 is added, in the middle, and the positions are dense.
@@ -964,7 +964,7 @@ func TestPlaylistLimits(t *testing.T) {
 	wantCode(t, "playlist 501", errOf(svc.CreatePlaylist(ctx, userA, "one too many", "")),
 		http.StatusUnprocessableEntity, CodeTooManyPlaylists)
 	list, err := svc.ListPlaylists(ctx, userA)
-	if err != nil || len(list) != MaxPlaylists || list[0] != p {
+	if err != nil || len(list) != MaxPlaylists || !reflect.DeepEqual(list[0], p) {
 		t.Fatalf("%d playlists, %v", len(list), err)
 	}
 	newPlaylist(t, svc, userB, "of the other user")
@@ -1017,7 +1017,7 @@ func TestPlaylistsArePrivate(t *testing.T) {
 	}
 	// Each sees their own playlists, and no others.
 	for user, want := range map[string]Playlist{userA: p, userB: mine} {
-		if list, err := svc.ListPlaylists(ctx, user); err != nil || len(list) != 1 || list[0] != want {
+		if list, err := svc.ListPlaylists(ctx, user); err != nil || len(list) != 1 || !reflect.DeepEqual(list[0], want) {
 			t.Fatalf("the playlists of %s: %+v, %v", user, list, err)
 		}
 	}
@@ -1029,7 +1029,7 @@ func TestPlaylistsArePrivate(t *testing.T) {
 	if after := stateOf(t, st, svc, userA, p.ID); !after.equal(before) {
 		t.Fatalf("an item was reached through another playlist: %+v", after)
 	}
-	if got := stateOf(t, st, svc, userB, mine.ID); got.playlist != mine || len(got.items) != 1 {
+	if got := stateOf(t, st, svc, userB, mine.ID); !reflect.DeepEqual(got.playlist, mine) || len(got.items) != 1 {
 		t.Fatalf("the playlist of B: %+v", got)
 	}
 }

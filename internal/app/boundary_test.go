@@ -123,8 +123,8 @@ func specOperations(t *testing.T) (*openapi3.T, []operation) {
 		return ops[i].method < ops[j].method
 	})
 	// The 37 operations of DESIGN.md §8.3 and those its erratum W1-W6 adds.
-	if len(ops) != 38 {
-		t.Fatalf("the specification has %d operations, want the 38 of DESIGN.md §8.3 and its erratum W1-W6", len(ops))
+	if len(ops) != 40 {
+		t.Fatalf("the specification has %d operations, want the 40 of DESIGN.md §8.3 and its erratum W1-W6", len(ops))
 	}
 	return doc, ops
 }

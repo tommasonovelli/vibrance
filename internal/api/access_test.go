@@ -31,8 +31,8 @@ func TestAccessIsTheOneOfTheDesign(t *testing.T) {
 	}
 	// The table itself, with the operations of the erratum W1-W6: three
 	// public operations, eight for admins.
-	if counts[auth.Public] != 3 || counts[auth.AdminOnly] != 8 || counts[auth.Authenticated] != 27 {
-		t.Errorf("%d public, %d for admins, %d for users; want 3, 8 and 27", counts[auth.Public], counts[auth.AdminOnly], counts[auth.Authenticated])
+	if counts[auth.Public] != 3 || counts[auth.AdminOnly] != 8 || counts[auth.Authenticated] != 29 {
+		t.Errorf("%d public, %d for admins, %d for users; want 3, 8 and 29", counts[auth.Public], counts[auth.AdminOnly], counts[auth.Authenticated])
 	}
 }
 

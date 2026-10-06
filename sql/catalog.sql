@@ -812,3 +812,19 @@ WHERE tracks.seq IN (
     LIMIT sqlc.arg(page_size)
 )
 ORDER BY tracks.first_seen_at DESC, tracks.id DESC;
+
+-- name: GetCatalogSummary :one
+-- GetCatalogSummary counts what is available to listen to: the artists
+-- that have an available album (those GET /artists lists), the available
+-- albums, and their available tracks with the sum of their known
+-- durations. The tracks are counted from the counters of their album
+-- (track_count and duration_ms, DESIGN.md 5.2), which the scanner keeps in
+-- the transaction of the album and the doctor checks: a track that is
+-- available is always in an available album, so they are the tracks of the
+-- albums of the lists, and 20,000 albums are read instead of 200,000
+-- tracks.
+SELECT count(DISTINCT albums.artist_id) AS artists, count(*) AS albums,
+    CAST(coalesce(sum(albums.track_count), 0) AS INTEGER) AS tracks,
+    CAST(coalesce(sum(albums.duration_ms), 0) AS INTEGER) AS duration_ms
+FROM albums
+WHERE albums.available = 1;

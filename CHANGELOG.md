@@ -8,6 +8,8 @@ Versions follow [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 ### Added
 
 - **Every track in one list.** `GET /api/v1/tracks` lists the available tracks, paged, by title, by artist, album after album, or by when Vibrance first saw them, in either direction, optionally only those of the albums of one artist. A track that MusicLib moves to another album keeps its place among the recently added. The first start after the upgrade computes the sort keys of every track once before it serves.
+- **Covers of the playlists.** Every playlist the API returns carries `covers`: up to four covers of distinct albums from its available items, in their order, for a mosaic.
+- **How much there is.** `GET /api/v1/catalog/summary` counts the available artists, albums and tracks and their duration; `GET /api/v1/me/favorites/summary` counts the favorites of the user and the duration of the available ones.
 
 ## [0.1.0] - 2026-10-06
 

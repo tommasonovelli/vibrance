@@ -101,6 +101,8 @@ var designOperations = []designOperation{
 	// The operations that the erratum W1-W6 of DESIGN.md adds
 	// (docs/proposals/web-client-api.md), in the order of its steps.
 	{"GET", "/tracks", "listTracks", "user", 200, []designError{{400, "invalid_cursor"}}},
+	{"GET", "/catalog/summary", "getCatalogSummary", "user", 200, nil},
+	{"GET", "/me/favorites/summary", "getFavoritesSummary", "user", 200, nil},
 }
 
 // designErrorCodes is the table of DESIGN.md §8.4, with the `*_not_found`

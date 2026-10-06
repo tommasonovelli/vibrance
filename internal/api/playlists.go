@@ -150,6 +150,11 @@ func (s Server) MovePlaylistItem(ctx context.Context, req MovePlaylistItemReques
 }
 
 func playlistOf(p catalog.Playlist) Playlist {
+	covers := make([]Cover, 0, len(p.Covers))
+	for _, c := range p.Covers {
+		covers = append(covers, *coverOf(c.AlbumID, c.Hash))
+	}
 	return Playlist{Id: p.ID, Name: p.Name, Description: p.Description, ItemCount: p.ItemCount, DurationMs: p.DurationMS,
-		Revision: p.Revision, Etag: p.ETag(), CreatedAt: timestamp(p.CreatedAt), UpdatedAt: timestamp(p.UpdatedAt)}
+		Revision: p.Revision, Etag: p.ETag(), CreatedAt: timestamp(p.CreatedAt), UpdatedAt: timestamp(p.UpdatedAt),
+		Covers: covers}
 }

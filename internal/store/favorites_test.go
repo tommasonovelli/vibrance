@@ -45,6 +45,9 @@ func TestFavoritesQueryPlans(t *testing.T) {
 		"TrackExists":    {trackExists, []any{testTrack}},
 		"AddFavorite":    {addFavorite, []any{testTrack, 1, testArtist}},
 		"RemoveFavorite": {removeFavorite, []any{testArtist, testTrack}},
+		// The summary reads the favorites of the user, and the track of each
+		// by its id: never every available track.
+		"GetFavoritesSummary": {getFavoritesSummary, []any{testArtist}},
 	} {
 		plan := explain(t, s, q.query, q.args...)
 		for _, line := range plan {

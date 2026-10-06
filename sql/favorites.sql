@@ -59,3 +59,19 @@ WHERE favorites.user_id = sqlc.arg(user_id)
   AND (favorites.created_at, favorites.track_id) < (CAST(sqlc.arg(created_at) AS INTEGER), CAST(sqlc.arg(after_id) AS TEXT))
 ORDER BY favorites.created_at DESC, favorites.track_id DESC
 LIMIT sqlc.arg(page_size);
+
+-- name: GetFavoritesSummary :one
+-- GetFavoritesSummary counts the favorites of a user and adds up the
+-- durations of those whose track is available, as GetPlaylistOfUser does
+-- for the items of a playlist (DESIGN.md 8.6): track_count counts every
+-- favorite, the ones whose track is not available included. The tracks of
+-- the favorites are found by their id, through the index that also holds
+-- available and the duration: without statistics SQLite would otherwise
+-- walk every available track through an index that begins with available,
+-- and look for each among the favorites (NOTES.md N-185).
+SELECT
+    (SELECT count(*) FROM favorites WHERE favorites.user_id = sqlc.arg(user_id)) AS track_count,
+    CAST((SELECT coalesce(sum(tracks.duration_ms), 0)
+          FROM favorites
+          JOIN tracks INDEXED BY tracks_duration_idx ON tracks.id = favorites.track_id
+          WHERE favorites.user_id = sqlc.arg(user_id) AND tracks.available = 1) AS INTEGER) AS duration_ms;

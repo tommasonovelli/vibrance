@@ -62,7 +62,22 @@ type Playlist struct {
 	Revision  int64
 	CreatedAt time.Time
 	UpdatedAt time.Time
+	// Covers are the covers of the mosaic of the playlist: at most
+	// MaxPlaylistCovers, of distinct albums, from the items whose track is
+	// available, in the order of the items, skipping the albums without a
+	// cover. Never nil: empty when there is none.
+	Covers []AlbumCover
 }
+
+// AlbumCover is the cover of an album: Hash is the SHA-256 of its file.
+type AlbumCover struct {
+	AlbumID string
+	Hash    string
+}
+
+// MaxPlaylistCovers is how many covers a playlist shows at most, the four
+// of a 2x2 mosaic (docs/proposals/web-client-api.md A2).
+const MaxPlaylistCovers = 4
 
 // ETag is the strong entity tag of the revision of the playlist, with its
 // quotes (§8.1): the value a client sends back as If-Match.
@@ -167,10 +182,51 @@ func checkRevision(etag string, ifMatch *string, required bool) error {
 	return nil
 }
 
-func playlistOf(r store.GetPlaylistOfUserRow) Playlist {
+// playlistOf is the playlist of a row, with its covers read in the
+// transaction q that read the row.
+func playlistOf(ctx context.Context, q *store.Queries, r store.GetPlaylistOfUserRow) (Playlist, error) {
+	covers, err := playlistCovers(ctx, q, r.Playlist.ID)
+	if err != nil {
+		return Playlist{}, err
+	}
 	return Playlist{ID: r.Playlist.ID, Name: r.Playlist.Name, Description: r.Playlist.Description,
 		ItemCount: int(r.ItemCount), DurationMS: r.DurationMs, Revision: r.Playlist.Revision,
-		CreatedAt: time.UnixMilli(r.Playlist.CreatedAt).UTC(), UpdatedAt: time.UnixMilli(r.Playlist.UpdatedAt).UTC()}
+		CreatedAt: time.UnixMilli(r.Playlist.CreatedAt).UTC(), UpdatedAt: time.UnixMilli(r.Playlist.UpdatedAt).UTC(),
+		Covers: covers}, nil
+}
+
+// playlistCovers reads, in the transaction q, the covers of the mosaic of a
+// playlist: the cover of the album of the first item whose track is
+// available and whose album has a cover, then of the first such item of
+// another album, and so on up to MaxPlaylistCovers. Each query starts after
+// the item the one before it found and leaves out the albums found, so the
+// items are read once, and a playlist whose first items give four albums
+// reads only those.
+func playlistCovers(ctx context.Context, q *store.Queries, playlistID string) ([]AlbumCover, error) {
+	covers := make([]AlbumCover, 0, MaxPlaylistCovers)
+	// No position is negative: the first item is the one after this key.
+	// An album id is never "": it stands for an album not found yet.
+	next := store.NextPlaylistCoverParams{PlaylistID: playlistID, AfterPosition: -1}
+	for len(covers) < MaxPlaylistCovers {
+		row, err := q.NextPlaylistCover(ctx, next)
+		switch {
+		case noRows(ctx, err):
+			return covers, nil
+		case err != nil:
+			return nil, err
+		}
+		covers = append(covers, AlbumCover{AlbumID: row.AlbumID, Hash: row.CoverSha256})
+		next.AfterPosition, next.AfterID = row.Position, row.ID
+		switch len(covers) {
+		case 1:
+			next.Seen1 = row.AlbumID
+		case 2:
+			next.Seen2 = row.AlbumID
+		case 3:
+			next.Seen3 = row.AlbumID
+		}
+	}
+	return covers, nil
 }
 
 // readPlaylist reads, in the transaction q, the playlist id of userID. One
@@ -185,7 +241,7 @@ func readPlaylist(ctx context.Context, q *store.Queries, userID, id string) (Pla
 	case err != nil:
 		return Playlist{}, err
 	}
-	return playlistOf(row), nil
+	return playlistOf(ctx, q, row)
 }
 
 // playlistHead reads, in the transaction q, the revision of the playlist id
@@ -232,17 +288,24 @@ func itemsChanged(ctx context.Context, q *store.Queries, userID, id string, now 
 
 // ListPlaylists returns every playlist of userID, the oldest first.
 func (s *Service) ListPlaylists(ctx context.Context, userID string) ([]Playlist, error) {
-	var rows []store.ListPlaylistsOfUserRow
-	err := s.store.Read(ctx, func(q *store.Queries) (err error) {
-		rows, err = q.ListPlaylistsOfUser(ctx, userID)
-		return err
+	var playlists []Playlist
+	err := s.store.Read(ctx, func(q *store.Queries) error {
+		rows, err := q.ListPlaylistsOfUser(ctx, userID)
+		if err != nil {
+			return err
+		}
+		playlists = make([]Playlist, 0, len(rows))
+		for _, r := range rows {
+			p, err := playlistOf(ctx, q, store.GetPlaylistOfUserRow(r))
+			if err != nil {
+				return err
+			}
+			playlists = append(playlists, p)
+		}
+		return nil
 	})
 	if err != nil {
 		return nil, fmt.Errorf("catalog: listing the playlists: %w", err)
-	}
-	playlists := make([]Playlist, 0, len(rows))
-	for _, r := range rows {
-		playlists = append(playlists, playlistOf(store.GetPlaylistOfUserRow(r)))
 	}
 	return playlists, nil
 }

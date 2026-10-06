@@ -47,6 +47,7 @@ type testAlbum struct {
 	year      int // 0: none
 	firstSeen int64
 	available bool
+	cover     string // the SHA-256 of cover.jpg; "": none
 }
 
 func (a testAlbum) yearKey() int64 {
@@ -83,11 +84,18 @@ func putAlbum(ctx context.Context, q *store.Queries, a testAlbum) error {
 		Year: sql.NullInt64{Int64: int64(a.year), Valid: a.year != 0}, YearKey: a.yearKey(),
 		RelPath: a.artist.name + "/" + a.title, AlbumRevision: 1, RenderVersion: "r", ReceiptHash: "h",
 		FirstSeenAt: a.firstSeen, UpdatedAt: a.firstSeen,
+		CoverRel: nullText(a.cover, "cover.jpg"), CoverSha256: nullText(a.cover, a.cover), CoverMime: nullText(a.cover, "image/jpeg"),
+		CoverSize: sql.NullInt64{Int64: 1000, Valid: a.cover != ""}, CoverMtimeNs: sql.NullInt64{Int64: 1, Valid: a.cover != ""},
 	})
 	if err != nil || a.available {
 		return err
 	}
 	return q.SetAlbumUnavailable(ctx, store.SetAlbumUnavailableParams{UpdatedAt: a.firstSeen + 1, ID: a.id})
+}
+
+// nullText is value, or NULL when cover is "".
+func nullText(cover, value string) sql.NullString {
+	return sql.NullString{String: value, Valid: cover != ""}
 }
 
 // sortKeys remembers the keys of names.SortKey, which makes a collator for

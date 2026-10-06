@@ -689,7 +689,7 @@ type AddPlaylistItemsResult struct {
 
 	// Playlist A playlist of the user, without its items.
 	//
-	// Example: {"created_at":"2026-09-30T12:34:56.000Z","description":"","duration_ms":3120000,"etag":"\"playlist:0199a5c3-51d0-7e42-8a6b-9c0d1e2f3a4b:7\"","id":"0199a5c3-51d0-7e42-8a6b-9c0d1e2f3a4b","item_count":12,"name":"Sunday morning","revision":7,"updated_at":"2026-10-02T08:15:00.000Z"}
+	// Example: {"covers":[{"hash":"9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08","url":"/api/v1/albums/7d4c2f0a-3b1e-4c5d-8e9f-0a1b2c3d4e5f/cover?v=9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"}],"created_at":"2026-09-30T12:34:56.000Z","description":"","duration_ms":3120000,"etag":"\"playlist:0199a5c3-51d0-7e42-8a6b-9c0d1e2f3a4b:7\"","id":"0199a5c3-51d0-7e42-8a6b-9c0d1e2f3a4b","item_count":12,"name":"Sunday morning","revision":7,"updated_at":"2026-10-02T08:15:00.000Z"}
 	Playlist Playlist `json:"playlist"`
 }
 
@@ -876,6 +876,23 @@ type AudioFormat struct {
 // AudioFormatCodec `aac` and `alac` are in an MP4 file (`.m4a`).
 type AudioFormatCodec string
 
+// CatalogSummary How much music is available.
+//
+// Example: {"albums":412,"artists":37,"duration_ms":1296000000,"tracks":5120}
+type CatalogSummary struct {
+	// Albums How many albums are available.
+	Albums int `json:"albums"`
+
+	// Artists How many artists have an available album.
+	Artists int `json:"artists"`
+
+	// DurationMs The sum of the known durations of the available tracks, in milliseconds.
+	DurationMs int64 `json:"duration_ms"`
+
+	// Tracks How many tracks are available.
+	Tracks int `json:"tracks"`
+}
+
 // ChangePasswordRequest The password the user has and the one that replaces it.
 //
 // Example: {"current_password":"correct horse battery staple","new_password":"a much longer and better passphrase"}
@@ -1021,6 +1038,17 @@ type FavoriteList struct {
 	//
 	// Example: eyJzIjoidGl0bGUiLCJvIjoiYXNjIn0
 	Next *Cursor `json:"next"`
+}
+
+// FavoritesSummary How many favorite tracks the user has.
+//
+// Example: {"duration_ms":20460000,"track_count":86}
+type FavoritesSummary struct {
+	// DurationMs The sum of the durations of the favorites whose track is available, in milliseconds.
+	DurationMs int64 `json:"duration_ms"`
+
+	// TrackCount How many favorites the user has, the ones whose track is not available included.
+	TrackCount int `json:"track_count"`
 }
 
 // Id A UUID in its canonical form, lowercase with hyphens. An id has one spelling, in requests as in responses.
@@ -1202,8 +1230,16 @@ type MovePlaylistItemRequest struct {
 
 // Playlist A playlist of the user, without its items.
 //
-// Example: {"created_at":"2026-09-30T12:34:56.000Z","description":"","duration_ms":3120000,"etag":"\"playlist:0199a5c3-51d0-7e42-8a6b-9c0d1e2f3a4b:7\"","id":"0199a5c3-51d0-7e42-8a6b-9c0d1e2f3a4b","item_count":12,"name":"Sunday morning","revision":7,"updated_at":"2026-10-02T08:15:00.000Z"}
+// Example: {"covers":[{"hash":"9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08","url":"/api/v1/albums/7d4c2f0a-3b1e-4c5d-8e9f-0a1b2c3d4e5f/cover?v=9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"}],"created_at":"2026-09-30T12:34:56.000Z","description":"","duration_ms":3120000,"etag":"\"playlist:0199a5c3-51d0-7e42-8a6b-9c0d1e2f3a4b:7\"","id":"0199a5c3-51d0-7e42-8a6b-9c0d1e2f3a4b","item_count":12,"name":"Sunday morning","revision":7,"updated_at":"2026-10-02T08:15:00.000Z"}
 type Playlist struct {
+	// Covers Up to four covers of distinct albums, taken from the items whose
+	// track is available, in the order of the items; albums without a
+	// cover are skipped. Empty when there is none. Clients draw one
+	// cover with fewer than four, a 2×2 mosaic with four. The covers
+	// change when the items do, and also when MusicLib changes the
+	// cover of an album, without a new `revision`.
+	Covers []Cover `json:"covers"`
+
 	// CreatedAt A moment, RFC 3339 in UTC, always with three digits of milliseconds and `Z`.
 	//
 	// Example: 2026-09-30T12:34:56.000Z
@@ -2134,9 +2170,15 @@ type ServerInterface interface {
 	// CreateToken Sign in with a token
 	// (POST /auth/tokens)
 	CreateToken(w http.ResponseWriter, r *http.Request, params CreateTokenParams)
+	// GetCatalogSummary How many artists, albums and tracks are available
+	// (GET /catalog/summary)
+	GetCatalogSummary(w http.ResponseWriter, r *http.Request)
 	// GetMe The user of the request
 	// (GET /me)
 	GetMe(w http.ResponseWriter, r *http.Request)
+	// GetFavoritesSummary How many favorite tracks the user has
+	// (GET /me/favorites/summary)
+	GetFavoritesSummary(w http.ResponseWriter, r *http.Request)
 	// ListFavoriteTracks The favorite tracks, the most recent first
 	// (GET /me/favorites/tracks)
 	ListFavoriteTracks(w http.ResponseWriter, r *http.Request, params ListFavoriteTracksParams)
@@ -2911,11 +2953,39 @@ func (siw *ServerInterfaceWrapper) CreateToken(w http.ResponseWriter, r *http.Re
 	handler.ServeHTTP(w, r)
 }
 
+// GetCatalogSummary operation middleware
+func (siw *ServerInterfaceWrapper) GetCatalogSummary(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCatalogSummary(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetMe operation middleware
 func (siw *ServerInterfaceWrapper) GetMe(w http.ResponseWriter, r *http.Request) {
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetMe(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetFavoritesSummary operation middleware
+func (siw *ServerInterfaceWrapper) GetFavoritesSummary(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetFavoritesSummary(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -4168,10 +4238,12 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/albums/{id}", wrapper.GetAlbum)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/tracks", wrapper.ListTracks)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/tracks/{id}", wrapper.GetTrack)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/catalog/summary", wrapper.GetCatalogSummary)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/search", wrapper.Search)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/tracks/{id}/audio", wrapper.GetTrackAudio)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/albums/{id}/cover", wrapper.GetAlbumCover)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/tracks/{id}/lyrics", wrapper.GetTrackLyrics)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me/favorites/summary", wrapper.GetFavoritesSummary)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me/favorites/tracks", wrapper.ListFavoriteTracks)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/me/favorites/tracks/{id}", wrapper.RemoveFavoriteTrack)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/me/favorites/tracks/{id}", wrapper.AddFavoriteTrack)
@@ -6580,6 +6652,110 @@ func (response CreateToken503JSONResponse) VisitCreateTokenResponse(w http.Respo
 	return err
 }
 
+type GetCatalogSummaryRequestObject struct {
+}
+
+type GetCatalogSummaryResponseObject interface {
+	VisitGetCatalogSummaryResponse(w http.ResponseWriter) error
+}
+
+type GetCatalogSummary200ResponseHeaders struct {
+	XRequestId openapi_types.UUID
+}
+
+type GetCatalogSummary200JSONResponse struct {
+	Body    CatalogSummary
+	Headers GetCatalogSummary200ResponseHeaders
+}
+
+func (response GetCatalogSummary200JSONResponse) VisitGetCatalogSummaryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCatalogSummary401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response GetCatalogSummary401JSONResponse) VisitGetCatalogSummaryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCatalogSummary403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response GetCatalogSummary403JSONResponse) VisitGetCatalogSummaryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCatalogSummary421JSONResponse struct{ MisdirectedRequestJSONResponse }
+
+func (response GetCatalogSummary421JSONResponse) VisitGetCatalogSummaryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(421)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCatalogSummary500JSONResponse struct{ InternalJSONResponse }
+
+func (response GetCatalogSummary500JSONResponse) VisitGetCatalogSummaryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetCatalogSummary503JSONResponse struct{ UnavailableJSONResponse }
+
+func (response GetCatalogSummary503JSONResponse) VisitGetCatalogSummaryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetMeRequestObject struct {
 }
 
@@ -6672,6 +6848,110 @@ func (response GetMe500JSONResponse) VisitGetMeResponse(w http.ResponseWriter) e
 type GetMe503JSONResponse struct{ UnavailableJSONResponse }
 
 func (response GetMe503JSONResponse) VisitGetMeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetFavoritesSummaryRequestObject struct {
+}
+
+type GetFavoritesSummaryResponseObject interface {
+	VisitGetFavoritesSummaryResponse(w http.ResponseWriter) error
+}
+
+type GetFavoritesSummary200ResponseHeaders struct {
+	XRequestId openapi_types.UUID
+}
+
+type GetFavoritesSummary200JSONResponse struct {
+	Body    FavoritesSummary
+	Headers GetFavoritesSummary200ResponseHeaders
+}
+
+func (response GetFavoritesSummary200JSONResponse) VisitGetFavoritesSummaryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetFavoritesSummary401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response GetFavoritesSummary401JSONResponse) VisitGetFavoritesSummaryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetFavoritesSummary403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response GetFavoritesSummary403JSONResponse) VisitGetFavoritesSummaryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetFavoritesSummary421JSONResponse struct{ MisdirectedRequestJSONResponse }
+
+func (response GetFavoritesSummary421JSONResponse) VisitGetFavoritesSummaryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(421)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetFavoritesSummary500JSONResponse struct{ InternalJSONResponse }
+
+func (response GetFavoritesSummary500JSONResponse) VisitGetFavoritesSummaryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetFavoritesSummary503JSONResponse struct{ UnavailableJSONResponse }
+
+func (response GetFavoritesSummary503JSONResponse) VisitGetFavoritesSummaryResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -9845,9 +10125,15 @@ type StrictServerInterface interface {
 	// CreateToken Sign in with a token
 	// (POST /auth/tokens)
 	CreateToken(ctx context.Context, request CreateTokenRequestObject) (CreateTokenResponseObject, error)
+	// GetCatalogSummary How many artists, albums and tracks are available
+	// (GET /catalog/summary)
+	GetCatalogSummary(ctx context.Context, request GetCatalogSummaryRequestObject) (GetCatalogSummaryResponseObject, error)
 	// GetMe The user of the request
 	// (GET /me)
 	GetMe(ctx context.Context, request GetMeRequestObject) (GetMeResponseObject, error)
+	// GetFavoritesSummary How many favorite tracks the user has
+	// (GET /me/favorites/summary)
+	GetFavoritesSummary(ctx context.Context, request GetFavoritesSummaryRequestObject) (GetFavoritesSummaryResponseObject, error)
 	// ListFavoriteTracks The favorite tracks, the most recent first
 	// (GET /me/favorites/tracks)
 	ListFavoriteTracks(ctx context.Context, request ListFavoriteTracksRequestObject) (ListFavoriteTracksResponseObject, error)
@@ -10403,6 +10689,30 @@ func (sh *strictHandler) CreateToken(w http.ResponseWriter, r *http.Request, par
 	}
 }
 
+// GetCatalogSummary operation middleware
+func (sh *strictHandler) GetCatalogSummary(w http.ResponseWriter, r *http.Request) {
+	var request GetCatalogSummaryRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetCatalogSummary(ctx, request.(GetCatalogSummaryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetCatalogSummary")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetCatalogSummaryResponseObject); ok {
+		if err := validResponse.VisitGetCatalogSummaryResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetMe operation middleware
 func (sh *strictHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 	var request GetMeRequestObject
@@ -10420,6 +10730,30 @@ func (sh *strictHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetMeResponseObject); ok {
 		if err := validResponse.VisitGetMeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetFavoritesSummary operation middleware
+func (sh *strictHandler) GetFavoritesSummary(w http.ResponseWriter, r *http.Request) {
+	var request GetFavoritesSummaryRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetFavoritesSummary(ctx, request.(GetFavoritesSummaryRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetFavoritesSummary")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetFavoritesSummaryResponseObject); ok {
+		if err := validResponse.VisitGetFavoritesSummaryResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

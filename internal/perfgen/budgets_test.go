@@ -74,6 +74,7 @@ func measureServer(t *testing.T, bin string) {
 	tracks := measureAlbumDetails(r, admin, albums)
 	measureSearch(r, admin)
 	measureFavorites(r, admin)
+	measureSummaries(r, admin)
 	measurePlaylists(r, admin)
 	measureLargePlaylist(r, user, tracks)
 	measureDocs(r, admin)
@@ -434,6 +435,32 @@ func measureFavorites(r *report, c *client) {
 	}
 }
 
+// measureSummaries reads the summary of the catalog, which counts every
+// available album, and the one of the favorites of a user of 2,500
+// favorites (step W2). They have no budget of their own.
+func measureSummaries(r *report, c *client) {
+	r.t.Helper()
+	catalog := r.measure("summary of the catalog: 20,000 albums", 0)
+	favorites := r.measure("summary of the favorites: 2,500", 0)
+	for range 20 {
+		var sum struct {
+			Albums int `json:"albums"`
+			Tracks int `json:"tracks"`
+		}
+		catalog.add(c.get("/api/v1/catalog/summary", &sum))
+		if sum.Albums != Full.Albums || sum.Tracks != Full.Tracks {
+			r.t.Fatalf("the summary of the catalog: %+v", sum)
+		}
+		var fav struct {
+			TrackCount int `json:"track_count"`
+		}
+		favorites.add(c.get("/api/v1/me/favorites/summary", &fav))
+		if fav.TrackCount != Full.Favorites/Full.Users {
+			r.t.Fatalf("the summary of the favorites: %+v", fav)
+		}
+	}
+}
+
 // measurePlaylists lists the playlists of the user that has the most a user
 // can have, 500, each of 200 items.
 func measurePlaylists(r *report, c *client) {
@@ -598,6 +625,97 @@ func measureLargePlaylist(r *report, c *client, tracks []string) {
 		at := rng.IntN(len(ids))
 		remove.add(c.must(http.StatusOK, &p, http.MethodDelete, items+"/"+ids[at], nil))
 		ids = slices.Delete(ids, at, at+1)
+	}
+	measureOneAlbumPlaylist(r, c, tracks[0])
+}
+
+// measureOneAlbumPlaylist fills a playlist with 10,000 items of one track:
+// the worst case of its covers (step W2), which then read every item to
+// look for a second album.
+func measureOneAlbumPlaylist(r *report, c *client, track string) {
+	r.t.Helper()
+	var p playlist
+	c.must(http.StatusCreated, &p, http.MethodPost, "/api/v1/playlists", map[string]string{"name": "One album", "description": ""})
+	items := "/api/v1/playlists/" + p.ID + "/items"
+	add := func(m *measure, n int) {
+		r.t.Helper()
+		var res added
+		took := c.must(http.StatusOK, &res, http.MethodPost, items, map[string]any{"track_ids": slices.Repeat([]string{track}, n), "position": nil})
+		if m != nil {
+			m.add(took)
+		}
+		p = res.Playlist
+	}
+	for range 9 {
+		add(nil, 1000)
+	}
+	add(nil, 980)
+	one := r.measure("playlist of 9,980..10,000 items of one track: add 1 item at the end", budgetAddAndMove)
+	for range 20 {
+		add(one, 1)
+	}
+	whole := r.measure("playlist of 10,000 items of one track, without its items", 0)
+	var got struct {
+		ItemCount int `json:"item_count"`
+		Covers    []struct {
+			Hash string `json:"hash"`
+		} `json:"covers"`
+	}
+	for range 20 {
+		whole.add(c.get("/api/v1/playlists/"+p.ID, &got))
+	}
+	if got.ItemCount != 10000 || len(got.Covers) > 1 {
+		r.t.Fatalf("the playlist of one track: %d items, %d covers", got.ItemCount, len(got.Covers))
+	}
+}
+
+// largePlaylists is the dataset of the measure of the step W2: that of the
+// step S24 with every playlist at the limit of 10,000 items (DESIGN.md §5.2),
+// 5,000,000 items, all of the account Admin.
+var largePlaylists = Size{Artists: 2000, Albums: 20000, Tracks: 200000, Users: 20, Playlists: 500, PlaylistItems: 10000,
+	Favorites: 50000}
+
+// TestPerfLargePlaylists measures GET /playlists of a user with 500
+// playlists of 10,000 items, with their counts and their covers (step W2),
+// against the budget of a page of a playlist of 10,000 items of the step
+// S24, the only budget of the playlists that a read of them has.
+func TestPerfLargePlaylists(t *testing.T) {
+	stateDir, musiclibDir := generate(t, largePlaylists, false)
+	checkRows(t, stateDir, largePlaylists)
+	bin := build(t, stateDir, musiclibDir)
+	r := &report{t: t}
+	defer r.print()
+	srv := start(t, bin)
+	defer srv.stop()
+	c := srv.signIn(Admin)
+	var listed struct {
+		Playlists []struct {
+			ID        string `json:"id"`
+			ItemCount int    `json:"item_count"`
+			Covers    []struct {
+				Hash string `json:"hash"`
+			} `json:"covers"`
+		} `json:"playlists"`
+	}
+	// Over the budget by far: the counts of each playlist read every item
+	// of it, 5,000,000 in all, with or without the covers (NOTES.md N-188).
+	list := r.measure("playlists of a user: 500 playlists of 10,000 items", budgetItemsPage)
+	list.open, list.ceiling = "N-188", 20*time.Second
+	c.get("/api/v1/playlists", &listed)
+	for range 5 {
+		list.add(c.get("/api/v1/playlists", &listed))
+	}
+	if len(listed.Playlists) != largePlaylists.Playlists {
+		t.Fatalf("%d playlists listed", len(listed.Playlists))
+	}
+	for _, p := range listed.Playlists {
+		if p.ItemCount != largePlaylists.PlaylistItems || len(p.Covers) != 4 {
+			t.Fatalf("a playlist of %d items with %d covers", p.ItemCount, len(p.Covers))
+		}
+	}
+	one := r.measure("playlist of 10,000 items, without its items", 0)
+	for _, p := range listed.Playlists[:50] {
+		one.add(c.get("/api/v1/playlists/"+p.ID, nil))
 	}
 }
 

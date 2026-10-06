@@ -78,6 +78,22 @@ func TestCatalogQueryPlans(t *testing.T) {
 	}
 }
 
+// The summary of the catalog reads the available albums alone, through an
+// index, and no track: their counters are on the albums.
+func TestCatalogSummaryPlan(t *testing.T) {
+	s := newStore(t)
+	plan := explain(t, s, getCatalogSummary)
+	joined := strings.Join(plan, "\n")
+	if !strings.Contains(joined, "SEARCH albums USING INDEX albums_first_seen_idx (available=?)") || strings.Contains(joined, "tracks") {
+		t.Errorf("the plan of GetCatalogSummary:\n%s", joined)
+	}
+	for _, line := range plan {
+		if strings.HasPrefix(line, "SCAN ") {
+			t.Errorf("GetCatalogSummary reads a whole table: %s", line)
+		}
+	}
+}
+
 // The single rows are read by their key.
 func TestCatalogLookupPlans(t *testing.T) {
 	s := newStore(t)

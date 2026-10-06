@@ -124,6 +124,16 @@ func (s Server) GetTrack(ctx context.Context, req GetTrackRequestObject) (GetTra
 	return GetTrack200JSONResponse{Body: trackOf(t)}, nil
 }
 
+// GetCatalogSummary counts the available artists, albums and tracks.
+func (s Server) GetCatalogSummary(ctx context.Context, _ GetCatalogSummaryRequestObject) (GetCatalogSummaryResponseObject, error) {
+	sum, err := s.catalog.Load().GetCatalogSummary(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return GetCatalogSummary200JSONResponse{Body: CatalogSummary{Artists: sum.Artists, Albums: sum.Albums, Tracks: sum.Tracks,
+		DurationMs: sum.DurationMS}}, nil
+}
+
 func limitOf(limit *Limit) int {
 	if limit == nil {
 		return defaultLimit

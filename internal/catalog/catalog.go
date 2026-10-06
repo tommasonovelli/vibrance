@@ -227,3 +227,31 @@ func floatOf(v sql.NullFloat64) *float64 {
 	}
 	return &v.Float64
 }
+
+// CatalogSummary is how much music is available
+// (docs/proposals/web-client-api.md A3).
+type CatalogSummary struct {
+	// Artists counts the artists that have an available album, the ones
+	// the list of the artists shows.
+	Artists int
+	Albums  int
+	Tracks  int
+	// DurationMS adds up the known durations of the available tracks.
+	DurationMS int64
+}
+
+// GetCatalogSummary counts the available artists, albums and tracks, and
+// adds up the known durations of the tracks. What is not available is not
+// counted.
+func (s *Service) GetCatalogSummary(ctx context.Context) (CatalogSummary, error) {
+	var row store.GetCatalogSummaryRow
+	err := s.store.Read(ctx, func(q *store.Queries) (err error) {
+		row, err = q.GetCatalogSummary(ctx)
+		return err
+	})
+	if err != nil {
+		return CatalogSummary{}, fmt.Errorf("catalog: counting the catalog: %w", err)
+	}
+	return CatalogSummary{Artists: int(row.Artists), Albums: int(row.Albums), Tracks: int(row.Tracks),
+		DurationMS: row.DurationMs}, nil
+}

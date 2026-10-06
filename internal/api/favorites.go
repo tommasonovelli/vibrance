@@ -46,3 +46,16 @@ func (s Server) RemoveFavoriteTrack(ctx context.Context, req RemoveFavoriteTrack
 	}
 	return RemoveFavoriteTrack204Response{}, nil
 }
+
+// GetFavoritesSummary counts the favorites of the user.
+func (s Server) GetFavoritesSummary(ctx context.Context, _ GetFavoritesSummaryRequestObject) (GetFavoritesSummaryResponseObject, error) {
+	p, err := principal(ctx)
+	if err != nil {
+		return nil, err
+	}
+	sum, err := s.catalog.Load().GetFavoritesSummary(ctx, p.UserID)
+	if err != nil {
+		return nil, err
+	}
+	return GetFavoritesSummary200JSONResponse{Body: FavoritesSummary{TrackCount: sum.TrackCount, DurationMs: sum.DurationMS}}, nil
+}

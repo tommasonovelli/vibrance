@@ -38,6 +38,7 @@ func TestPlaylistQueryPlans(t *testing.T) {
 		"DeletePlaylistItem":      {deletePlaylistItem, []any{"i1"}},
 		"RenamePlaylist":          {renamePlaylist, []any{"n", "d", 1, testList}},
 		"DeletePlaylist":          {deletePlaylist, []any{testList}},
+		"NextPlaylistCover":       {nextPlaylistCover, []any{testList, -1, "", "", "", ""}},
 	} {
 		plan := explain(t, s, q.query, q.args...)
 		for _, line := range plan {
@@ -45,6 +46,20 @@ func TestPlaylistQueryPlans(t *testing.T) {
 				t.Errorf("%s reads a whole table: %s\n%s", name, line, strings.Join(plan, "\n"))
 			}
 		}
+	}
+	// The next cover walks the items of the playlist in their order from the
+	// key it is given, sorts nothing (it stops at the first item it keeps),
+	// and finds the track of each item by its id: never every available
+	// track, as an index that begins with available would (NOTES.md N-185).
+	joined = strings.Join(explain(t, s, nextPlaylistCover, testList, 3, "i1", testAlbum, "", ""), "\n")
+	for _, want := range []string{"SEARCH playlist_items USING INDEX " + index + " (playlist_id=? AND position>?)",
+		"SEARCH tracks USING INDEX tracks_duration_idx (id=? AND available=?)", "SEARCH albums USING INDEX sqlite_autoindex_albums_1 (id=?)"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("NextPlaylistCover has no %q:\n%s", want, joined)
+		}
+	}
+	if strings.Contains(joined, "TEMP B-TREE") {
+		t.Errorf("NextPlaylistCover sorts its rows:\n%s", joined)
 	}
 	// The renumbering reads the items of its playlist alone, through the
 	// index.

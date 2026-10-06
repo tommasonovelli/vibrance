@@ -133,10 +133,10 @@ func TestPlaylists(t *testing.T) {
 		p.Etag != first || rec.Header().Get("ETag") != first || p.CreatedAt != p.UpdatedAt {
 		t.Fatalf("created: %+v, ETag %s", p, rec.Header().Get("ETag"))
 	}
-	if got := w.playlist(w.anna, p.Id); got != p {
+	if got := w.playlist(w.anna, p.Id); !reflect.DeepEqual(got, p) {
 		t.Fatalf("read: %+v, want %+v", got, p)
 	}
-	if list := decode[api.PlaylistList](t, w.get("/playlists", w.anna)); len(list.Playlists) != 1 || list.Playlists[0] != p {
+	if list := decode[api.PlaylistList](t, w.get("/playlists", w.anna)); len(list.Playlists) != 1 || !reflect.DeepEqual(list.Playlists[0], p) {
 		t.Fatalf("listed: %+v", list)
 	}
 	items := "/playlists/" + p.Id + "/items"
@@ -159,7 +159,7 @@ func TestPlaylists(t *testing.T) {
 		t.Fatal("the same track twice is one item")
 	}
 	p = w.playlist(w.anna, p.Id)
-	if p != added.Playlist {
+	if !reflect.DeepEqual(p, added.Playlist) {
 		t.Fatalf("the playlist is %+v, the answer said %+v", p, added.Playlist)
 	}
 
@@ -174,7 +174,7 @@ func TestPlaylists(t *testing.T) {
 			w.do("POST", items, map[string]any{"track_ids": []string{ids[2]}, "position": nil}, ifMatch(anna, stale)),
 			http.StatusPreconditionFailed, "precondition_failed")
 	}
-	if got := w.playlist(w.anna, p.Id); got != p {
+	if got := w.playlist(w.anna, p.Id); !reflect.DeepEqual(got, p) {
 		t.Fatalf("refused changes changed the playlist: %+v, want %+v", got, p)
 	}
 	if got := itemTracks(w.playlistItems(w.anna, p.Id, "50")); !slices.Equal(got, []string{ids[0], ids[1], ids[0]}) {
@@ -215,7 +215,7 @@ func TestPlaylists(t *testing.T) {
 	if listed[0].Id != added.Added[0].ItemId || listed[1].Id != inserted.Added[0].ItemId || listed[4].Id != added.Added[2].ItemId {
 		t.Fatalf("the ids of the items changed: %+v", listed)
 	}
-	if got := w.playlist(w.anna, p.Id); got != p {
+	if got := w.playlist(w.anna, p.Id); !reflect.DeepEqual(got, p) {
 		t.Fatalf("a favorite changed the playlist: %+v", got)
 	}
 
@@ -256,7 +256,7 @@ func TestPlaylists(t *testing.T) {
 	if !slices.Equal(got, []string{missing}) {
 		t.Fatalf("the details of unknown_track: %v", got)
 	}
-	if got := w.playlist(w.anna, p.Id); got != p {
+	if got := w.playlist(w.anna, p.Id); !reflect.DeepEqual(got, p) {
 		t.Fatalf("refused changes changed the playlist: %+v, want %+v", got, p)
 	}
 
@@ -311,7 +311,7 @@ func TestPlaylists(t *testing.T) {
 	}
 	wantRefusal(t, "a rename with an old If-Match", w.do("PUT", path, map[string]any{"name": "x", "description": ""}, ifMatch(anna, first)),
 		http.StatusPreconditionFailed, "precondition_failed")
-	if got := w.playlist(w.anna, p.Id); got != p {
+	if got := w.playlist(w.anna, p.Id); !reflect.DeepEqual(got, p) {
 		t.Fatalf("refused renames changed the playlist: %+v, want %+v", got, p)
 	}
 	rec = w.do("PUT", path, map[string]any{"name": strings.Repeat("é", 200), "description": "two\nlines"}, anna)
@@ -321,7 +321,7 @@ func TestPlaylists(t *testing.T) {
 	}
 	rec = w.do("PUT", path, map[string]any{"name": "Sunday", "description": ""}, ifMatch(anna, p.Etag))
 	wantStatus(t, "updatePlaylist with If-Match", rec, http.StatusOK)
-	if p = decode[api.Playlist](t, rec); p.Name != "Sunday" || p.Revision != 7 || p != w.playlist(w.anna, p.Id) {
+	if p = decode[api.Playlist](t, rec); p.Name != "Sunday" || p.Revision != 7 || !reflect.DeepEqual(p, w.playlist(w.anna, p.Id)) {
 		t.Fatalf("renamed: %+v", p)
 	}
 
@@ -513,7 +513,7 @@ func TestPlaylistsOfAnotherUser(t *testing.T) {
 			}
 		}
 	}
-	if got := w.playlist(w.anna, p.ID); got != before {
+	if got := w.playlist(w.anna, p.ID); !reflect.DeepEqual(got, before) {
 		t.Fatalf("the playlist was changed by another user: %+v, want %+v", got, before)
 	}
 	if items := w.playlistItems(w.anna, p.ID, "50"); len(items) != 1 || items[0].Id != itemID {
@@ -553,7 +553,7 @@ func TestPlaylistWithUnavailableTracks(t *testing.T) {
 	if got.ItemCount != 3 || got.DurationMs != *before[1].Track.DurationMs || got.DurationMs >= whole.DurationMs || got.Revision != whole.Revision {
 		t.Fatalf("with two unavailable items: %+v, before %+v", got, whole)
 	}
-	if list := decode[api.PlaylistList](t, w.get("/playlists", w.anna)); len(list.Playlists) != 1 || list.Playlists[0] != got {
+	if list := decode[api.PlaylistList](t, w.get("/playlists", w.anna)); len(list.Playlists) != 1 || !reflect.DeepEqual(list.Playlists[0], got) {
 		t.Fatalf("the list says %+v", list)
 	}
 	after := w.playlistItems(w.anna, p.Id, "2")
@@ -585,7 +585,7 @@ func TestPlaylistWithUnavailableTracks(t *testing.T) {
 	if !slices.Equal(ids, []string{a2, a1}) {
 		t.Fatalf("the details of track_unavailable: %v", ids)
 	}
-	if again := w.playlist(w.anna, p.Id); again != got {
+	if again := w.playlist(w.anna, p.Id); !reflect.DeepEqual(again, got) {
 		t.Fatalf("a refused change changed the playlist: %+v", again)
 	}
 }

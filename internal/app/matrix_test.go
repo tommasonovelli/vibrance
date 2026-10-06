@@ -64,11 +64,13 @@ var authorizationMatrix = map[string]access{
 	"listTracks":          {s401, s200, s200, 0},
 	"getAlbum":            {s401, s200, s200, 0},
 	"getTrack":            {s401, s200, s200, 0},
+	"getCatalogSummary":   {s401, s200, s200, 0},
 	"search":              {s401, s200, s200, 0},
 	"getTrackAudio":       {s401, s200, s200, 0},
 	"getAlbumCover":       {s401, s200, s200, 0},
 	"getTrackLyrics":      {s401, s200, s200, 0},
 	"listFavoriteTracks":  {s401, s200, s200, 0},
+	"getFavoritesSummary": {s401, s200, s200, 0},
 	"addFavoriteTrack":    {s401, s204, s204, 0},
 	"removeFavoriteTrack": {s401, s204, s204, 0},
 	"listPlaylists":       {s401, s200, s200, 0},
@@ -153,6 +155,10 @@ var matrixRequests = map[string]matrixRequest{
 		w.catalogEntry()
 		return "GET", "/tracks/" + entryTrack, nil, ""
 	},
+	"getCatalogSummary": func(w *world, _, _ *account) (string, string, any, string) {
+		w.catalogEntry()
+		return "GET", "/catalog/summary", nil, ""
+	},
 	"search": func(*world, *account, *account) (string, string, any, string) {
 		return "GET", "/search?q=track", nil, ""
 	},
@@ -171,6 +177,9 @@ var matrixRequests = map[string]matrixRequest{
 	// proves that each user sees and changes only their own).
 	"listFavoriteTracks": func(*world, *account, *account) (string, string, any, string) {
 		return "GET", "/me/favorites/tracks", nil, ""
+	},
+	"getFavoritesSummary": func(*world, *account, *account) (string, string, any, string) {
+		return "GET", "/me/favorites/summary", nil, ""
 	},
 	"addFavoriteTrack": func(w *world, _, _ *account) (string, string, any, string) {
 		w.catalogEntry()

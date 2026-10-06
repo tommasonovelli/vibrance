@@ -35,6 +35,35 @@ func (q *Queries) AddFavorite(ctx context.Context, arg AddFavoriteParams) error 
 	return err
 }
 
+const getFavoritesSummary = `-- name: GetFavoritesSummary :one
+SELECT
+    (SELECT count(*) FROM favorites WHERE favorites.user_id = ?1) AS track_count,
+    CAST((SELECT coalesce(sum(tracks.duration_ms), 0)
+          FROM favorites
+          JOIN tracks INDEXED BY tracks_duration_idx ON tracks.id = favorites.track_id
+          WHERE favorites.user_id = ?1 AND tracks.available = 1) AS INTEGER) AS duration_ms
+`
+
+type GetFavoritesSummaryRow struct {
+	TrackCount int64
+	DurationMs int64
+}
+
+// GetFavoritesSummary counts the favorites of a user and adds up the
+// durations of those whose track is available, as GetPlaylistOfUser does
+// for the items of a playlist (DESIGN.md 8.6): track_count counts every
+// favorite, the ones whose track is not available included. The tracks of
+// the favorites are found by their id, through the index that also holds
+// available and the duration: without statistics SQLite would otherwise
+// walk every available track through an index that begins with available,
+// and look for each among the favorites (NOTES.md N-185).
+func (q *Queries) GetFavoritesSummary(ctx context.Context, userID string) (GetFavoritesSummaryRow, error) {
+	row := q.db.QueryRowContext(ctx, getFavoritesSummary, userID)
+	var i GetFavoritesSummaryRow
+	err := row.Scan(&i.TrackCount, &i.DurationMs)
+	return i, err
+}
+
 const listFavorites = `-- name: ListFavorites :many
 SELECT favorites.created_at AS favorited_at, tracks.seq, tracks.id, tracks.album_id, tracks.fingerprint, tracks.fp_version, tracks.occurrence, tracks.disc, tracks."no", tracks.title, tracks.artist, tracks.genre, tracks.rel_path, tracks.file_size, tracks.file_mtime_ns, tracks.file_sha256, tracks.codec, tracks.sample_rate, tracks.channels, tracks.bit_depth, tracks.bitrate, tracks.duration_ms, tracks.lyrics_rel, tracks.lyrics_sha256, tracks.rg_track_gain, tracks.rg_track_peak, tracks.rg_album_gain, tracks.rg_album_peak, tracks.available, tracks.updated_at, tracks.title_key, tracks.artist_key, tracks.album_key, tracks.first_seen_at,
     albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,

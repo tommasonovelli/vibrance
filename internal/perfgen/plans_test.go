@@ -186,6 +186,31 @@ func checkQueryPlans(t *testing.T, stateDir string) {
 			_, err := q.ListPlaylistItems(ctx, store.ListPlaylistItemsParams{UserID: admin.ID, PlaylistID: playlist, AfterPosition: 100, AfterID: track.ID, PageSize: page})
 			return err
 		}},
+		// The covers of a playlist (step W2): the items in their order from
+		// a key, each track by its id.
+		{name: "NextPlaylistCover", index: "playlist_items_position_idx", run: func(q *store.Queries) error {
+			_, err := q.NextPlaylistCover(ctx, store.NextPlaylistCoverParams{PlaylistID: playlist, AfterPosition: -1})
+			return err // the first items of the playlist have a cover
+		}},
+		{name: "NextPlaylistCoverAfter", index: "playlist_items_position_idx", run: func(q *store.Queries) error {
+			_, err := q.NextPlaylistCover(ctx, store.NextPlaylistCoverParams{PlaylistID: playlist, AfterPosition: 100, AfterID: track.ID,
+				Seen1: album.ID})
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil
+			}
+			return err
+		}},
+		// The summaries (step W2). The catalog is counted on the available
+		// albums, all of them: reading them whole is what it is meant to
+		// do, and the artists are counted once each.
+		{name: "GetCatalogSummary (every available album)", scans: true, sorts: true, run: func(q *store.Queries) error {
+			_, err := q.GetCatalogSummary(ctx)
+			return err
+		}},
+		{name: "GetFavoritesSummary", index: "tracks_duration_idx", run: func(q *store.Queries) error {
+			_, err := q.GetFavoritesSummary(ctx, admin.ID)
+			return err
+		}},
 		// The dataset has only the sessions of this run: SQLite reads a table of
 		// a few rows whole, whatever its indexes.
 		{name: "GetSessionByTokenHash", scans: true, run: func(q *store.Queries) error {

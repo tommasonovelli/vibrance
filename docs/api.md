@@ -65,6 +65,15 @@ curl -sS -H "$AUTH" "$BASE/tracks?sort=added&order=desc&limit=50"
 curl -sS -H "$AUTH" "$BASE/tracks?sort=album&artist=ARTIST_ID"
 ```
 
+## How much there is
+
+The lists are paged and have no totals. `GET /catalog/summary` counts what is available: the artists with an available album, the albums, the tracks and the sum of their known durations. `GET /me/favorites/summary` counts the favorites of the user of the request, unavailable ones included, and adds up the durations of the available ones, as a playlist counts its items.
+
+```sh
+curl -sS -H "$AUTH" "$BASE/catalog/summary"        # {"artists":37,"albums":412,"tracks":5120,"duration_ms":1296000000}
+curl -sS -H "$AUTH" "$BASE/me/favorites/summary"   # {"track_count":86,"duration_ms":20460000}
+```
+
 ## Audio, with `Range`
 
 The audio of a track is its file, as MusicLib wrote it. Ranges and conditional requests work as for any file; the `ETag` is the SHA-256 of the file.
@@ -99,6 +108,8 @@ curl -sS -H "$AUTH" -H 'X-Vibrance-Request: 1' -H 'Content-Type: application/jso
 
 curl -sS -H "$AUTH" "$BASE/playlists/PLAYLIST_ID/items"
 ```
+
+Every playlist carries `covers`: up to four covers of distinct albums, from the items whose track is available, in the order of the items, skipping albums without a cover; empty when there is none. Draw one cover with fewer than four, a 2×2 mosaic with four.
 
 Without `If-Match` the move answers `428 precondition_required`. With the `etag` of an older revision it answers `412 precondition_failed` and changes nothing: read the playlist again (`GET /playlists/PLAYLIST_ID`), apply the change to what it is now, and send it with the new `etag`.
 

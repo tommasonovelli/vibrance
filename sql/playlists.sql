@@ -155,3 +155,32 @@ WHERE playlist_items.playlist_id = sqlc.arg(playlist_id)
   AND (playlist_items.position, playlist_items.id) > (CAST(sqlc.arg(after_position) AS INTEGER), CAST(sqlc.arg(after_id) AS TEXT))
 ORDER BY playlist_items.position, playlist_items.id
 LIMIT sqlc.arg(page_size);
+
+-- name: NextPlaylistCover :one
+-- NextPlaylistCover returns the first item of a playlist after the one with
+-- that key (position, id) whose track is available, whose album has a cover
+-- and whose album is none of seen1, seen2 and seen3, with that album and its
+-- cover: the next cover of the mosaic of the playlist (Playlist.covers,
+-- docs/proposals/web-client-api.md A2). A cover is shown once for each
+-- album, so the albums found already are passed as seen ('' for none, which
+-- is no album id). No position is negative, so the first item is the one
+-- after (-1, ''). The items are read in the order of
+-- playlist_items_position_idx from the key, and the query stops at the
+-- first that is kept: the items it passes have a track that is not
+-- available, an album without a cover or an album seen already, so the
+-- next call, from the key of this item, does not read them again. The track
+-- of an item is found by its id, through the index that also holds
+-- available: without statistics SQLite would otherwise read the tracks
+-- through an index that begins with available, every available track for
+-- each item (NOTES.md N-185).
+SELECT playlist_items.position, playlist_items.id, tracks.album_id, CAST(albums.cover_sha256 AS TEXT) AS cover_sha256
+FROM playlist_items
+JOIN tracks INDEXED BY tracks_duration_idx ON tracks.id = playlist_items.track_id
+JOIN albums ON albums.id = tracks.album_id
+WHERE playlist_items.playlist_id = sqlc.arg(playlist_id)
+  AND (playlist_items.position, playlist_items.id) > (CAST(sqlc.arg(after_position) AS INTEGER), CAST(sqlc.arg(after_id) AS TEXT))
+  AND tracks.available = 1
+  AND albums.cover_sha256 IS NOT NULL
+  AND tracks.album_id NOT IN (CAST(sqlc.arg(seen1) AS TEXT), CAST(sqlc.arg(seen2) AS TEXT), CAST(sqlc.arg(seen3) AS TEXT))
+ORDER BY playlist_items.position, playlist_items.id
+LIMIT 1;

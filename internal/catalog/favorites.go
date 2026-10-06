@@ -150,3 +150,28 @@ func favoriteRows[R ~struct {
 	}
 	return out, nil
 }
+
+// FavoritesSummary is how many favorites a user has
+// (docs/proposals/web-client-api.md A4), with the meaning of the counts of
+// a playlist (§8.6).
+type FavoritesSummary struct {
+	// TrackCount counts every favorite, the ones whose track is not
+	// available included.
+	TrackCount int
+	// DurationMS adds up the favorites whose track is available.
+	DurationMS int64
+}
+
+// GetFavoritesSummary counts the favorites of userID and adds up the
+// durations of those whose track is available.
+func (s *Service) GetFavoritesSummary(ctx context.Context, userID string) (FavoritesSummary, error) {
+	var row store.GetFavoritesSummaryRow
+	err := s.store.Read(ctx, func(q *store.Queries) (err error) {
+		row, err = q.GetFavoritesSummary(ctx, userID)
+		return err
+	})
+	if err != nil {
+		return FavoritesSummary{}, fmt.Errorf("catalog: counting the favorites: %w", err)
+	}
+	return FavoritesSummary{TrackCount: int(row.TrackCount), DurationMS: row.DurationMs}, nil
+}
