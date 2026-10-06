@@ -837,7 +837,9 @@ type LoginResult struct {
 // Lyrics The lyrics of a track. When `synced` is true every line has its
 // `time_ms` and the lines are in the order of their times. When it is
 // false the file had no time at all: every line has `"time_ms": null`
-// and the lines are in the order of the file, without the empty ones.
+// and the lines are in the order of the file. The empty lines between
+// two stanzas are then one line with an empty `text`; there is none
+// before the first line of text or after the last.
 //
 // Example: {"lines":[{"text":"First line of the song","time_ms":12340},{"text":"","time_ms":15800},{"text":"Second line of the song","time_ms":21050}],"synced":true}
 type Lyrics struct {
@@ -847,11 +849,16 @@ type Lyrics struct {
 	Synced bool `json:"synced"`
 }
 
-// LyricsLine One line of the lyrics.
+// LyricsLine One line of the lyrics. Its time comes from a time tag of the file,
+// `[mm:ss.xx]`, `[mm:ss:xx]` or `[hh:mm:ss.xx]`; three numbers without
+// a point are minutes, seconds and fraction, never hours (the known
+// limit that `getTrackLyrics` describes).
 //
 // Example: {"text":"First line of the song","time_ms":12340}
 type LyricsLine struct {
-	// Text The line. Empty, in synced lyrics, for a pause without words.
+	// Text The line, without the word tags of the file. Empty, in synced
+	// lyrics, for a pause without words; in lyrics that are not
+	// synced, for the space between two stanzas.
 	Text string `json:"text"`
 
 	// TimeMs When the line begins, in milliseconds from the start of the track; `null` in lyrics that are not synced.

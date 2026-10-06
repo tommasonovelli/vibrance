@@ -15,19 +15,38 @@ import (
 	"unicode/utf8"
 )
 
-// The grammar of §9.3 written a second time, with regular expressions and
-// numbers without a limit: the fuzz target compares Parse with it.
+// The grammar of §9.3, with the readings of its erratum R1, written a
+// second time, with regular expressions and numbers without a limit: the
+// fuzz target compares Parse with it.
 var (
 	modelEnding = regexp.MustCompile(`\r\n|\r|\n`)
 	modelTag    = regexp.MustCompile(`^\[([^\]]*)\]`)
-	modelTime   = regexp.MustCompile(`^([0-9]+):(?:([0-5][0-9]):)?([0-5][0-9])(?:\.([0-9]{1,3}))?$`)
-	modelIdent  = regexp.MustCompile(`^(?:[aA][rR]|[tT][iI]|[aA][lL]|[bB][yY]|[lL][eE][nN][gG][tT][hH]|([oO][fF][fF][sS][eE][tT])):`)
+	// Minutes and seconds, with a fraction after a point or a colon.
+	modelTime = regexp.MustCompile(`^([0-9]+):([0-5][0-9])(?:[.:]([0-9]{1,3}))?$`)
+	// Hours: only with a point before the fraction.
+	modelHours  = regexp.MustCompile(`^([0-9]+):([0-5][0-9]):([0-5][0-9])\.([0-9]{1,3})$`)
+	modelIdent  = regexp.MustCompile(`^(?:` + anyCase("ar", "ti", "al", "by", "length", "au", "lr", "re", "ve", "tool", "la", "id") + `|(` + anyCase("offset") + `)):`)
 	modelNumber = regexp.MustCompile(`^[+-]?[0-9]+$`)
 	modelWord   = regexp.MustCompile(`<([^<>]*)>`)
 
 	maxInt64 = big.NewInt(math.MaxInt64)
 	minInt64 = big.NewInt(math.MinInt64)
 )
+
+// anyCase is an expression for the keys in any ASCII case. The flag (?i)
+// would not do: it folds as Unicode does, and reads a long s as an s.
+func anyCase(keys ...string) string {
+	var b strings.Builder
+	for i, key := range keys {
+		if i > 0 {
+			b.WriteByte('|')
+		}
+		for _, c := range key {
+			b.WriteString("[" + string(c) + strings.ToUpper(string(c)) + "]")
+		}
+	}
+	return b.String()
+}
 
 func bigOf(digits string) *big.Int {
 	n, ok := new(big.Int).SetString(digits, 10)
@@ -39,18 +58,16 @@ func bigOf(digits string) *big.Int {
 
 // modelTimeOf is the time a tag stands for, when it is one.
 func modelTimeOf(tag string) (*big.Int, bool) {
-	m := modelTime.FindStringSubmatch(tag)
-	if m == nil {
+	var hours, minutes, seconds, fraction string
+	if m := modelHours.FindStringSubmatch(tag); m != nil {
+		hours, minutes, seconds, fraction = m[1], m[2], m[3], m[4]
+	} else if m := modelTime.FindStringSubmatch(tag); m != nil {
+		hours, minutes, seconds, fraction = "0", m[1], m[2], m[3]
+	} else {
 		return nil, false
 	}
-	first, minutes, seconds, fraction := m[1], m[2], m[3], m[4]
-	ms := new(big.Int)
-	if minutes == "" {
-		ms.Mul(bigOf(first), big.NewInt(60_000))
-	} else {
-		ms.Mul(bigOf(first), big.NewInt(3_600_000))
-		ms.Add(ms, new(big.Int).Mul(bigOf(minutes), big.NewInt(60_000)))
-	}
+	ms := new(big.Int).Mul(bigOf(hours), big.NewInt(3_600_000))
+	ms.Add(ms, new(big.Int).Mul(bigOf(minutes), big.NewInt(60_000)))
 	ms.Add(ms, new(big.Int).Mul(bigOf(seconds), big.NewInt(1000)))
 	if fraction != "" {
 		ms.Add(ms, bigOf((fraction + "00")[:3]))
@@ -73,6 +90,7 @@ func modelParse(data []byte) (synced bool, lines []line) {
 	for _, l := range modelEnding.Split(text, -1) {
 		rest := strings.TrimSpace(l)
 		var times []*big.Int
+		header := false
 		for {
 			m := modelTag.FindStringSubmatch(rest)
 			if m == nil {
@@ -81,6 +99,7 @@ func modelParse(data []byte) (synced bool, lines []line) {
 			if ms, ok := modelTimeOf(m[1]); ok {
 				times = append(times, ms)
 			} else if id := modelIdent.FindStringSubmatch(m[1]); id != nil {
+				header = true
 				value := strings.TrimSpace(m[1][len(id[0]):])
 				if id[1] != "" && modelNumber.MatchString(value) {
 					if n := bigOf(value); n.Cmp(minInt64) >= 0 && n.Cmp(maxInt64) <= 0 {
@@ -102,13 +121,26 @@ func modelParse(data []byte) (synced bool, lines []line) {
 		for _, ms := range times {
 			timed = append(timed, modelLine{ms: ms, text: words})
 		}
-		if len(times) == 0 && words != "" {
+		// Every untimed line is kept here, the empty ones too, but those
+		// that were only header tags.
+		if len(times) == 0 && (words != "" || !header) {
 			plainLines = append(plainLines, plain(words))
 		}
 	}
 
 	if len(timed) == 0 {
-		return false, plainLines[:min(len(plainLines), maxLines)]
+		empty := func(l line) bool { return l.text == "" }
+		// Empty lines in a row are one; none stays before the first text,
+		// and none after the last, also when the cut makes it the last.
+		plainLines = slices.CompactFunc(plainLines, func(a, b line) bool { return empty(a) && empty(b) })
+		if len(plainLines) > 0 && empty(plainLines[0]) {
+			plainLines = plainLines[1:]
+		}
+		plainLines = plainLines[:min(len(plainLines), maxLines)]
+		if n := len(plainLines); n > 0 && empty(plainLines[n-1]) {
+			plainLines = plainLines[:n-1]
+		}
+		return false, plainLines
 	}
 	sort.SliceStable(timed, func(i, j int) bool { return timed[i].ms.Cmp(timed[j].ms) < 0 })
 	timed = timed[:min(len(timed), maxLines)]
@@ -167,6 +199,9 @@ func lrcSeeds(tb testing.TB) [][]byte {
 		"[00:01:23]a\n[00:01:75]b\n[00:60:00]c\n[1:2:03]d\n[00:5]e\n[00:01.]f\n[00:01.2345]g\n[-1:00]h\n",
 		"[t\xc4\xb0:T]\n[off\xc5\xbfet:500]\n[LENGTH:03:20]\n[bY:]\n[al:a:b]\n[artist:A]\n[ar :A]\n[ar]\n",
 		"[00:02][00:01]a\r\r\n[00:01][00:02]b\n\r[offset:1500]",
+		"[01:02:03]a\n[01:02:3]b\n[01:02:345]c\n[01:02:3456]d\n[1:02:03.4]e\n[01:02:]f\n[00:01]g<00:02:50>h<0:00:02.5>i",
+		"\r\n\r\n[ar:A]\r\n\r\nOne\r\nTwo\r\n\r\n\r\n[re:Editor]\r\n \t\r\nThree\r\rFour\n\nFive\r\n[Chorus: all]\r\n\r\n",
+		"[au:A]\n[lr:L]\n[re:R]\n[ve:V]\n[tool:T]\n[la:en]\n[id:x]\n[TOOL:x][Id:y]\n[tools:x]\n[lang:en]\n[Verse: one]\ntext",
 	} {
 		seeds = append(seeds, []byte(s))
 	}
@@ -174,8 +209,9 @@ func lrcSeeds(tb testing.TB) [][]byte {
 }
 
 // FuzzParseLRC: Parse never panics, whatever the bytes; the times are never
-// negative and never go back; lyrics that are not synced have no time and
-// no empty line, synced ones a time on every line; a text is valid UTF-8
+// negative and never go back; lyrics that are not synced have no time, and
+// no empty line at the start, at the end or after another, synced ones a
+// time on every line; a text is valid UTF-8
 // on one line without white space around it; there are at most maxLines
 // lines; the answer is the one of the model, does not depend on how the
 // lines end, and a byte order mark before the file does not change it.
@@ -204,8 +240,10 @@ func FuzzParseLRC(f *testing.F) {
 			switch {
 			case !got.Synced && l.TimeMS != nil:
 				t.Fatalf("line %d has the time %d in lyrics that are not synced", i, *l.TimeMS)
-			case !got.Synced && l.Text == "":
-				t.Fatalf("line %d is empty in lyrics that are not synced", i)
+			case !got.Synced && l.Text == "" && (i == 0 || i == len(got.Lines)-1):
+				t.Fatalf("line %d of %d is empty in lyrics that are not synced", i, len(got.Lines))
+			case !got.Synced && l.Text == "" && got.Lines[i-1].Text == "":
+				t.Fatalf("lines %d and %d are both empty in lyrics that are not synced", i-1, i)
 			case got.Synced && l.TimeMS == nil:
 				t.Fatalf("line %d has no time in synced lyrics", i)
 			}
@@ -240,10 +278,12 @@ func FuzzParseLRC(f *testing.F) {
 			}
 		}
 		same("a second reading", data)
-		// An empty line is no line, so the three endings are one.
-		same("CR for LF", bytes.ReplaceAll(data, []byte("\n"), []byte("\r")))
-		same("LF for CR", bytes.ReplaceAll(data, []byte("\r"), []byte("\n")))
-		same("CRLF for LF", bytes.ReplaceAll(data, []byte("\n"), []byte("\r\n")))
+		// The three endings are one: whichever a file is written with, the
+		// answer is the same.
+		lf := bytes.ReplaceAll(bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n")), []byte("\r"), []byte("\n"))
+		same("LF for every ending", lf)
+		same("CR for every ending", bytes.ReplaceAll(lf, []byte("\n"), []byte("\r")))
+		same("CRLF for every ending", bytes.ReplaceAll(lf, []byte("\n"), []byte("\r\n")))
 		same("a line ending at the end", append(slices.Clone(data), '\n'))
 		if !bytes.HasPrefix(data, []byte(bom)) {
 			same("a byte order mark", append([]byte(bom), data...))

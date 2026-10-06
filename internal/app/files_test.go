@@ -532,11 +532,13 @@ func TestTrackLyrics(t *testing.T) {
 	wantStatus(t, "HEAD", head, http.StatusOK)
 	wantHeader(t, "HEAD", head, "ETag", rec.Header().Get("ETag"))
 
-	// Lyrics without a time.
-	writeFile(t, file, []byte("\xef\xbb\xbfFirst words\r\n\r\nSecond words\r\n"))
+	// Lyrics without a time, as Windows writes them: the empty line
+	// between the two stanzas is a line with an empty text, and the
+	// header and the line endings give none.
+	writeFile(t, file, []byte("\xef\xbb\xbf[tool:An editor]\r\n\r\nFirst words\r\nmore words\r\n\r\n\r\nSecond words\r\n\r\n"))
 	w.setLyricsSHA256(id)
 	got = decode[api.Lyrics](t, w.fetch(http.MethodGet, path, anna))
-	want = api.Lyrics{Synced: false, Lines: []api.LyricsLine{{Text: "First words"}, {Text: "Second words"}}}
+	want = api.Lyrics{Synced: false, Lines: []api.LyricsLine{{Text: "First words"}, {Text: "more words"}, {Text: ""}, {Text: "Second words"}}}
 	if b, _ := json.Marshal(got); string(b) != mustJSON(t, want) {
 		t.Errorf("lyrics without a time: %s, want %s", b, mustJSON(t, want))
 	}
@@ -586,7 +588,7 @@ func TestTrackLyricsAreThoseOfTheParser(t *testing.T) {
 	w := newWorld(t, apiOrigin)
 	id := w.fixtureTrack(albumA, 1)
 	file := w.lyricsPath(id)
-	writeFile(t, file, []byte("[offset:+500]\n[00:02.00][00:01.00]Twice <00:01.50>word\n[00:03.00]\nno time\n"))
+	writeFile(t, file, []byte("[offset:+500]\n[00:02.00][00:01:00]Twice <00:01:50>word\n[00:03.00]\nno time\n"))
 	w.setLyricsSHA256(id)
 	parsed := lyrics.Parse(readFile(t, file))
 	got := decode[api.Lyrics](t, w.fetch(http.MethodGet, "/tracks/"+id+"/lyrics", w.as(w.anna)))

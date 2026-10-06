@@ -92,6 +92,7 @@ func TestParseEmptyFiles(t *testing.T) {
 		{"only line endings", "\n\r\n\r\n\n", nil},
 		{"only white space", " \t\n  \n\t", nil},
 		{"only identification tags", "[ar:A]\n[ti:T]\n[offset:100]\n", nil},
+		{"only header tags and empty lines", "\r\n[ar:A]\r\n\r\n[tool:T]\r\n \r\n[id:1]\r\n\r\n", nil},
 	})
 	if got := Parse(nil); got.Synced || got.Lines == nil || len(got.Lines) != 0 {
 		t.Errorf("Parse(nil) = %+v, want no lines in a slice that is not nil", got)
@@ -138,7 +139,7 @@ func TestParseTimeTags(t *testing.T) {
 		{"mm:ss.x", "[01:02.3]x", one(62_300)},
 		{"mm:ss.xx", "[01:02.34]x", one(62_340)},
 		{"mm:ss.xxx", "[01:02.345]x", one(62_345)},
-		{"hh:mm:ss", "[01:02:03]x", one(3_723_000)},
+		{"mm:ss:xx", "[01:02:03]x", one(62_030)},
 		{"hh:mm:ss.x", "[01:02:03.4]x", one(3_723_400)},
 		{"hh:mm:ss.xx", "[01:02:03.45]x", one(3_723_450)},
 		{"hh:mm:ss.xxx", "[01:02:03.456]x", one(3_723_456)},
@@ -157,8 +158,8 @@ func TestParseTimeTags(t *testing.T) {
 		{"a letter in the fraction", "[00:01.2a]x", notATag("[00:01.2a]x")},
 		{"two fractions", "[00:01.2.3]x", notATag("[00:01.2.3]x")},
 		{"a comma for the fraction", "[00:01,23]x", notATag("[00:01,23]x")},
-		{"a colon for the fraction is hours", "[00:01:23]x", one(83_000)},
-		{"a colon for the fraction, over 59", "[00:01:75]x", notATag("[00:01:75]x")},
+		{"a colon for the fraction", "[00:01:23]x", one(1230)},
+		{"a colon for the fraction, over 59", "[00:01:75]x", one(1750)},
 
 		// Minutes of any length.
 		{"zero", "[00:00.00]x", one(0)},
@@ -180,13 +181,14 @@ func TestParseTimeTags(t *testing.T) {
 		{"no seconds", "[00:]x", notATag("[00:]x")},
 
 		// With hours, minutes too are two digits, 0 to 59.
-		{"one digit of hours", "[1:00:00]x", one(3_600_000)},
-		{"many digits of hours", "[100:00:00]x", one(360_000_000)},
+		{"one digit of hours", "[1:00:00.0]x", one(3_600_000)},
+		{"many digits of hours", "[100:00:00.00]x", one(360_000_000)},
 		{"minute 59 after hours", "[0:59:59.999]x", one(3_599_999)},
-		{"minute 60 after hours", "[00:60:00]x", notATag("[00:60:00]x")},
-		{"one digit of minutes after hours", "[00:1:00]x", notATag("[00:1:00]x")},
-		{"no hours", "[:00:01]x", notATag("[:00:01]x")},
+		{"minute 60 after hours", "[00:60:00.0]x", notATag("[00:60:00.0]x")},
+		{"one digit of minutes after hours", "[00:1:00.0]x", notATag("[00:1:00.0]x")},
+		{"no hours", "[:00:01.0]x", notATag("[:00:01.0]x")},
 		{"four fields", "[00:00:00:01]x", notATag("[00:00:00:01]x")},
+		{"four fields and a point", "[00:00:00:01.0]x", notATag("[00:00:00:01.0]x")},
 
 		// Nothing but ASCII digits.
 		{"a sign", "[-1:00]x", notATag("[-1:00]x")},
@@ -208,18 +210,173 @@ func TestParseTimeTags(t *testing.T) {
 	})
 }
 
+// Three numbers are hours, minutes and seconds only with a point before the
+// fraction: without it the third number is the fraction (erratum R1). A
+// real [hh:mm:ss] without a fraction is read that way too: a known limit.
+func TestParseThreeFields(t *testing.T) {
+	one := func(ms int64) []line { return []line{at(ms, "x")} }
+	notATag := func(in string) []line { return []line{plain(in)} }
+	runCases(t, []parseCase{
+		// Without a point: minutes, seconds, fraction of 1 to 3 digits.
+		{"hundredths", "[01:02:03]x", one(62_030)},
+		{"tenths", "[01:02:3]x", one(62_300)},
+		{"thousandths", "[01:02:345]x", one(62_345)},
+		{"fraction 00", "[00:05:00]x", one(5000)},
+		{"fraction over 59", "[00:05:99]x", one(5990)},
+		{"fraction 999", "[00:59:999]x", one(59_999)},
+		{"minutes of any length", "[123:45:67]x", one(7_425_670)},
+		{"one digit of minutes", "[5:07:50]x", one(307_500)},
+		{"what would be one hour", "[01:00:00]x", one(60_000)},
+		{"four digits of fraction", "[01:02:3456]x", notATag("[01:02:3456]x")},
+		{"no digit in the fraction", "[01:02:]x", notATag("[01:02:]x")},
+		{"a letter in the fraction", "[01:02:3a]x", notATag("[01:02:3a]x")},
+		{"second 60", "[01:60:00]x", notATag("[01:60:00]x")},
+		{"one digit of seconds", "[01:2:03]x", notATag("[01:2:03]x")},
+		{"no minutes", "[:02:03]x", notATag("[:02:03]x")},
+		{"four fields", "[01:02:03:04]x", notATag("[01:02:03:04]x")},
+
+		// With a point: hours, minutes, seconds, fraction.
+		{"with a point, tenths", "[01:02:03.4]x", one(3_723_400)},
+		{"with a point, hundredths", "[01:02:03.45]x", one(3_723_450)},
+		{"with a point, thousandths", "[01:02:03.456]x", one(3_723_456)},
+		{"with a point, fraction 0", "[01:00:00.0]x", one(3_600_000)},
+		{"with a point, second 60", "[01:02:60.0]x", notATag("[01:02:60.0]x")},
+		{"with a point, minute 60", "[01:60:03.0]x", notATag("[01:60:03.0]x")},
+		{"with a point, one digit of seconds", "[01:02:3.0]x", notATag("[01:02:3.0]x")},
+		{"with a point, three digits of seconds", "[01:02:345.0]x", notATag("[01:02:345.0]x")},
+		{"with a point and no fraction", "[01:02:03.]x", notATag("[01:02:03.]x")},
+		{"a point in the wrong place", "[01:02.03:04]x", notATag("[01:02.03:04]x")},
+
+		// The same line in the two writings, and a file of each kind.
+		{"the two forms on one line", "[00:01:50][00:00:01.50]x", []line{at(1500, "x"), at(1500, "x")}},
+		{"a file in mm:ss:xx", "[00:12:50]one\r\n[00:17:05]two\r\n[01:03:99]three\r\n",
+			[]line{at(12_500, "one"), at(17_050, "two"), at(63_990, "three")}},
+		{"the lines stay in order", "[00:59:99]a\n[01:00:00]b\n[01:00:01]c", []line{at(59_990, "a"), at(60_000, "b"), at(60_010, "c")}},
+		{"with an offset", "[offset:500]\n[00:01:50]x", one(1000)},
+
+		// Word tags follow the same rule.
+		{"a word tag without a point", "[00:01]a<00:02:50>b", []line{at(1000, "ab")}},
+		{"a word tag with one digit of fraction", "[00:01]a<00:02:5>b", []line{at(1000, "ab")}},
+		{"a word tag with a point", "[00:01]a<00:00:02.50>b", []line{at(1000, "ab")}},
+		{"a word tag with four digits", "[00:01]a<00:02:5000>b", []line{at(1000, "a<00:02:5000>b")}},
+		{"word tags in a file in mm:ss:xx", "[00:12:50]<00:12:50>one <00:13:10>two", []line{at(12_500, "one two")}},
+		{"word tags without time tags", "<00:02:50>one <00:03:00>two", []line{plain("one two")}},
+	})
+}
+
+// In lyrics that are not synced an empty line separates two stanzas
+// (erratum R1): the runs of empty lines are one line each, none stays at
+// the start or at the end, and "\r\n" is one line ending.
+func TestParseEmptyLinesOfPlainLyrics(t *testing.T) {
+	e := plain("")
+	two := []line{plain("one"), e, plain("two")}
+	runCases(t, []parseCase{
+		{"between two lines", "one\n\ntwo\n", two},
+		{"several in a row are one", "one\n\n\n\n\ntwo", two},
+		{"white space only is empty", "one\n \t \ntwo", two},
+		{"white space only and empty in a row", "one\n\n \n\t\n\ntwo", two},
+		{"at the start they are dropped", "\n\n \none\n\ntwo", two},
+		{"at the end they are dropped", "one\n\ntwo\n\n \n\n", two},
+		{"after a byte order mark", bom + "\n\none\n\ntwo", two},
+		{"none between the lines of a stanza", "one\ntwo\n\nthree\nfour", []line{plain("one"), plain("two"), e, plain("three"), plain("four")}},
+		{"a file of one line", "\n\nonly\n\n", []line{plain("only")}},
+
+		// The three line endings.
+		{"CRLF is one ending", "one\r\ntwo\r\nthree\r\n", []line{plain("one"), plain("two"), plain("three")}},
+		{"CRLF, an empty line", "one\r\n\r\ntwo\r\n", two},
+		{"CRLF, several empty lines", "one\r\n\r\n\r\n\r\ntwo", two},
+		{"CR, an empty line", "one\r\rtwo\r", two},
+		{"CR CR LF is two endings", "one\r\r\ntwo", two},
+		{"LF CR is two endings", "one\n\rtwo", two},
+		{"CR LF CR LF", "one\r\n\r\ntwo", two},
+		{"mixed endings", "one\r\n\n\r\rtwo\n\r\n", two},
+		{"a Windows file with stanzas", bom + "\r\nFirst verse\r\nand its second line\r\n\r\n\r\n[Chorus]\r\nla la\r\n\r\nLast verse\r\n\r\n",
+			[]line{plain("First verse"), plain("and its second line"), e, plain("[Chorus]"), plain("la la"), e, plain("Last verse")}},
+
+		// A line that was only header tags is no line, not an empty one.
+		{"a header between two lines", "one\n[ar:A]\ntwo", []line{plain("one"), plain("two")}},
+		{"several headers on a line", "one\n[ar:A] [ti:T]\ntwo", []line{plain("one"), plain("two")}},
+		{"an offset between two lines", "one\n[offset:500]\ntwo", []line{plain("one"), plain("two")}},
+		{"headers at the start", "[ar:A]\n[ti:T]\none\n\ntwo", two},
+		{"headers, then empty lines, at the start", "[ar:A]\r\n[ti:T]\r\n\r\none\r\n\r\ntwo", two},
+		{"headers at the end", "one\n\ntwo\n\n[by:x]\n[re:y]\n", two},
+		{"empty lines around a header are one", "one\n\n[by:x]\n\ntwo", two},
+		{"a header after an empty line", "one\n\n[by:x]\ntwo", two},
+		{"a header before an empty line", "one\n[by:x]\n\ntwo", two},
+		{"a header with a text is a line", "one\n\n[by:x]two", two},
+		{"a header with white space only", "one\n[by:x] \t\ntwo", []line{plain("one"), plain("two")}},
+
+		// Lines that are empty once their word tags are removed.
+		{"only word tags between two lines", "one\n<00:01.00>\ntwo", two},
+		{"only word tags at the start", "<00:01.00>\none\n\ntwo", two},
+		{"a header and word tags only", "one\n[ar:A]<00:01.00>\ntwo", []line{plain("one"), plain("two")}},
+
+		// Synced lyrics: nothing changes.
+		{"synced: untimed empty lines are dropped", "[00:01]a\n\n\n[00:02]b\r\n\r\n[00:03]c", []line{at(1000, "a"), at(2000, "b"), at(3000, "c")}},
+		{"synced: timed empty lines are all kept", "[00:01]\n[00:02]\n[00:03]\n\n", []line{at(1000, ""), at(2000, ""), at(3000, "")}},
+		{"synced: at the start and at the end", "[00:00]\n[00:01]a\n[00:02]\n[00:03]", []line{at(0, ""), at(1000, "a"), at(2000, ""), at(3000, "")}},
+		{"one time tag makes the file synced", "one\n\ntwo\n[00:01]three", []line{at(1000, "three")}},
+	})
+}
+
+// The header tags are a closed list of thirteen keys (erratum R1), read in
+// any ASCII case. Any other [letters:...] is text.
+func TestParseHeaderTags(t *testing.T) {
+	var all strings.Builder
+	for _, key := range []string{"ar", "ti", "al", "by", "length", "offset", "au", "lr", "re", "ve", "tool", "la", "id"} {
+		all.WriteString("[" + key + ":value]\n")
+		check(t, "["+key+":value]\ntext", plain("text"))
+		check(t, "["+strings.ToUpper(key)+":value]\ntext", plain("text"))
+		check(t, "["+strings.ToUpper(key[:1])+key[1:]+":]text", plain("text"))
+		check(t, "["+key+":value][00:01]text", at(1000, "text"))
+		check(t, "[00:01]["+key+":value]text", at(1000, "text"))
+		// Only as the whole key, and only with the colon.
+		for _, in := range []string{"[" + key + "x:value]", "[x" + key + ":value]", "[" + key + " :value]", "[ " + key + ":value]", "[" + key + "]", "[" + key + "=value]"} {
+			check(t, in, plain(in))
+		}
+	}
+	if len(identKeys) != 13 {
+		t.Errorf("%d header keys, want 13", len(identKeys))
+	}
+	runCases(t, []parseCase{
+		{"a file of headers only", all.String(), nil},
+		{"a Windows file of headers only", bom + strings.ReplaceAll(all.String(), "\n", "\r\n"), nil},
+		{"headers before plain lyrics", all.String() + "\none\n\ntwo\n", []line{plain("one"), plain(""), plain("two")}},
+		{"headers before synced lyrics", all.String() + "[00:01]one\n", []line{at(1000, "one")}},
+		{"the headers a tagger writes",
+			"[id:abc123]\n[ar:Artist]\n[ti:Title]\n[al:Album]\n[au:Author]\n[lr:Lyricist]\n[length:03:20]\n[by:Someone]\n[re:Editor]\n[tool:Editor]\n[ve:1.2.3]\n[la:en]\n[offset:0]\n\nFirst\n\nSecond",
+			[]line{plain("First"), plain(""), plain("Second")}},
+		{"several on a line", "[au:A][lr:L] [tool:T]\none", []line{plain("one")}},
+		{"with an empty value", "[la:]\n[id:]\none", []line{plain("one")}},
+		{"with colons in the value", "[tool:a:b:c]\none", []line{plain("one")}},
+		{"the offset still counts among the new ones", "[re:x][offset:500][ve:1]\n[00:01]a", []line{at(500, "a")}},
+
+		// Not in the list: text.
+		{"a section header with a name", "[Chorus: all]\nla", []line{plain("[Chorus: all]"), plain("la")}},
+		{"section headers", "[Verse 1: Someone]\n[Intro: x]\n[Bridge:]\n[Outro: y]", []line{plain("[Verse 1: Someone]"), plain("[Intro: x]"), plain("[Bridge:]"), plain("[Outro: y]")}},
+		{"longer words that begin with a key", "[lang:en]\n[tools:x]\n[album:A]\n[ident:1]\n[version:2]\n[author:B]",
+			[]line{plain("[lang:en]"), plain("[tools:x]"), plain("[album:A]"), plain("[ident:1]"), plain("[version:2]"), plain("[author:B]")}},
+		{"other short keys", "[x:y]\n[t:1]\n[#:c]\n[tt:1]", []line{plain("[x:y]"), plain("[t:1]"), plain("[#:c]"), plain("[tt:1]")}},
+		{"in a synced file they are dropped as untimed lines", "[Chorus: all]\n[00:01]la", []line{at(1000, "la")}},
+		{"after a time tag they are text", "[00:01][Chorus: all]la", []line{at(1000, "[Chorus: all]la")}},
+	})
+}
+
 func TestParseTimesThatDoNotFit(t *testing.T) {
 	// 153722867280912:55.807 is the largest int64 of milliseconds.
 	check(t, "[153722867280912:55.807]x", at(math.MaxInt64, "x"))
 	check(t, "[2562047788015:12:55.807]x", at(math.MaxInt64, "x"))
+	check(t, "[153722867280912:55:807]x", at(math.MaxInt64, "x"))
 	check(t, "[153722867280912:55.806]x", at(math.MaxInt64-1, "x"))
 	for _, in := range []string{
 		"[153722867280912:55.808]x",
 		"[153722867280912:56]x",
 		"[153722867280913:00]x",
 		"[2562047788015:12:55.808]x",
-		"[2562047788015:13:00]x",
-		"[2562047788016:00:00]x",
+		"[2562047788015:13:00.0]x",
+		"[2562047788016:00:00.0]x",
+		"[153722867280912:55:808]x",
+		"[153722867280913:00:0]x",
 		"[9223372036854775807:00]x",
 		"[9223372036854775808:00]x",
 		"[" + strings.Repeat("9", 400) + ":00]x",
@@ -337,7 +494,7 @@ func TestParseOrderIsStableOnManyLines(t *testing.T) {
 func TestParseWordTags(t *testing.T) {
 	runCases(t, []parseCase{
 		{"enhanced LRC", "[00:01.00]<00:01.00>one <00:01.50>two <00:02.00>three<00:02.50>", []line{at(1000, "one two three")}},
-		{"every form of time", "[00:01]a<1:02>b<01:02.3>c<01:02.34>d<01:02.345>e<01:02:03.45>f", []line{at(1000, "abcdef")}},
+		{"every form of time", "[00:01]a<1:02>b<01:02.3>c<01:02.34>d<01:02.345>e<01:02:03.45>f<01:02:03>g<01:02:3>h<01:02:345>i", []line{at(1000, "abcdefghi")}},
 		{"only word tags", "[00:01.00]<00:01.00><00:02.00>", []line{at(1000, "")}},
 		{"white space left by the tags at the ends is trimmed", "[00:01.00] <00:01.00> one <00:02.00> ", []line{at(1000, "one")}},
 		{"white space left inside is kept", "[00:01.00]one <00:01.50> two", []line{at(1000, "one  two")}},
@@ -403,7 +560,7 @@ func TestParseBytesThatAreNotUTF8(t *testing.T) {
 func TestParseFilesWithoutTimeTags(t *testing.T) {
 	runCases(t, []parseCase{
 		{"plain lines", "one\ntwo\nthree\n", []line{plain("one"), plain("two"), plain("three")}},
-		{"empty lines are dropped", "one\n\n\ntwo\n \t \nthree\n\n", []line{plain("one"), plain("two"), plain("three")}},
+		{"empty lines are kept, one for each run", "one\n\n\ntwo\n \t \nthree\n\n", []line{plain("one"), plain(""), plain("two"), plain(""), plain("three")}},
 		{"the text is trimmed", "  one \n\ttwo\t", []line{plain("one"), plain("two")}},
 		{"section headers are text", "[Chorus]\nla la\n[Verse 1: Someone]\nla", []line{plain("[Chorus]"), plain("la la"), plain("[Verse 1: Someone]"), plain("la")}},
 		{"times that are not valid are text", "[00:75.00]a\n[1:2]b", []line{plain("[00:75.00]a"), plain("[1:2]b")}},
@@ -431,9 +588,9 @@ func TestParseIdentificationTags(t *testing.T) {
 		{"the value ends at the first closing bracket", "[ti:Song [live]]\none", []line{plain("]"), plain("one")}},
 
 		// Only the tags of the grammar: anything else in brackets is text.
-		{"other keys are text", "[re:Editor]\n[ve:1.0]\n[au:Author]\n[la:en]\none",
-			[]line{plain("[re:Editor]"), plain("[ve:1.0]"), plain("[au:Author]"), plain("[la:en]"), plain("one")}},
-		{"other keys are dropped with the untimed lines", "[re:Editor]\n[00:01]one", []line{at(1000, "one")}},
+		{"other keys are text", "[artist:A]\n[title:T]\n[lang:en]\n[x:y]\none",
+			[]line{plain("[artist:A]"), plain("[title:T]"), plain("[lang:en]"), plain("[x:y]"), plain("one")}},
+		{"other keys are dropped with the untimed lines", "[artist:A]\n[00:01]one", []line{at(1000, "one")}},
 		{"a key with a space", "[ar :Artist]", []line{plain("[ar :Artist]")}},
 		{"a key without a colon", "[ar]", []line{plain("[ar]")}},
 		{"a longer key", "[artist:A]", []line{plain("[artist:A]")}},
@@ -579,6 +736,27 @@ func TestParseCutsAtMaxLines(t *testing.T) {
 		in = plainLines(3*maxLines) + timedLines(maxLines)
 		expectTimed(t, Parse([]byte(in)), maxLines)
 	})
+	t.Run("the empty lines of plain lyrics count", func(t *testing.T) {
+		// Line 10,000 is the empty one after text 4,999: the cut makes it
+		// the last line, and the lyrics do not end with an empty line.
+		got := Parse([]byte(strings.Repeat("text\n\n\n", maxLines)))
+		if got.Synced || len(got.Lines) != maxLines-1 {
+			t.Fatalf("synced=%t with %d lines, want not synced with %d", got.Synced, len(got.Lines), maxLines-1)
+		}
+		for i, l := range got.Lines {
+			if want := []string{"text", ""}[i%2]; l.TimeMS != nil || l.Text != want {
+				t.Fatalf("line %d is %s, want %q", i, show(false, flat(got)[i:i+1]), want)
+			}
+		}
+		// One text more than half: the cut falls on a text.
+		got = Parse([]byte("first\n" + strings.Repeat("text\n\n", maxLines)))
+		if len(got.Lines) != maxLines {
+			t.Fatalf("%d lines, want %d", len(got.Lines), maxLines)
+		}
+		if got.Lines[maxLines-1].Text != "text" || got.Lines[maxLines-2].Text != "" {
+			t.Fatalf("the last lines are %s", show(false, flat(got)[maxLines-2:]))
+		}
+	})
 	t.Run("an offset after the cut still counts", func(t *testing.T) {
 		got := Parse([]byte(timedLines(maxLines+10) + "[offset:-7]\n"))
 		if len(got.Lines) != maxLines || *got.Lines[0].TimeMS != 7 || *got.Lines[maxLines-1].TimeMS != maxLines+6 {
@@ -631,6 +809,9 @@ func TestParseTimeIsLinear(t *testing.T) {
 		"identification tags":          strings.Repeat("[ar:x]", size/6),
 		"offsets":                      strings.Repeat("[offset:1]", size/10),
 		"carriage returns":             strings.Repeat("\r", size),
+		"Windows line endings":         strings.Repeat("\r\n", size/2),
+		"empty lines between words":    strings.Repeat("a\n\n", size/3),
+		"three fields":                 strings.Repeat("[00:00:00]", size/10),
 		"white space":                  strings.Repeat(" ", size) + "x",
 		"white space between tags":     strings.Repeat("[00:00] ", size/8),
 		"one digit a line":             strings.Repeat("1\n", size/2),

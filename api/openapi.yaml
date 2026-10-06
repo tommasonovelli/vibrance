@@ -1285,6 +1285,19 @@ paths:
         HEAD is answered too. `has_lyrics` of a track tells whether to ask.
         The `ETag` is the SHA-256 of the file.
 
+        How the file is read. A time tag is `[mm:ss]`, `[mm:ss.xx]` or
+        `[hh:mm:ss.xx]`, with a fraction of one to three digits. A tag of
+        three numbers without a point, `[mm:ss:xx]`, is minutes, seconds and
+        fraction, as the files that write it mean it. Known limit: a real
+        `[hh:mm:ss]`, hours without a fraction, is read that way too, so
+        `[01:02:03]` is 1 minute, 2 seconds and 30 milliseconds. The word
+        tags of enhanced LRC, `<mm:ss.xx>` in any of those forms, are
+        removed from the text. The header tags are never text: `[ar:]`,
+        `[ti:]`, `[al:]`, `[by:]`, `[length:]`, `[au:]`, `[lr:]`, `[re:]`,
+        `[ve:]`, `[tool:]`, `[la:]`, `[id:]`, and `[offset:]`, which moves
+        every time of the file. Any other `[word: ...]`, as `[Chorus: ...]`,
+        is text.
+
         `404 track_not_found`: there is no such track.
         `404 lyrics_not_found`: the track has no lyrics, or is not available,
         or its lyrics file is gone, cannot be read or is over 2 MiB.
@@ -2875,7 +2888,9 @@ components:
         The lyrics of a track. When `synced` is true every line has its
         `time_ms` and the lines are in the order of their times. When it is
         false the file had no time at all: every line has `"time_ms": null`
-        and the lines are in the order of the file, without the empty ones.
+        and the lines are in the order of the file. The empty lines between
+        two stanzas are then one line with an empty `text`; there is none
+        before the first line of text or after the last.
       required: [synced, lines]
       properties:
         synced:
@@ -2897,7 +2912,11 @@ components:
             text: Second line of the song
     LyricsLine:
       type: object
-      description: "One line of the lyrics."
+      description: |
+        One line of the lyrics. Its time comes from a time tag of the file,
+        `[mm:ss.xx]`, `[mm:ss:xx]` or `[hh:mm:ss.xx]`; three numbers without
+        a point are minutes, seconds and fraction, never hours (the known
+        limit that `getTrackLyrics` describes).
       required: [time_ms, text]
       properties:
         time_ms:
@@ -2908,7 +2927,10 @@ components:
           description: When the line begins, in milliseconds from the start of the track; `null` in lyrics that are not synced.
         text:
           type: string
-          description: The line. Empty, in synced lyrics, for a pause without words.
+          description: |
+            The line, without the word tags of the file. Empty, in synced
+            lyrics, for a pause without words; in lyrics that are not
+            synced, for the space between two stanzas.
       example:
         time_ms: 12340
         text: First line of the song

@@ -185,7 +185,7 @@ The block backs up both products first, and updates nothing if a backup fails. `
 - index MusicLib's library by itself, in the background, and show what it could not read and why;
 - keep the id of a track through every change MusicLib makes to it, so that playlists and favorites never lose it; albums that leave the library are shown as unavailable, never deleted, and come back as they were;
 - give each person an account (`admin` or `user`), with sign-in by cookie for browsers and by token for apps;
-- serve artists, albums and tracks, sorted and paged; the original audio files with ranges (**FLAC**, **MP3**, **M4A** with AAC or ALAC, as MusicLib writes them); the album covers, as they are or as thumbnails; the **LRC lyrics** as structured lines;
+- serve artists, albums and tracks, sorted and paged; the original audio files with ranges (**FLAC**, **MP3**, **M4A** with AAC or ALAC, as MusicLib writes them); the album covers, as they are or as thumbnails; the **LRC lyrics** as structured lines, synchronised or plain with their stanzas;
 - search artists, albums and tracks as you type, without regard to case and accents;
 - keep favorites and private playlists for each user;
 - document its API with OpenAPI, serve that document and a page to try it;
