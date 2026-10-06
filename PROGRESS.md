@@ -33,6 +33,10 @@ Design: DESIGN.md (versione 0.1). Orchestratore: aggiorna questo file a ogni pas
 | S23 | Contratto end-to-end con MusicLib reale | done | 1 | 7e2aaa8 | 2026-10-05 · A1–A20 verdi 5 volte su 5 nelle esecuzioni del revisore (MusicLib 1.2.0 vero) · fine fase C |
 | S24 | Prestazioni | done | 2 | 867d7d6 | 2026-10-05 · round 1: CHANGES REQUIRED (memoria a riposo 163,5 MB con 20.000 album scansionati, non misurata né dichiarata; misure «aperte» senza tetto; debiti «per S24» non tutti misurati) · errata §5.2 (indice per la durata delle playlist) · round 2 approvato: memoria a riposo 64 MB dopo la correzione, `scripts/perf.sh` rieseguito dal revisore |
 | S25 | Rilascio 0.1.0 | done | 1 | 2c3d3bf | 2026-10-05 · gate, contratto, smoke, prestazioni e govulncheck rieseguiti dal revisore sull'albero finale; checklist di sicurezza I1–I16 compilata · nessun tag, nessuna pubblicazione · fine fase D |
+| R1 | Testi: marca a tre campi, righe vuote, tag di intestazione | in-progress | 1 | | 2026-10-06 · passo aggiunto dall'errata dopo le decisioni dell'utente |
+| R2 | Contratto dell'API: header dichiarato, `ETag` sulle playlist, cookie | todo | | | |
+| R3 | Ricerca: query in NFC e `vibrance rebuild-search` | todo | | | |
+| R4 | Operatività e cover: `stop_grace_period`, cover enormi, verifica finale | todo | | | |
 
 Stati: `todo`, `in-progress`, `done`, `blocked`.
 
@@ -138,14 +142,14 @@ Stati: `todo`, `in-progress`, `done`, `blocked`.
 
 L'utente ha risposto all'elenco delle decisioni aperte. Da realizzare prima del tag `v0.1.0`, con errata e passi dedicati (ingegnere, poi revisore), dopo il parere di un consulente indipendente chiesto dall'utente:
 - N-082 (2): la marca LRC a tre campi `[00:01:23]` è minuti:secondi:centesimi. N-082 (5): le righe vuote dei testi non sincronizzati si tengono. N-082 (1): si ignora una lista chiusa di tag LRC noti.
-- N-078: una cover che non si apre non ferma l'album: album indicizzato senza cover, con avviso.
-- N-107: il cookie di sessione si rinnova con l'uso.
-- N-126: normalizzazione NFC di query e indice di ricerca.
-- N-144: un comando che ripara l'indice di ricerca.
+- N-078: dopo il parere del consulente resta com'è (album fermo finché la cover non si apre, riprovata a ogni ciclo): la proposta «album senza cover» non guarirebbe da sola. La variante con riprova è rimandata a dopo la 0.1.0.
+- N-107: l'utente resta dentro finché usa l'applicazione: `Max-Age` del cookie a 400 giorni, sessione sul server di 30 giorni scorrevoli (forma del consulente, stesso effetto per l'utente).
+- N-126: normalizzazione NFC della sola query (l'indice è già in NFC).
+- N-144: sottocomando nuovo `vibrance rebuild-search`.
 - N-147: `stop_grace_period: 15s` nel servizio `vibrance`.
 - N-138: l'header `X-Vibrance-Request` dichiarato nella specifica.
 - Header `ETag` anche sulle risposte di modifica delle playlist.
-- N-165: memoria delle miniature di cover enormi (forma da decidere dopo il parere).
+- N-165: una cover sopra 16 megapixel si decodifica da sola (semaforo pesato). I passi che realizzano queste decisioni sono R1–R4 (errata «2026-10-06 · R1–R4» in fondo a DESIGN.md).
 
 Confermate come sono: N-076 (miniature proporzionate), N-040 (bitrate FLAC `null`, salvo parere diverso), N-128 (preferiti su tracce non disponibili: decide l'orchestratore), N-172 (Go 1.25 resta; l'utente aggiornerà in futuro), e tutte le scelte prudenti delle fasi A–D (N-014, N-017, N-027, N-033, N-045, N-059, N-060, N-064, N-087, N-091, N-093, N-099, N-100, N-102, N-106, N-112, N-115, N-122, N-132, N-143, N-150, N-158, N-160, N-161, N-162).
 
