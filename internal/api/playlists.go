@@ -10,7 +10,10 @@ import (
 // the user of the request: catalog.Service answers the one of another user
 // as one that does not exist. The If-Match of a request goes to the service
 // as it was sent, nil without one, and is compared there, in the
-// transaction of the change.
+// transaction of the change. Every answer that carries one playlist has its
+// entity tag in the ETag header too, the same text as the etag of the body
+// (§8.1): a client reads the tag of the new revision where it reads any
+// other.
 
 // ListPlaylists lists the playlists of the user.
 func (s Server) ListPlaylists(ctx context.Context, _ ListPlaylistsRequestObject) (ListPlaylistsResponseObject, error) {
@@ -65,7 +68,7 @@ func (s Server) UpdatePlaylist(ctx context.Context, req UpdatePlaylistRequestObj
 	if err != nil {
 		return nil, err
 	}
-	return UpdatePlaylist200JSONResponse{Body: playlistOf(pl)}, nil
+	return UpdatePlaylist200JSONResponse{Body: playlistOf(pl), Headers: UpdatePlaylist200ResponseHeaders{ETag: pl.ETag()}}, nil
 }
 
 // DeletePlaylist deletes a playlist with its items.
@@ -116,7 +119,7 @@ func (s Server) AddPlaylistItems(ctx context.Context, req AddPlaylistItemsReques
 	for _, item := range added {
 		body.Added = append(body.Added, AddedPlaylistItem{ItemId: item.ItemID, TrackId: item.TrackID, Position: item.Position})
 	}
-	return AddPlaylistItems200JSONResponse{Body: body}, nil
+	return AddPlaylistItems200JSONResponse{Body: body, Headers: AddPlaylistItems200ResponseHeaders{ETag: pl.ETag()}}, nil
 }
 
 // RemovePlaylistItem removes one item of a playlist.
@@ -129,7 +132,7 @@ func (s Server) RemovePlaylistItem(ctx context.Context, req RemovePlaylistItemRe
 	if err != nil {
 		return nil, err
 	}
-	return RemovePlaylistItem200JSONResponse{Body: playlistOf(pl)}, nil
+	return RemovePlaylistItem200JSONResponse{Body: playlistOf(pl), Headers: RemovePlaylistItem200ResponseHeaders{ETag: pl.ETag()}}, nil
 }
 
 // MovePlaylistItem moves one item of a playlist to a position.
@@ -143,7 +146,7 @@ func (s Server) MovePlaylistItem(ctx context.Context, req MovePlaylistItemReques
 	if err != nil {
 		return nil, err
 	}
-	return MovePlaylistItem200JSONResponse{Body: playlistOf(pl)}, nil
+	return MovePlaylistItem200JSONResponse{Body: playlistOf(pl), Headers: MovePlaylistItem200ResponseHeaders{ETag: pl.ETag()}}, nil
 }
 
 func playlistOf(p catalog.Playlist) Playlist {

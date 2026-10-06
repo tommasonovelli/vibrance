@@ -260,6 +260,96 @@ func (e SessionKind) Valid() bool {
 	}
 }
 
+// Defines values for XVibranceRequest.
+const (
+	XVibranceRequestN1 XVibranceRequest = "1"
+)
+
+// Valid indicates whether the value is a known member of the XVibranceRequest enum.
+func (e XVibranceRequest) Valid() bool {
+	switch e {
+	case XVibranceRequestN1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ScanLibraryParamsXVibranceRequest.
+const (
+	ScanLibraryParamsXVibranceRequestN1 ScanLibraryParamsXVibranceRequest = "1"
+)
+
+// Valid indicates whether the value is a known member of the ScanLibraryParamsXVibranceRequest enum.
+func (e ScanLibraryParamsXVibranceRequest) Valid() bool {
+	switch e {
+	case ScanLibraryParamsXVibranceRequestN1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreateUserParamsXVibranceRequest.
+const (
+	CreateUserParamsXVibranceRequestN1 CreateUserParamsXVibranceRequest = "1"
+)
+
+// Valid indicates whether the value is a known member of the CreateUserParamsXVibranceRequest enum.
+func (e CreateUserParamsXVibranceRequest) Valid() bool {
+	switch e {
+	case CreateUserParamsXVibranceRequestN1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DeleteUserParamsXVibranceRequest.
+const (
+	DeleteUserParamsXVibranceRequestN1 DeleteUserParamsXVibranceRequest = "1"
+)
+
+// Valid indicates whether the value is a known member of the DeleteUserParamsXVibranceRequest enum.
+func (e DeleteUserParamsXVibranceRequest) Valid() bool {
+	switch e {
+	case DeleteUserParamsXVibranceRequestN1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UpdateUserParamsXVibranceRequest.
+const (
+	UpdateUserParamsXVibranceRequestN1 UpdateUserParamsXVibranceRequest = "1"
+)
+
+// Valid indicates whether the value is a known member of the UpdateUserParamsXVibranceRequest enum.
+func (e UpdateUserParamsXVibranceRequest) Valid() bool {
+	switch e {
+	case UpdateUserParamsXVibranceRequestN1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ResetUserPasswordParamsXVibranceRequest.
+const (
+	ResetUserPasswordParamsXVibranceRequestN1 ResetUserPasswordParamsXVibranceRequest = "1"
+)
+
+// Valid indicates whether the value is a known member of the ResetUserPasswordParamsXVibranceRequest enum.
+func (e ResetUserPasswordParamsXVibranceRequest) Valid() bool {
+	switch e {
+	case ResetUserPasswordParamsXVibranceRequestN1:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ListAlbumsParamsSort.
 const (
 	ListAlbumsParamsSortAdded  ListAlbumsParamsSort = "added"
@@ -317,6 +407,201 @@ func (e GetAlbumCoverParamsSize) Valid() bool {
 	case GetAlbumCoverParamsSizeN640:
 		return true
 	case GetAlbumCoverParamsSizeOriginal:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for LoginParamsXVibranceRequest.
+const (
+	LoginParamsXVibranceRequestN1 LoginParamsXVibranceRequest = "1"
+)
+
+// Valid indicates whether the value is a known member of the LoginParamsXVibranceRequest enum.
+func (e LoginParamsXVibranceRequest) Valid() bool {
+	switch e {
+	case LoginParamsXVibranceRequestN1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for LogoutParamsXVibranceRequest.
+const (
+	LogoutParamsXVibranceRequestN1 LogoutParamsXVibranceRequest = "1"
+)
+
+// Valid indicates whether the value is a known member of the LogoutParamsXVibranceRequest enum.
+func (e LogoutParamsXVibranceRequest) Valid() bool {
+	switch e {
+	case LogoutParamsXVibranceRequestN1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreateTokenParamsXVibranceRequest.
+const (
+	CreateTokenParamsXVibranceRequestN1 CreateTokenParamsXVibranceRequest = "1"
+)
+
+// Valid indicates whether the value is a known member of the CreateTokenParamsXVibranceRequest enum.
+func (e CreateTokenParamsXVibranceRequest) Valid() bool {
+	switch e {
+	case CreateTokenParamsXVibranceRequestN1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RemoveFavoriteTrackParamsXVibranceRequest.
+const (
+	RemoveFavoriteTrackParamsXVibranceRequestN1 RemoveFavoriteTrackParamsXVibranceRequest = "1"
+)
+
+// Valid indicates whether the value is a known member of the RemoveFavoriteTrackParamsXVibranceRequest enum.
+func (e RemoveFavoriteTrackParamsXVibranceRequest) Valid() bool {
+	switch e {
+	case RemoveFavoriteTrackParamsXVibranceRequestN1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AddFavoriteTrackParamsXVibranceRequest.
+const (
+	AddFavoriteTrackParamsXVibranceRequestN1 AddFavoriteTrackParamsXVibranceRequest = "1"
+)
+
+// Valid indicates whether the value is a known member of the AddFavoriteTrackParamsXVibranceRequest enum.
+func (e AddFavoriteTrackParamsXVibranceRequest) Valid() bool {
+	switch e {
+	case AddFavoriteTrackParamsXVibranceRequestN1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ChangePasswordParamsXVibranceRequest.
+const (
+	ChangePasswordParamsXVibranceRequestN1 ChangePasswordParamsXVibranceRequest = "1"
+)
+
+// Valid indicates whether the value is a known member of the ChangePasswordParamsXVibranceRequest enum.
+func (e ChangePasswordParamsXVibranceRequest) Valid() bool {
+	switch e {
+	case ChangePasswordParamsXVibranceRequestN1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RevokeSessionParamsXVibranceRequest.
+const (
+	RevokeSessionParamsXVibranceRequestN1 RevokeSessionParamsXVibranceRequest = "1"
+)
+
+// Valid indicates whether the value is a known member of the RevokeSessionParamsXVibranceRequest enum.
+func (e RevokeSessionParamsXVibranceRequest) Valid() bool {
+	switch e {
+	case RevokeSessionParamsXVibranceRequestN1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreatePlaylistParamsXVibranceRequest.
+const (
+	CreatePlaylistParamsXVibranceRequestN1 CreatePlaylistParamsXVibranceRequest = "1"
+)
+
+// Valid indicates whether the value is a known member of the CreatePlaylistParamsXVibranceRequest enum.
+func (e CreatePlaylistParamsXVibranceRequest) Valid() bool {
+	switch e {
+	case CreatePlaylistParamsXVibranceRequestN1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for DeletePlaylistParamsXVibranceRequest.
+const (
+	DeletePlaylistParamsXVibranceRequestN1 DeletePlaylistParamsXVibranceRequest = "1"
+)
+
+// Valid indicates whether the value is a known member of the DeletePlaylistParamsXVibranceRequest enum.
+func (e DeletePlaylistParamsXVibranceRequest) Valid() bool {
+	switch e {
+	case DeletePlaylistParamsXVibranceRequestN1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UpdatePlaylistParamsXVibranceRequest.
+const (
+	UpdatePlaylistParamsXVibranceRequestN1 UpdatePlaylistParamsXVibranceRequest = "1"
+)
+
+// Valid indicates whether the value is a known member of the UpdatePlaylistParamsXVibranceRequest enum.
+func (e UpdatePlaylistParamsXVibranceRequest) Valid() bool {
+	switch e {
+	case UpdatePlaylistParamsXVibranceRequestN1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for AddPlaylistItemsParamsXVibranceRequest.
+const (
+	AddPlaylistItemsParamsXVibranceRequestN1 AddPlaylistItemsParamsXVibranceRequest = "1"
+)
+
+// Valid indicates whether the value is a known member of the AddPlaylistItemsParamsXVibranceRequest enum.
+func (e AddPlaylistItemsParamsXVibranceRequest) Valid() bool {
+	switch e {
+	case AddPlaylistItemsParamsXVibranceRequestN1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RemovePlaylistItemParamsXVibranceRequest.
+const (
+	RemovePlaylistItemParamsXVibranceRequestN1 RemovePlaylistItemParamsXVibranceRequest = "1"
+)
+
+// Valid indicates whether the value is a known member of the RemovePlaylistItemParamsXVibranceRequest enum.
+func (e RemovePlaylistItemParamsXVibranceRequest) Valid() bool {
+	switch e {
+	case RemovePlaylistItemParamsXVibranceRequestN1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for MovePlaylistItemParamsXVibranceRequest.
+const (
+	MovePlaylistItemParamsXVibranceRequestN1 MovePlaylistItemParamsXVibranceRequest = "1"
+)
+
+// Valid indicates whether the value is a known member of the MovePlaylistItemParamsXVibranceRequest enum.
+func (e MovePlaylistItemParamsXVibranceRequest) Valid() bool {
+	switch e {
+	case MovePlaylistItemParamsXVibranceRequestN1:
 		return true
 	default:
 		return false
@@ -1206,6 +1491,9 @@ type PathId = openapi_types.UUID
 // PathItemId defines model for PathItemId.
 type PathItemId = openapi_types.UUID
 
+// XVibranceRequest defines model for XVibranceRequest.
+type XVibranceRequest string
+
 // BadRequest Every error of the API. `code` is stable and is what a client tests.
 // `message` is a sentence for people, in English, and may change.
 // `details` is an object, empty unless the operation says what it
@@ -1332,6 +1620,66 @@ type UnavailableOrChanging = Error
 // Example: {"code":"track_unavailable","details":{},"message":"The track is not available."}
 type Unprocessable = Error
 
+// ScanLibraryParams defines parameters for ScanLibrary.
+type ScanLibraryParams struct {
+	// XVibranceRequest Always `1`. Every request other than GET and HEAD carries it, once:
+	// a page of another site cannot send it. Without it, or with another
+	// value, the answer is `403 request_header_required`, before the session,
+	// the other parameters and the body are looked at; it is never a `400`.
+	XVibranceRequest ScanLibraryParamsXVibranceRequest `json:"X-Vibrance-Request"`
+}
+
+// ScanLibraryParamsXVibranceRequest defines parameters for ScanLibrary.
+type ScanLibraryParamsXVibranceRequest string
+
+// CreateUserParams defines parameters for CreateUser.
+type CreateUserParams struct {
+	// XVibranceRequest Always `1`. Every request other than GET and HEAD carries it, once:
+	// a page of another site cannot send it. Without it, or with another
+	// value, the answer is `403 request_header_required`, before the session,
+	// the other parameters and the body are looked at; it is never a `400`.
+	XVibranceRequest CreateUserParamsXVibranceRequest `json:"X-Vibrance-Request"`
+}
+
+// CreateUserParamsXVibranceRequest defines parameters for CreateUser.
+type CreateUserParamsXVibranceRequest string
+
+// DeleteUserParams defines parameters for DeleteUser.
+type DeleteUserParams struct {
+	// XVibranceRequest Always `1`. Every request other than GET and HEAD carries it, once:
+	// a page of another site cannot send it. Without it, or with another
+	// value, the answer is `403 request_header_required`, before the session,
+	// the other parameters and the body are looked at; it is never a `400`.
+	XVibranceRequest DeleteUserParamsXVibranceRequest `json:"X-Vibrance-Request"`
+}
+
+// DeleteUserParamsXVibranceRequest defines parameters for DeleteUser.
+type DeleteUserParamsXVibranceRequest string
+
+// UpdateUserParams defines parameters for UpdateUser.
+type UpdateUserParams struct {
+	// XVibranceRequest Always `1`. Every request other than GET and HEAD carries it, once:
+	// a page of another site cannot send it. Without it, or with another
+	// value, the answer is `403 request_header_required`, before the session,
+	// the other parameters and the body are looked at; it is never a `400`.
+	XVibranceRequest UpdateUserParamsXVibranceRequest `json:"X-Vibrance-Request"`
+}
+
+// UpdateUserParamsXVibranceRequest defines parameters for UpdateUser.
+type UpdateUserParamsXVibranceRequest string
+
+// ResetUserPasswordParams defines parameters for ResetUserPassword.
+type ResetUserPasswordParams struct {
+	// XVibranceRequest Always `1`. Every request other than GET and HEAD carries it, once:
+	// a page of another site cannot send it. Without it, or with another
+	// value, the answer is `403 request_header_required`, before the session,
+	// the other parameters and the body are looked at; it is never a `400`.
+	XVibranceRequest ResetUserPasswordParamsXVibranceRequest `json:"X-Vibrance-Request"`
+}
+
+// ResetUserPasswordParamsXVibranceRequest defines parameters for ResetUserPassword.
+type ResetUserPasswordParamsXVibranceRequest string
+
 // ListAlbumsParams defines parameters for ListAlbums.
 type ListAlbumsParams struct {
 	// Sort The order of the list.
@@ -1384,6 +1732,42 @@ type ListArtistsParams struct {
 	After *After `form:"after,omitempty" json:"after,omitempty"`
 }
 
+// LoginParams defines parameters for Login.
+type LoginParams struct {
+	// XVibranceRequest Always `1`. Every request other than GET and HEAD carries it, once:
+	// a page of another site cannot send it. Without it, or with another
+	// value, the answer is `403 request_header_required`, before the session,
+	// the other parameters and the body are looked at; it is never a `400`.
+	XVibranceRequest LoginParamsXVibranceRequest `json:"X-Vibrance-Request"`
+}
+
+// LoginParamsXVibranceRequest defines parameters for Login.
+type LoginParamsXVibranceRequest string
+
+// LogoutParams defines parameters for Logout.
+type LogoutParams struct {
+	// XVibranceRequest Always `1`. Every request other than GET and HEAD carries it, once:
+	// a page of another site cannot send it. Without it, or with another
+	// value, the answer is `403 request_header_required`, before the session,
+	// the other parameters and the body are looked at; it is never a `400`.
+	XVibranceRequest LogoutParamsXVibranceRequest `json:"X-Vibrance-Request"`
+}
+
+// LogoutParamsXVibranceRequest defines parameters for Logout.
+type LogoutParamsXVibranceRequest string
+
+// CreateTokenParams defines parameters for CreateToken.
+type CreateTokenParams struct {
+	// XVibranceRequest Always `1`. Every request other than GET and HEAD carries it, once:
+	// a page of another site cannot send it. Without it, or with another
+	// value, the answer is `403 request_header_required`, before the session,
+	// the other parameters and the body are looked at; it is never a `400`.
+	XVibranceRequest CreateTokenParamsXVibranceRequest `json:"X-Vibrance-Request"`
+}
+
+// CreateTokenParamsXVibranceRequest defines parameters for CreateToken.
+type CreateTokenParamsXVibranceRequest string
+
 // ListFavoriteTracksParams defines parameters for ListFavoriteTracks.
 type ListFavoriteTracksParams struct {
 	// Limit The most rows in a page.
@@ -1395,8 +1779,74 @@ type ListFavoriteTracksParams struct {
 	After *After `form:"after,omitempty" json:"after,omitempty"`
 }
 
+// RemoveFavoriteTrackParams defines parameters for RemoveFavoriteTrack.
+type RemoveFavoriteTrackParams struct {
+	// XVibranceRequest Always `1`. Every request other than GET and HEAD carries it, once:
+	// a page of another site cannot send it. Without it, or with another
+	// value, the answer is `403 request_header_required`, before the session,
+	// the other parameters and the body are looked at; it is never a `400`.
+	XVibranceRequest RemoveFavoriteTrackParamsXVibranceRequest `json:"X-Vibrance-Request"`
+}
+
+// RemoveFavoriteTrackParamsXVibranceRequest defines parameters for RemoveFavoriteTrack.
+type RemoveFavoriteTrackParamsXVibranceRequest string
+
+// AddFavoriteTrackParams defines parameters for AddFavoriteTrack.
+type AddFavoriteTrackParams struct {
+	// XVibranceRequest Always `1`. Every request other than GET and HEAD carries it, once:
+	// a page of another site cannot send it. Without it, or with another
+	// value, the answer is `403 request_header_required`, before the session,
+	// the other parameters and the body are looked at; it is never a `400`.
+	XVibranceRequest AddFavoriteTrackParamsXVibranceRequest `json:"X-Vibrance-Request"`
+}
+
+// AddFavoriteTrackParamsXVibranceRequest defines parameters for AddFavoriteTrack.
+type AddFavoriteTrackParamsXVibranceRequest string
+
+// ChangePasswordParams defines parameters for ChangePassword.
+type ChangePasswordParams struct {
+	// XVibranceRequest Always `1`. Every request other than GET and HEAD carries it, once:
+	// a page of another site cannot send it. Without it, or with another
+	// value, the answer is `403 request_header_required`, before the session,
+	// the other parameters and the body are looked at; it is never a `400`.
+	XVibranceRequest ChangePasswordParamsXVibranceRequest `json:"X-Vibrance-Request"`
+}
+
+// ChangePasswordParamsXVibranceRequest defines parameters for ChangePassword.
+type ChangePasswordParamsXVibranceRequest string
+
+// RevokeSessionParams defines parameters for RevokeSession.
+type RevokeSessionParams struct {
+	// XVibranceRequest Always `1`. Every request other than GET and HEAD carries it, once:
+	// a page of another site cannot send it. Without it, or with another
+	// value, the answer is `403 request_header_required`, before the session,
+	// the other parameters and the body are looked at; it is never a `400`.
+	XVibranceRequest RevokeSessionParamsXVibranceRequest `json:"X-Vibrance-Request"`
+}
+
+// RevokeSessionParamsXVibranceRequest defines parameters for RevokeSession.
+type RevokeSessionParamsXVibranceRequest string
+
+// CreatePlaylistParams defines parameters for CreatePlaylist.
+type CreatePlaylistParams struct {
+	// XVibranceRequest Always `1`. Every request other than GET and HEAD carries it, once:
+	// a page of another site cannot send it. Without it, or with another
+	// value, the answer is `403 request_header_required`, before the session,
+	// the other parameters and the body are looked at; it is never a `400`.
+	XVibranceRequest CreatePlaylistParamsXVibranceRequest `json:"X-Vibrance-Request"`
+}
+
+// CreatePlaylistParamsXVibranceRequest defines parameters for CreatePlaylist.
+type CreatePlaylistParamsXVibranceRequest string
+
 // DeletePlaylistParams defines parameters for DeletePlaylist.
 type DeletePlaylistParams struct {
+	// XVibranceRequest Always `1`. Every request other than GET and HEAD carries it, once:
+	// a page of another site cannot send it. Without it, or with another
+	// value, the answer is `403 request_header_required`, before the session,
+	// the other parameters and the body are looked at; it is never a `400`.
+	XVibranceRequest DeletePlaylistParamsXVibranceRequest `json:"X-Vibrance-Request"`
+
 	// IfMatch The `etag` of the playlist the change was prepared on,
 	// `"playlist:<id>:<revision>"` with its quotes. The change is made only
 	// if the playlist is still at that revision (`412 precondition_failed`
@@ -1405,8 +1855,17 @@ type DeletePlaylistParams struct {
 	IfMatch *IfMatch `json:"If-Match,omitempty"`
 }
 
+// DeletePlaylistParamsXVibranceRequest defines parameters for DeletePlaylist.
+type DeletePlaylistParamsXVibranceRequest string
+
 // UpdatePlaylistParams defines parameters for UpdatePlaylist.
 type UpdatePlaylistParams struct {
+	// XVibranceRequest Always `1`. Every request other than GET and HEAD carries it, once:
+	// a page of another site cannot send it. Without it, or with another
+	// value, the answer is `403 request_header_required`, before the session,
+	// the other parameters and the body are looked at; it is never a `400`.
+	XVibranceRequest UpdatePlaylistParamsXVibranceRequest `json:"X-Vibrance-Request"`
+
 	// IfMatch The `etag` of the playlist the change was prepared on,
 	// `"playlist:<id>:<revision>"` with its quotes. The change is made only
 	// if the playlist is still at that revision (`412 precondition_failed`
@@ -1414,6 +1873,9 @@ type UpdatePlaylistParams struct {
 	// (`428 precondition_required` without it) or optional.
 	IfMatch *IfMatch `json:"If-Match,omitempty"`
 }
+
+// UpdatePlaylistParamsXVibranceRequest defines parameters for UpdatePlaylist.
+type UpdatePlaylistParamsXVibranceRequest string
 
 // ListPlaylistItemsParams defines parameters for ListPlaylistItems.
 type ListPlaylistItemsParams struct {
@@ -1428,6 +1890,12 @@ type ListPlaylistItemsParams struct {
 
 // AddPlaylistItemsParams defines parameters for AddPlaylistItems.
 type AddPlaylistItemsParams struct {
+	// XVibranceRequest Always `1`. Every request other than GET and HEAD carries it, once:
+	// a page of another site cannot send it. Without it, or with another
+	// value, the answer is `403 request_header_required`, before the session,
+	// the other parameters and the body are looked at; it is never a `400`.
+	XVibranceRequest AddPlaylistItemsParamsXVibranceRequest `json:"X-Vibrance-Request"`
+
 	// IfMatch The `etag` of the playlist the change was prepared on,
 	// `"playlist:<id>:<revision>"` with its quotes. The change is made only
 	// if the playlist is still at that revision (`412 precondition_failed`
@@ -1435,9 +1903,18 @@ type AddPlaylistItemsParams struct {
 	// (`428 precondition_required` without it) or optional.
 	IfMatch *IfMatch `json:"If-Match,omitempty"`
 }
+
+// AddPlaylistItemsParamsXVibranceRequest defines parameters for AddPlaylistItems.
+type AddPlaylistItemsParamsXVibranceRequest string
 
 // RemovePlaylistItemParams defines parameters for RemovePlaylistItem.
 type RemovePlaylistItemParams struct {
+	// XVibranceRequest Always `1`. Every request other than GET and HEAD carries it, once:
+	// a page of another site cannot send it. Without it, or with another
+	// value, the answer is `403 request_header_required`, before the session,
+	// the other parameters and the body are looked at; it is never a `400`.
+	XVibranceRequest RemovePlaylistItemParamsXVibranceRequest `json:"X-Vibrance-Request"`
+
 	// IfMatch The `etag` of the playlist the change was prepared on,
 	// `"playlist:<id>:<revision>"` with its quotes. The change is made only
 	// if the playlist is still at that revision (`412 precondition_failed`
@@ -1446,8 +1923,17 @@ type RemovePlaylistItemParams struct {
 	IfMatch *IfMatch `json:"If-Match,omitempty"`
 }
 
+// RemovePlaylistItemParamsXVibranceRequest defines parameters for RemovePlaylistItem.
+type RemovePlaylistItemParamsXVibranceRequest string
+
 // MovePlaylistItemParams defines parameters for MovePlaylistItem.
 type MovePlaylistItemParams struct {
+	// XVibranceRequest Always `1`. Every request other than GET and HEAD carries it, once:
+	// a page of another site cannot send it. Without it, or with another
+	// value, the answer is `403 request_header_required`, before the session,
+	// the other parameters and the body are looked at; it is never a `400`.
+	XVibranceRequest MovePlaylistItemParamsXVibranceRequest `json:"X-Vibrance-Request"`
+
 	// IfMatch The `etag` of the playlist the change was prepared on,
 	// `"playlist:<id>:<revision>"` with its quotes. The change is made only
 	// if the playlist is still at that revision (`412 precondition_failed`
@@ -1455,6 +1941,9 @@ type MovePlaylistItemParams struct {
 	// (`428 precondition_required` without it) or optional.
 	IfMatch *IfMatch `json:"If-Match,omitempty"`
 }
+
+// MovePlaylistItemParamsXVibranceRequest defines parameters for MovePlaylistItem.
+type MovePlaylistItemParamsXVibranceRequest string
 
 // SearchParams defines parameters for Search.
 type SearchParams struct {
@@ -1525,25 +2014,25 @@ type ServerInterface interface {
 	GetLibraryStatus(w http.ResponseWriter, r *http.Request)
 	// ScanLibrary Ask for a scan of the library
 	// (POST /admin/library/scan)
-	ScanLibrary(w http.ResponseWriter, r *http.Request)
+	ScanLibrary(w http.ResponseWriter, r *http.Request, params ScanLibraryParams)
 	// ListUsers Every account
 	// (GET /admin/users)
 	ListUsers(w http.ResponseWriter, r *http.Request)
 	// CreateUser Create an account
 	// (POST /admin/users)
-	CreateUser(w http.ResponseWriter, r *http.Request)
+	CreateUser(w http.ResponseWriter, r *http.Request, params CreateUserParams)
 	// DeleteUser Delete an account
 	// (DELETE /admin/users/{id})
-	DeleteUser(w http.ResponseWriter, r *http.Request, id PathId)
+	DeleteUser(w http.ResponseWriter, r *http.Request, id PathId, params DeleteUserParams)
 	// GetUser One account
 	// (GET /admin/users/{id})
 	GetUser(w http.ResponseWriter, r *http.Request, id PathId)
 	// UpdateUser Change the role of an account, or disable it
 	// (PUT /admin/users/{id})
-	UpdateUser(w http.ResponseWriter, r *http.Request, id PathId)
+	UpdateUser(w http.ResponseWriter, r *http.Request, id PathId, params UpdateUserParams)
 	// ResetUserPassword Set the password of an account
 	// (PUT /admin/users/{id}/password)
-	ResetUserPassword(w http.ResponseWriter, r *http.Request, id PathId)
+	ResetUserPassword(w http.ResponseWriter, r *http.Request, id PathId, params ResetUserPasswordParams)
 	// ListAlbums The albums, in a chosen order
 	// (GET /albums)
 	ListAlbums(w http.ResponseWriter, r *http.Request, params ListAlbumsParams)
@@ -1561,13 +2050,13 @@ type ServerInterface interface {
 	GetArtist(w http.ResponseWriter, r *http.Request, id PathId)
 	// Login Sign in with a cookie
 	// (POST /auth/login)
-	Login(w http.ResponseWriter, r *http.Request)
+	Login(w http.ResponseWriter, r *http.Request, params LoginParams)
 	// Logout Sign out
 	// (POST /auth/logout)
-	Logout(w http.ResponseWriter, r *http.Request)
+	Logout(w http.ResponseWriter, r *http.Request, params LogoutParams)
 	// CreateToken Sign in with a token
 	// (POST /auth/tokens)
-	CreateToken(w http.ResponseWriter, r *http.Request)
+	CreateToken(w http.ResponseWriter, r *http.Request, params CreateTokenParams)
 	// GetMe The user of the request
 	// (GET /me)
 	GetMe(w http.ResponseWriter, r *http.Request)
@@ -1576,25 +2065,25 @@ type ServerInterface interface {
 	ListFavoriteTracks(w http.ResponseWriter, r *http.Request, params ListFavoriteTracksParams)
 	// RemoveFavoriteTrack Make a track no longer a favorite
 	// (DELETE /me/favorites/tracks/{id})
-	RemoveFavoriteTrack(w http.ResponseWriter, r *http.Request, id PathId)
+	RemoveFavoriteTrack(w http.ResponseWriter, r *http.Request, id PathId, params RemoveFavoriteTrackParams)
 	// AddFavoriteTrack Make a track a favorite
 	// (PUT /me/favorites/tracks/{id})
-	AddFavoriteTrack(w http.ResponseWriter, r *http.Request, id PathId)
+	AddFavoriteTrack(w http.ResponseWriter, r *http.Request, id PathId, params AddFavoriteTrackParams)
 	// ChangePassword Change the password
 	// (PUT /me/password)
-	ChangePassword(w http.ResponseWriter, r *http.Request)
+	ChangePassword(w http.ResponseWriter, r *http.Request, params ChangePasswordParams)
 	// ListSessions The live sessions of the user
 	// (GET /me/sessions)
 	ListSessions(w http.ResponseWriter, r *http.Request)
 	// RevokeSession Revoke a session
 	// (DELETE /me/sessions/{id})
-	RevokeSession(w http.ResponseWriter, r *http.Request, id PathId)
+	RevokeSession(w http.ResponseWriter, r *http.Request, id PathId, params RevokeSessionParams)
 	// ListPlaylists The playlists of the user
 	// (GET /playlists)
 	ListPlaylists(w http.ResponseWriter, r *http.Request)
 	// CreatePlaylist Create a playlist
 	// (POST /playlists)
-	CreatePlaylist(w http.ResponseWriter, r *http.Request)
+	CreatePlaylist(w http.ResponseWriter, r *http.Request, params CreatePlaylistParams)
 	// DeletePlaylist Delete a playlist
 	// (DELETE /playlists/{id})
 	DeletePlaylist(w http.ResponseWriter, r *http.Request, id PathId, params DeletePlaylistParams)
@@ -1659,8 +2148,39 @@ func (siw *ServerInterfaceWrapper) GetLibraryStatus(w http.ResponseWriter, r *ht
 // ScanLibrary operation middleware
 func (siw *ServerInterfaceWrapper) ScanLibrary(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ScanLibraryParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Vibrance-Request" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Vibrance-Request")]; found {
+		var XVibranceRequest ScanLibraryParamsXVibranceRequest
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Vibrance-Request", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Vibrance-Request", valueList[0], &XVibranceRequest, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Vibrance-Request", Err: err})
+			return
+		}
+
+		params.XVibranceRequest = XVibranceRequest
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Vibrance-Request is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Vibrance-Request", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ScanLibrary(w, r)
+		siw.Handler.ScanLibrary(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1687,8 +2207,39 @@ func (siw *ServerInterfaceWrapper) ListUsers(w http.ResponseWriter, r *http.Requ
 // CreateUser operation middleware
 func (siw *ServerInterfaceWrapper) CreateUser(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateUserParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Vibrance-Request" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Vibrance-Request")]; found {
+		var XVibranceRequest CreateUserParamsXVibranceRequest
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Vibrance-Request", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Vibrance-Request", valueList[0], &XVibranceRequest, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Vibrance-Request", Err: err})
+			return
+		}
+
+		params.XVibranceRequest = XVibranceRequest
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Vibrance-Request is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Vibrance-Request", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateUser(w, r)
+		siw.Handler.CreateUser(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1713,8 +2264,36 @@ func (siw *ServerInterfaceWrapper) DeleteUser(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteUserParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Vibrance-Request" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Vibrance-Request")]; found {
+		var XVibranceRequest DeleteUserParamsXVibranceRequest
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Vibrance-Request", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Vibrance-Request", valueList[0], &XVibranceRequest, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Vibrance-Request", Err: err})
+			return
+		}
+
+		params.XVibranceRequest = XVibranceRequest
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Vibrance-Request is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Vibrance-Request", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeleteUser(w, r, id)
+		siw.Handler.DeleteUser(w, r, id, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1765,8 +2344,36 @@ func (siw *ServerInterfaceWrapper) UpdateUser(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateUserParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Vibrance-Request" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Vibrance-Request")]; found {
+		var XVibranceRequest UpdateUserParamsXVibranceRequest
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Vibrance-Request", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Vibrance-Request", valueList[0], &XVibranceRequest, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Vibrance-Request", Err: err})
+			return
+		}
+
+		params.XVibranceRequest = XVibranceRequest
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Vibrance-Request is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Vibrance-Request", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.UpdateUser(w, r, id)
+		siw.Handler.UpdateUser(w, r, id, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1791,8 +2398,36 @@ func (siw *ServerInterfaceWrapper) ResetUserPassword(w http.ResponseWriter, r *h
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ResetUserPasswordParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Vibrance-Request" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Vibrance-Request")]; found {
+		var XVibranceRequest ResetUserPasswordParamsXVibranceRequest
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Vibrance-Request", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Vibrance-Request", valueList[0], &XVibranceRequest, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Vibrance-Request", Err: err})
+			return
+		}
+
+		params.XVibranceRequest = XVibranceRequest
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Vibrance-Request is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Vibrance-Request", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ResetUserPassword(w, r, id)
+		siw.Handler.ResetUserPassword(w, r, id, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2064,8 +2699,39 @@ func (siw *ServerInterfaceWrapper) GetArtist(w http.ResponseWriter, r *http.Requ
 // Login operation middleware
 func (siw *ServerInterfaceWrapper) Login(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params LoginParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Vibrance-Request" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Vibrance-Request")]; found {
+		var XVibranceRequest LoginParamsXVibranceRequest
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Vibrance-Request", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Vibrance-Request", valueList[0], &XVibranceRequest, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Vibrance-Request", Err: err})
+			return
+		}
+
+		params.XVibranceRequest = XVibranceRequest
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Vibrance-Request is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Vibrance-Request", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.Login(w, r)
+		siw.Handler.Login(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2078,8 +2744,39 @@ func (siw *ServerInterfaceWrapper) Login(w http.ResponseWriter, r *http.Request)
 // Logout operation middleware
 func (siw *ServerInterfaceWrapper) Logout(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params LogoutParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Vibrance-Request" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Vibrance-Request")]; found {
+		var XVibranceRequest LogoutParamsXVibranceRequest
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Vibrance-Request", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Vibrance-Request", valueList[0], &XVibranceRequest, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Vibrance-Request", Err: err})
+			return
+		}
+
+		params.XVibranceRequest = XVibranceRequest
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Vibrance-Request is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Vibrance-Request", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.Logout(w, r)
+		siw.Handler.Logout(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2092,8 +2789,39 @@ func (siw *ServerInterfaceWrapper) Logout(w http.ResponseWriter, r *http.Request
 // CreateToken operation middleware
 func (siw *ServerInterfaceWrapper) CreateToken(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreateTokenParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Vibrance-Request" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Vibrance-Request")]; found {
+		var XVibranceRequest CreateTokenParamsXVibranceRequest
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Vibrance-Request", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Vibrance-Request", valueList[0], &XVibranceRequest, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Vibrance-Request", Err: err})
+			return
+		}
+
+		params.XVibranceRequest = XVibranceRequest
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Vibrance-Request is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Vibrance-Request", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateToken(w, r)
+		siw.Handler.CreateToken(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2178,8 +2906,36 @@ func (siw *ServerInterfaceWrapper) RemoveFavoriteTrack(w http.ResponseWriter, r 
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RemoveFavoriteTrackParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Vibrance-Request" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Vibrance-Request")]; found {
+		var XVibranceRequest RemoveFavoriteTrackParamsXVibranceRequest
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Vibrance-Request", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Vibrance-Request", valueList[0], &XVibranceRequest, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Vibrance-Request", Err: err})
+			return
+		}
+
+		params.XVibranceRequest = XVibranceRequest
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Vibrance-Request is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Vibrance-Request", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.RemoveFavoriteTrack(w, r, id)
+		siw.Handler.RemoveFavoriteTrack(w, r, id, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2204,8 +2960,36 @@ func (siw *ServerInterfaceWrapper) AddFavoriteTrack(w http.ResponseWriter, r *ht
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params AddFavoriteTrackParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Vibrance-Request" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Vibrance-Request")]; found {
+		var XVibranceRequest AddFavoriteTrackParamsXVibranceRequest
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Vibrance-Request", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Vibrance-Request", valueList[0], &XVibranceRequest, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Vibrance-Request", Err: err})
+			return
+		}
+
+		params.XVibranceRequest = XVibranceRequest
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Vibrance-Request is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Vibrance-Request", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.AddFavoriteTrack(w, r, id)
+		siw.Handler.AddFavoriteTrack(w, r, id, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2218,8 +3002,39 @@ func (siw *ServerInterfaceWrapper) AddFavoriteTrack(w http.ResponseWriter, r *ht
 // ChangePassword operation middleware
 func (siw *ServerInterfaceWrapper) ChangePassword(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ChangePasswordParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Vibrance-Request" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Vibrance-Request")]; found {
+		var XVibranceRequest ChangePasswordParamsXVibranceRequest
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Vibrance-Request", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Vibrance-Request", valueList[0], &XVibranceRequest, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Vibrance-Request", Err: err})
+			return
+		}
+
+		params.XVibranceRequest = XVibranceRequest
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Vibrance-Request is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Vibrance-Request", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ChangePassword(w, r)
+		siw.Handler.ChangePassword(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2258,8 +3073,36 @@ func (siw *ServerInterfaceWrapper) RevokeSession(w http.ResponseWriter, r *http.
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RevokeSessionParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Vibrance-Request" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Vibrance-Request")]; found {
+		var XVibranceRequest RevokeSessionParamsXVibranceRequest
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Vibrance-Request", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Vibrance-Request", valueList[0], &XVibranceRequest, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Vibrance-Request", Err: err})
+			return
+		}
+
+		params.XVibranceRequest = XVibranceRequest
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Vibrance-Request is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Vibrance-Request", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.RevokeSession(w, r, id)
+		siw.Handler.RevokeSession(w, r, id, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2286,8 +3129,39 @@ func (siw *ServerInterfaceWrapper) ListPlaylists(w http.ResponseWriter, r *http.
 // CreatePlaylist operation middleware
 func (siw *ServerInterfaceWrapper) CreatePlaylist(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreatePlaylistParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Vibrance-Request" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Vibrance-Request")]; found {
+		var XVibranceRequest CreatePlaylistParamsXVibranceRequest
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Vibrance-Request", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Vibrance-Request", valueList[0], &XVibranceRequest, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Vibrance-Request", Err: err})
+			return
+		}
+
+		params.XVibranceRequest = XVibranceRequest
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Vibrance-Request is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Vibrance-Request", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreatePlaylist(w, r)
+		siw.Handler.CreatePlaylist(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2316,6 +3190,29 @@ func (siw *ServerInterfaceWrapper) DeletePlaylist(w http.ResponseWriter, r *http
 	var params DeletePlaylistParams
 
 	headers := r.Header
+
+	// ------------- Required header parameter "X-Vibrance-Request" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Vibrance-Request")]; found {
+		var XVibranceRequest DeletePlaylistParamsXVibranceRequest
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Vibrance-Request", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Vibrance-Request", valueList[0], &XVibranceRequest, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Vibrance-Request", Err: err})
+			return
+		}
+
+		params.XVibranceRequest = XVibranceRequest
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Vibrance-Request is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Vibrance-Request", Err: err})
+		return
+	}
 
 	// ------------- Optional header parameter "If-Match" -------------
 	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
@@ -2392,6 +3289,29 @@ func (siw *ServerInterfaceWrapper) UpdatePlaylist(w http.ResponseWriter, r *http
 	var params UpdatePlaylistParams
 
 	headers := r.Header
+
+	// ------------- Required header parameter "X-Vibrance-Request" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Vibrance-Request")]; found {
+		var XVibranceRequest UpdatePlaylistParamsXVibranceRequest
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Vibrance-Request", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Vibrance-Request", valueList[0], &XVibranceRequest, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Vibrance-Request", Err: err})
+			return
+		}
+
+		params.XVibranceRequest = XVibranceRequest
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Vibrance-Request is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Vibrance-Request", Err: err})
+		return
+	}
 
 	// ------------- Optional header parameter "If-Match" -------------
 	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
@@ -2498,6 +3418,29 @@ func (siw *ServerInterfaceWrapper) AddPlaylistItems(w http.ResponseWriter, r *ht
 
 	headers := r.Header
 
+	// ------------- Required header parameter "X-Vibrance-Request" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Vibrance-Request")]; found {
+		var XVibranceRequest AddPlaylistItemsParamsXVibranceRequest
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Vibrance-Request", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Vibrance-Request", valueList[0], &XVibranceRequest, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Vibrance-Request", Err: err})
+			return
+		}
+
+		params.XVibranceRequest = XVibranceRequest
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Vibrance-Request is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Vibrance-Request", Err: err})
+		return
+	}
+
 	// ------------- Optional header parameter "If-Match" -------------
 	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
 		var IfMatch IfMatch
@@ -2557,6 +3500,29 @@ func (siw *ServerInterfaceWrapper) RemovePlaylistItem(w http.ResponseWriter, r *
 
 	headers := r.Header
 
+	// ------------- Required header parameter "X-Vibrance-Request" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Vibrance-Request")]; found {
+		var XVibranceRequest RemovePlaylistItemParamsXVibranceRequest
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Vibrance-Request", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Vibrance-Request", valueList[0], &XVibranceRequest, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Vibrance-Request", Err: err})
+			return
+		}
+
+		params.XVibranceRequest = XVibranceRequest
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Vibrance-Request is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Vibrance-Request", Err: err})
+		return
+	}
+
 	// ------------- Optional header parameter "If-Match" -------------
 	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
 		var IfMatch IfMatch
@@ -2615,6 +3581,29 @@ func (siw *ServerInterfaceWrapper) MovePlaylistItem(w http.ResponseWriter, r *ht
 	var params MovePlaylistItemParams
 
 	headers := r.Header
+
+	// ------------- Required header parameter "X-Vibrance-Request" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Vibrance-Request")]; found {
+		var XVibranceRequest MovePlaylistItemParamsXVibranceRequest
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Vibrance-Request", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Vibrance-Request", valueList[0], &XVibranceRequest, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Vibrance-Request", Err: err})
+			return
+		}
+
+		params.XVibranceRequest = XVibranceRequest
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Vibrance-Request is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Vibrance-Request", Err: err})
+		return
+	}
 
 	// ------------- Optional header parameter "If-Match" -------------
 	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
@@ -3273,6 +4262,7 @@ func (response GetLibraryStatus503JSONResponse) VisitGetLibraryStatusResponse(w 
 }
 
 type ScanLibraryRequestObject struct {
+	Params ScanLibraryParams
 }
 
 type ScanLibraryResponseObject interface {
@@ -3481,7 +4471,8 @@ func (response ListUsers503JSONResponse) VisitListUsersResponse(w http.ResponseW
 }
 
 type CreateUserRequestObject struct {
-	Body *CreateUserJSONRequestBody
+	Params CreateUserParams
+	Body   *CreateUserJSONRequestBody
 }
 
 type CreateUserResponseObject interface {
@@ -3646,7 +4637,8 @@ func (response CreateUser503JSONResponse) VisitCreateUserResponse(w http.Respons
 }
 
 type DeleteUserRequestObject struct {
-	Id PathId `json:"id"`
+	Id     PathId `json:"id"`
+	Params DeleteUserParams
 }
 
 type DeleteUserResponseObject interface {
@@ -3923,8 +4915,9 @@ func (response GetUser503JSONResponse) VisitGetUserResponse(w http.ResponseWrite
 }
 
 type UpdateUserRequestObject struct {
-	Id   PathId `json:"id"`
-	Body *UpdateUserJSONRequestBody
+	Id     PathId `json:"id"`
+	Params UpdateUserParams
+	Body   *UpdateUserJSONRequestBody
 }
 
 type UpdateUserResponseObject interface {
@@ -4089,8 +5082,9 @@ func (response UpdateUser503JSONResponse) VisitUpdateUserResponse(w http.Respons
 }
 
 type ResetUserPasswordRequestObject struct {
-	Id   PathId `json:"id"`
-	Body *ResetUserPasswordJSONRequestBody
+	Id     PathId `json:"id"`
+	Params ResetUserPasswordParams
+	Body   *ResetUserPasswordJSONRequestBody
 }
 
 type ResetUserPasswordResponseObject interface {
@@ -5046,7 +6040,8 @@ func (response GetArtist503JSONResponse) VisitGetArtistResponse(w http.ResponseW
 }
 
 type LoginRequestObject struct {
-	Body *LoginJSONRequestBody
+	Params LoginParams
+	Body   *LoginJSONRequestBody
 }
 
 type LoginResponseObject interface {
@@ -5183,6 +6178,7 @@ func (response Login503JSONResponse) VisitLoginResponse(w http.ResponseWriter) e
 }
 
 type LogoutRequestObject struct {
+	Params LogoutParams
 }
 
 type LogoutResponseObject interface {
@@ -5283,7 +6279,8 @@ func (response Logout503JSONResponse) VisitLogoutResponse(w http.ResponseWriter)
 }
 
 type CreateTokenRequestObject struct {
-	Body *CreateTokenJSONRequestBody
+	Params CreateTokenParams
+	Body   *CreateTokenJSONRequestBody
 }
 
 type CreateTokenResponseObject interface {
@@ -5642,7 +6639,8 @@ func (response ListFavoriteTracks503JSONResponse) VisitListFavoriteTracksRespons
 }
 
 type RemoveFavoriteTrackRequestObject struct {
-	Id PathId `json:"id"`
+	Id     PathId `json:"id"`
+	Params RemoveFavoriteTrackParams
 }
 
 type RemoveFavoriteTrackResponseObject interface {
@@ -5769,7 +6767,8 @@ func (response RemoveFavoriteTrack503JSONResponse) VisitRemoveFavoriteTrackRespo
 }
 
 type AddFavoriteTrackRequestObject struct {
-	Id PathId `json:"id"`
+	Id     PathId `json:"id"`
+	Params AddFavoriteTrackParams
 }
 
 type AddFavoriteTrackResponseObject interface {
@@ -5896,7 +6895,8 @@ func (response AddFavoriteTrack503JSONResponse) VisitAddFavoriteTrackResponse(w 
 }
 
 type ChangePasswordRequestObject struct {
-	Body *ChangePasswordJSONRequestBody
+	Params ChangePasswordParams
+	Body   *ChangePasswordJSONRequestBody
 }
 
 type ChangePasswordResponseObject interface {
@@ -6142,7 +7142,8 @@ func (response ListSessions503JSONResponse) VisitListSessionsResponse(w http.Res
 }
 
 type RevokeSessionRequestObject struct {
-	Id PathId `json:"id"`
+	Id     PathId `json:"id"`
+	Params RevokeSessionParams
 }
 
 type RevokeSessionResponseObject interface {
@@ -6373,7 +7374,8 @@ func (response ListPlaylists503JSONResponse) VisitListPlaylistsResponse(w http.R
 }
 
 type CreatePlaylistRequestObject struct {
-	Body *CreatePlaylistJSONRequestBody
+	Params CreatePlaylistParams
+	Body   *CreatePlaylistJSONRequestBody
 }
 
 type CreatePlaylistResponseObject interface {
@@ -6815,6 +7817,7 @@ type UpdatePlaylistResponseObject interface {
 }
 
 type UpdatePlaylist200ResponseHeaders struct {
+	ETag       string
 	XRequestId openapi_types.UUID
 }
 
@@ -6830,6 +7833,7 @@ func (response UpdatePlaylist200JSONResponse) VisitUpdatePlaylistResponse(w http
 		return err
 	}
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("ETag", fmt.Sprint(response.Headers.ETag))
 	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
 	w.WriteHeader(200)
 	_, err := buf.WriteTo(w)
@@ -7135,6 +8139,7 @@ type AddPlaylistItemsResponseObject interface {
 }
 
 type AddPlaylistItems200ResponseHeaders struct {
+	ETag       string
 	XRequestId openapi_types.UUID
 }
 
@@ -7150,6 +8155,7 @@ func (response AddPlaylistItems200JSONResponse) VisitAddPlaylistItemsResponse(w 
 		return err
 	}
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("ETag", fmt.Sprint(response.Headers.ETag))
 	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
 	w.WriteHeader(200)
 	_, err := buf.WriteTo(w)
@@ -7334,6 +8340,7 @@ type RemovePlaylistItemResponseObject interface {
 }
 
 type RemovePlaylistItem200ResponseHeaders struct {
+	ETag       string
 	XRequestId openapi_types.UUID
 }
 
@@ -7349,6 +8356,7 @@ func (response RemovePlaylistItem200JSONResponse) VisitRemovePlaylistItemRespons
 		return err
 	}
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("ETag", fmt.Sprint(response.Headers.ETag))
 	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
 	w.WriteHeader(200)
 	_, err := buf.WriteTo(w)
@@ -7487,6 +8495,7 @@ type MovePlaylistItemResponseObject interface {
 }
 
 type MovePlaylistItem200ResponseHeaders struct {
+	ETag       string
 	XRequestId openapi_types.UUID
 }
 
@@ -7502,6 +8511,7 @@ func (response MovePlaylistItem200JSONResponse) VisitMovePlaylistItemResponse(w 
 		return err
 	}
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("ETag", fmt.Sprint(response.Headers.ETag))
 	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
 	w.WriteHeader(200)
 	_, err := buf.WriteTo(w)
@@ -8678,8 +9688,10 @@ func (sh *strictHandler) GetLibraryStatus(w http.ResponseWriter, r *http.Request
 }
 
 // ScanLibrary operation middleware
-func (sh *strictHandler) ScanLibrary(w http.ResponseWriter, r *http.Request) {
+func (sh *strictHandler) ScanLibrary(w http.ResponseWriter, r *http.Request, params ScanLibraryParams) {
 	var request ScanLibraryRequestObject
+
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.ScanLibrary(ctx, request.(ScanLibraryRequestObject))
@@ -8726,8 +9738,10 @@ func (sh *strictHandler) ListUsers(w http.ResponseWriter, r *http.Request) {
 }
 
 // CreateUser operation middleware
-func (sh *strictHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
+func (sh *strictHandler) CreateUser(w http.ResponseWriter, r *http.Request, params CreateUserParams) {
 	var request CreateUserRequestObject
+
+	request.Params = params
 
 	var body CreateUserJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -8757,10 +9771,11 @@ func (sh *strictHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 }
 
 // DeleteUser operation middleware
-func (sh *strictHandler) DeleteUser(w http.ResponseWriter, r *http.Request, id PathId) {
+func (sh *strictHandler) DeleteUser(w http.ResponseWriter, r *http.Request, id PathId, params DeleteUserParams) {
 	var request DeleteUserRequestObject
 
 	request.Id = id
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.DeleteUser(ctx, request.(DeleteUserRequestObject))
@@ -8809,10 +9824,11 @@ func (sh *strictHandler) GetUser(w http.ResponseWriter, r *http.Request, id Path
 }
 
 // UpdateUser operation middleware
-func (sh *strictHandler) UpdateUser(w http.ResponseWriter, r *http.Request, id PathId) {
+func (sh *strictHandler) UpdateUser(w http.ResponseWriter, r *http.Request, id PathId, params UpdateUserParams) {
 	var request UpdateUserRequestObject
 
 	request.Id = id
+	request.Params = params
 
 	var body UpdateUserJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -8842,10 +9858,11 @@ func (sh *strictHandler) UpdateUser(w http.ResponseWriter, r *http.Request, id P
 }
 
 // ResetUserPassword operation middleware
-func (sh *strictHandler) ResetUserPassword(w http.ResponseWriter, r *http.Request, id PathId) {
+func (sh *strictHandler) ResetUserPassword(w http.ResponseWriter, r *http.Request, id PathId, params ResetUserPasswordParams) {
 	var request ResetUserPasswordRequestObject
 
 	request.Id = id
+	request.Params = params
 
 	var body ResetUserPasswordJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -9006,8 +10023,10 @@ func (sh *strictHandler) GetArtist(w http.ResponseWriter, r *http.Request, id Pa
 }
 
 // Login operation middleware
-func (sh *strictHandler) Login(w http.ResponseWriter, r *http.Request) {
+func (sh *strictHandler) Login(w http.ResponseWriter, r *http.Request, params LoginParams) {
 	var request LoginRequestObject
+
+	request.Params = params
 
 	var body LoginJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -9037,8 +10056,10 @@ func (sh *strictHandler) Login(w http.ResponseWriter, r *http.Request) {
 }
 
 // Logout operation middleware
-func (sh *strictHandler) Logout(w http.ResponseWriter, r *http.Request) {
+func (sh *strictHandler) Logout(w http.ResponseWriter, r *http.Request, params LogoutParams) {
 	var request LogoutRequestObject
+
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.Logout(ctx, request.(LogoutRequestObject))
@@ -9061,8 +10082,10 @@ func (sh *strictHandler) Logout(w http.ResponseWriter, r *http.Request) {
 }
 
 // CreateToken operation middleware
-func (sh *strictHandler) CreateToken(w http.ResponseWriter, r *http.Request) {
+func (sh *strictHandler) CreateToken(w http.ResponseWriter, r *http.Request, params CreateTokenParams) {
 	var request CreateTokenRequestObject
+
+	request.Params = params
 
 	var body CreateTokenJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -9142,10 +10165,11 @@ func (sh *strictHandler) ListFavoriteTracks(w http.ResponseWriter, r *http.Reque
 }
 
 // RemoveFavoriteTrack operation middleware
-func (sh *strictHandler) RemoveFavoriteTrack(w http.ResponseWriter, r *http.Request, id PathId) {
+func (sh *strictHandler) RemoveFavoriteTrack(w http.ResponseWriter, r *http.Request, id PathId, params RemoveFavoriteTrackParams) {
 	var request RemoveFavoriteTrackRequestObject
 
 	request.Id = id
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.RemoveFavoriteTrack(ctx, request.(RemoveFavoriteTrackRequestObject))
@@ -9168,10 +10192,11 @@ func (sh *strictHandler) RemoveFavoriteTrack(w http.ResponseWriter, r *http.Requ
 }
 
 // AddFavoriteTrack operation middleware
-func (sh *strictHandler) AddFavoriteTrack(w http.ResponseWriter, r *http.Request, id PathId) {
+func (sh *strictHandler) AddFavoriteTrack(w http.ResponseWriter, r *http.Request, id PathId, params AddFavoriteTrackParams) {
 	var request AddFavoriteTrackRequestObject
 
 	request.Id = id
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.AddFavoriteTrack(ctx, request.(AddFavoriteTrackRequestObject))
@@ -9194,8 +10219,10 @@ func (sh *strictHandler) AddFavoriteTrack(w http.ResponseWriter, r *http.Request
 }
 
 // ChangePassword operation middleware
-func (sh *strictHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
+func (sh *strictHandler) ChangePassword(w http.ResponseWriter, r *http.Request, params ChangePasswordParams) {
 	var request ChangePasswordRequestObject
+
+	request.Params = params
 
 	var body ChangePasswordJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
@@ -9249,10 +10276,11 @@ func (sh *strictHandler) ListSessions(w http.ResponseWriter, r *http.Request) {
 }
 
 // RevokeSession operation middleware
-func (sh *strictHandler) RevokeSession(w http.ResponseWriter, r *http.Request, id PathId) {
+func (sh *strictHandler) RevokeSession(w http.ResponseWriter, r *http.Request, id PathId, params RevokeSessionParams) {
 	var request RevokeSessionRequestObject
 
 	request.Id = id
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.RevokeSession(ctx, request.(RevokeSessionRequestObject))
@@ -9299,8 +10327,10 @@ func (sh *strictHandler) ListPlaylists(w http.ResponseWriter, r *http.Request) {
 }
 
 // CreatePlaylist operation middleware
-func (sh *strictHandler) CreatePlaylist(w http.ResponseWriter, r *http.Request) {
+func (sh *strictHandler) CreatePlaylist(w http.ResponseWriter, r *http.Request, params CreatePlaylistParams) {
 	var request CreatePlaylistRequestObject
+
+	request.Params = params
 
 	var body CreatePlaylistJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {

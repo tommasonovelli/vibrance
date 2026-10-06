@@ -81,7 +81,7 @@ Open **<http://127.0.0.1:8090>** in a browser on the same machine (exactly this 
 grep VIBRANCE_ADMIN_PASSWORD .env                    # prints VIBRANCE_ADMIN_PASSWORD=...
 ```
 
-The password is everything after `=`. On the page, open **Sign in with a cookie** (`POST /auth/login`), choose **Test Request**, add the header `X-Vibrance-Request: 1` in its **Headers** table (Vibrance asks for it on every request that changes something), fill in `username` and `password`, and send. A good result is `200` with your account. From then on the requests of the page are signed in.
+The password is everything after `=`. On the page, open **Sign in with a cookie** (`POST /auth/login`), choose **Test Request**, fill in `username` and `password`, and send. (The **Headers** table already has `X-Vibrance-Request: 1`, which Vibrance asks for on every request that changes something: leave it there.) A good result is `200` with your account. From then on the requests of the page are signed in.
 
 The same from a terminal, with [`curl`](docs/api.md):
 

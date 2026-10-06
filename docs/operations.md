@@ -471,7 +471,7 @@ When Vibrance refuses to start, the process exits and Docker starts it again (`r
 | Symptom | Cause | What to do |
 |---|---|---|
 | The answer is `421 host_not_allowed` | the address is not `VIBRANCE_PUBLIC_ORIGIN` (for example `localhost` instead of `127.0.0.1`) | use exactly the address of `VIBRANCE_PUBLIC_ORIGIN`, or [change it](#access-from-other-devices) |
-| `403 request_header_required` | a request other than GET without the header `X-Vibrance-Request: 1` | add the header; every client of the API sends it |
+| `403 request_header_required` | a request other than GET without the header `X-Vibrance-Request: 1` | add the header; every client of the API sends it, and the page at `/api/docs` fills it in by itself |
 | Nothing answers at all | Vibrance listens on another address or port, or is stopped | `docker compose ps`; check `VIBRANCE_BIND`, `VIBRANCE_PORT` and `VIBRANCE_PUBLIC_ORIGIN` |
 | The admin password is refused | it was changed through the API, or `.env` was changed after the first start | `grep VIBRANCE_ADMIN_PASSWORD .env` is only the first password; [reset it](#the-passwords-and-the-accounts) |
 | Vibrance lists no album | MusicLib has not published any yet, the scan has not run, or the library cannot be read | wait for the next scan, or ask for one; `GET /api/v1/admin/library` shows the state and the problems |

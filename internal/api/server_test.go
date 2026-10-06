@@ -40,9 +40,10 @@ var testCost = auth.Cost{MemoryKiB: 64, Time: 1, Threads: 1}
 // database of its own with one admin, as wrap returns them (nil: as they
 // are). Every other path is a 404, as in the server. The checks of Host,
 // Origin and X-Vibrance-Request are not here: they are in front of the
-// router (internal/app). The authentication is: a request without
-// credentials of its own is sent with a new session of the admin, so that
-// it reaches its operation.
+// router (internal/app), so a request other than GET and HEAD is given the
+// header the boundary would have asked of it. The authentication is: a
+// request without credentials of its own is sent with a new session of the
+// admin, so that it reaches its operation.
 func testHandler(t *testing.T, wrap func(Server) StrictServerInterface) (http.Handler, *bytes.Buffer) {
 	t.Helper()
 	logs := &bytes.Buffer{}
@@ -102,6 +103,11 @@ func testHandler(t *testing.T, wrap func(Server) StrictServerInterface) (http.Ha
 				return
 			}
 			r.Header.Set("Authorization", "Bearer "+in.Token)
+		}
+		// The boundary lets no request other than GET and HEAD through
+		// without the header, so the operations declare it as required.
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			r.Header.Set(httpx.RequestHeader, "1")
 		}
 		mux.ServeHTTP(w, r)
 	}), logs

@@ -60,6 +60,13 @@ type world struct {
 // newWorld makes a world whose public origin is origin.
 func newWorld(t *testing.T, origin string) *world {
 	t.Helper()
+	return newWorldAt(t, origin, time.Now)
+}
+
+// newWorldAt is newWorld with the clock of the sessions: now says when a
+// session is made, used and over.
+func newWorldAt(t *testing.T, origin string, now func() time.Time) *world {
+	t.Helper()
 	logs := &syncBuffer{}
 	s := mustServer(t, newLogger(logs), origin, t.TempDir(), t.TempDir())
 	u, err := url.Parse(origin)
@@ -76,7 +83,7 @@ func newWorld(t *testing.T, origin string) *world {
 			t.Error(err)
 		}
 	})
-	sessions, err := auth.NewService(st, testCost, time.Now, newLogger(logs))
+	sessions, err := auth.NewService(st, testCost, now, newLogger(logs))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -11,7 +11,7 @@ BASE=http://127.0.0.1:8090/api/v1
 Three rules hold for every request (the specification has the others):
 
 - The request must be addressed to the public origin: another `Host` answers `421 host_not_allowed`.
-- Every request other than GET and HEAD carries `X-Vibrance-Request: 1`, signing in included: without it the answer is `403 request_header_required`.
+- Every request other than GET and HEAD carries `X-Vibrance-Request: 1`, signing in included: without it, or with another value, the answer is `403 request_header_required`. The specification declares it as a required header of each such operation, so a client generated from it, and the page at `/api/docs`, send it by themselves; with `curl` it is `-H 'X-Vibrance-Request: 1'`.
 - Errors are JSON, `{"code": ..., "message": ..., "details": {...}}`. Test the `code`, which is stable.
 
 ## Signing in with a cookie
@@ -26,6 +26,8 @@ curl -sS -b cookies.txt -H 'X-Vibrance-Request: 1' -X POST "$BASE/auth/logout"
 ```
 
 A wrong name or password answers `401 invalid_credentials`, after about a second.
+
+The browser stays signed in for as long as it is used: the session lasts 30 days, and a request in the second half of them gives it 30 days again. After 30 days without a request it is over, and the answer is `401 login_required`: sign in again. The cookie is set only by the sign-in, with a `Max-Age` of 400 days, the most a browser keeps one; it does not say how long the session lasts.
 
 ## Signing in with a token
 
@@ -70,7 +72,7 @@ In a web page of the same origin, `<audio src="/api/v1/tracks/TRACK_ID/audio">` 
 
 ## A playlist, with `If-Match`
 
-Every change gives a playlist a new `revision` and a new `etag`, `"playlist:<id>:<revision>"`, quotes included. Adding at the end needs no precondition; a change that depends on positions (inserting at a position, moving an item) needs `If-Match` with the current `etag`.
+Every change gives a playlist a new `revision` and a new `etag`, `"playlist:<id>:<revision>"`, quotes included. Every answer that carries one playlist has it twice, in the `etag` field of the body and in the `ETag` header: the answer to a change has the tag of the new revision, ready for the next `If-Match`. Adding at the end needs no precondition; a change that depends on positions (inserting at a position, moving an item) needs `If-Match` with the current `etag`.
 
 ```sh
 # Create it: 201, with the playlist and its etag.

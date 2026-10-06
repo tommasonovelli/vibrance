@@ -30,7 +30,7 @@ func (s Server) Login(ctx context.Context, req LoginRequestObject) (LoginRespons
 	if err != nil {
 		return nil, err
 	}
-	cookie := s.sessionCookie(in.Token, int(auth.CookieLifetime/time.Second))
+	cookie := s.sessionCookie(in.Token, int(cookieMaxAge/time.Second))
 	return Login200JSONResponse{Body: LoginResult{User: userOf(in.User), Session: sessionOf(in.Session)},
 		Headers: Login200ResponseHeaders{SetCookie: cookie}}, nil
 }
@@ -187,6 +187,14 @@ func principal(ctx context.Context) (auth.Principal, error) {
 	}
 	return p, nil
 }
+
+// cookieMaxAge is how long a browser keeps the session cookie: 400 days, the
+// most browsers keep any cookie. It is not the lifetime of the session
+// (auth.CookieLifetime, 30 days from each renewal), which the server alone
+// decides: the cookie is sent once, at the sign-in, so an age of 30 days
+// would sign a browser out 30 days after it signed in, however much it was
+// used. A cookie that outlives its session is a dead token.
+const cookieMaxAge = 400 * 24 * time.Hour
 
 // sessionCookie is the Set-Cookie of the session cookie (§7.3, T14):
 // HttpOnly, SameSite=Strict, Path=/, Secure if and only if the public origin

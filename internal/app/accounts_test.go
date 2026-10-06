@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -44,9 +45,12 @@ func TestGetServerInfo(t *testing.T) {
 	}
 }
 
-// §7.3, T14: the session cookie is HttpOnly, SameSite=Strict, Path=/, lasts
-// 30 days, and is Secure if and only if the public origin is https: with
-// http and Secure a browser in the LAN would drop it.
+// §7.3, T14: the session cookie is HttpOnly, SameSite=Strict, Path=/, and is
+// Secure if and only if the public origin is https: with http and Secure a
+// browser in the LAN would drop it. Its Max-Age is 400 days whatever the
+// origin, the most a browser keeps a cookie, while its session lasts 30
+// days: the browser keeps the cookie, and the server alone ends the session
+// (TestCookieSessionLastsWhileItIsUsed).
 func TestLoginSetsTheCookie(t *testing.T) {
 	for origin, secure := range map[string]bool{"http://vibrance.lan:8090": false, apiOrigin: true} {
 		w := newWorld(t, origin)
@@ -61,9 +65,15 @@ func TestLoginSetsTheCookie(t *testing.T) {
 			t.Fatal(err)
 		}
 		if c.Name != auth.CookieName || !tokenForm.MatchString(c.Value) || c.Path != "/" || c.Domain != "" ||
-			c.MaxAge != 30*24*3600 || !c.HttpOnly || c.SameSite != http.SameSiteStrictMode || c.Secure != secure {
+			c.MaxAge != 400*24*3600 || !c.HttpOnly || c.SameSite != http.SameSiteStrictMode || c.Secure != secure {
 			t.Errorf("%s: the cookie has the flags path=%q domain=%q max-age=%d httponly=%v samesite=%v secure=%v",
 				origin, c.Path, c.Domain, c.MaxAge, c.HttpOnly, c.SameSite, c.Secure)
+		}
+		// The age as a browser reads it, and no Expires that could say
+		// otherwise.
+		attributes := strings.Split(raw[0], "; ")
+		if !slices.Contains(attributes, "Max-Age=34560000") || strings.Contains(raw[0], "Expires") {
+			t.Errorf("%s: the attributes of the cookie are %q, want Max-Age=34560000 and no Expires", origin, attributes[1:])
 		}
 		if strings.Contains(raw[0], "Secure") != secure {
 			t.Errorf("%s: Secure in the header is %v", origin, !secure)
@@ -93,6 +103,69 @@ func TestLoginSetsTheCookie(t *testing.T) {
 		wantStatus(t, "login without a device", rec, http.StatusOK)
 		if got := decode[api.LoginResult](t, rec); got.Session.DeviceName != nil {
 			t.Errorf("%s: device_name %q, want null", origin, *got.Session.DeviceName)
+		}
+	}
+}
+
+// §7.3, erratum R2: a browser stays signed in for as long as it is used.
+// The cookie is set once, at the sign-in, and the session of the server is
+// the only authority: used in the second half of its 30 days it has 30 days
+// again, so the same cookie is good on day 31; not used for 30 days it is
+// over, and the cookie the browser still keeps is a dead token. No answer
+// but the one of the sign-in sets the cookie, not even the one that renews
+// the session (I4: a GET changes nothing a client can see).
+func TestCookieSessionLastsWhileItIsUsed(t *testing.T) {
+	const day = 24 * time.Hour
+	for _, origin := range []string{"http://vibrance.lan:8090", apiOrigin} {
+		start := time.Date(2026, 10, 6, 12, 0, 0, 0, time.UTC)
+		var elapsed atomic.Int64
+		w := newWorldAt(t, origin, func() time.Time { return start.Add(time.Duration(elapsed.Load())) })
+		signIn := func() credential {
+			t.Helper()
+			rec := w.do("POST", "/auth/login", map[string]any{"username": "anna", "password": w.anna.password}, nobody)
+			wantStatus(t, "login on "+origin, rec, http.StatusOK)
+			c, err := http.ParseSetCookie(rec.Header().Get("Set-Cookie"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			return sessionCookie(c.Value)
+		}
+		used, idle := signIn(), signIn()
+		// ask uses a cookie at a moment, and returns the status.
+		ask := func(c credential, at time.Duration) int {
+			t.Helper()
+			elapsed.Store(int64(at))
+			rec := w.do("GET", "/me", nil, c)
+			if got := rec.Header().Values("Set-Cookie"); len(got) != 0 {
+				t.Errorf("%s: a GET after %s set %d cookies: the cookie is set by the sign-in alone", origin, at, len(got))
+			}
+			return rec.Code
+		}
+
+		if got := ask(used, 16*day); got != http.StatusOK {
+			t.Fatalf("%s: the cookie on day 16: status %d", origin, got)
+		}
+		if got := ask(idle, 30*day); got != http.StatusUnauthorized {
+			t.Errorf("%s: a cookie not used for 30 days: status %d, want 401", origin, got)
+		}
+		if got := ask(used, 31*day); got != http.StatusOK {
+			t.Errorf("%s: the cookie used on day 16, on day 31: status %d, want 200", origin, got)
+		}
+		if got := ask(idle, 31*day); got != http.StatusUnauthorized {
+			t.Errorf("%s: a cookie not used for 31 days: status %d, want 401", origin, got)
+		}
+		// Day 16 gave it 30 days, to day 46. Used on day 31, in the first
+		// half of them, it was not renewed: without another request it is
+		// over on day 46, long before the browser drops the cookie.
+		if got := ask(used, 46*day-time.Millisecond); got != http.StatusOK {
+			t.Errorf("%s: the cookie the instant before day 46: status %d, want 200", origin, got)
+		}
+		// That request renewed it to day 76; then nothing for 30 days.
+		if got := ask(used, 76*day); got != http.StatusUnauthorized {
+			t.Errorf("%s: the cookie 30 days after its last use: status %d, want 401", origin, got)
+		}
+		if got := ask(used, 399*day); got != http.StatusUnauthorized {
+			t.Errorf("%s: a cookie the browser still keeps, of a session that is over: status %d, want 401", origin, got)
 		}
 	}
 }

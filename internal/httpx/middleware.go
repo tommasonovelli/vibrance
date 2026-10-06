@@ -275,7 +275,10 @@ func (w *secured) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 //     403 origin_not_allowed;
 //   - a request other than GET and HEAD must carry X-Vibrance-Request: 1,
 //     once: 403 request_header_required otherwise. A client that is not a
-//     browser may omit Origin, not this header.
+//     browser may omit Origin, not this header. The specification declares
+//     it as a required parameter of those operations, for the clients made
+//     from it; the refusal is this one all the same, because the boundary
+//     is in front of the validation, whose answer would be a 400.
 //
 // The X-Forwarded-* headers are never read. publicOrigin is
 // VIBRANCE_PUBLIC_ORIGIN, already validated: scheme://host[:port].

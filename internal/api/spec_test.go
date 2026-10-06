@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
+	"reflect"
 	"regexp"
 	"slices"
 	"sort"
@@ -13,6 +14,8 @@ import (
 	"testing"
 
 	"github.com/getkin/kin-openapi/openapi3"
+
+	"vibrance/internal/httpx"
 )
 
 // specPath is the specification, from the directory of this package.
@@ -365,9 +368,17 @@ func TestSpecCompleteness(t *testing.T) {
 				t.Errorf("%s: response %d is not declared", id, status)
 			}
 		}
+		// X-Vibrance-Request does not count: the boundary answers 403 for
+		// it before the validator sees the request, never 400.
 		hasBody := o.op.RequestBody != nil
-		if (len(o.op.Parameters) > 0 || hasBody) && !o.has(400) {
-			t.Errorf("%s takes parameters or a body: response 400 is not declared", id)
+		validated := 0
+		for _, p := range o.op.Parameters {
+			if p.Ref != requestHeaderRef {
+				validated++
+			}
+		}
+		if (validated > 0 || hasBody) != o.has(400) {
+			t.Errorf("%s: response 400 goes with a body or a parameter the validator checks, and only with one", id)
 		}
 		if hasBody != o.has(413) {
 			t.Errorf("%s: response 413 goes with a request body, and only with one", id)
@@ -382,8 +393,10 @@ func TestSpecCompleteness(t *testing.T) {
 			}
 			// A header parameter is never `required`: a missing header
 			// has its own answer (428), not the 400 of the validator.
-			if p.Value.In == "header" && p.Value.Required {
-				t.Errorf("%s: header parameter %q must not be required", id, p.Value.Name)
+			// X-Vibrance-Request is the one that is, and its own answer
+			// is the 403 of the boundary (TestSpecRequestHeader).
+			if p.Value.In == "header" && p.Value.Required != (p.Ref == requestHeaderRef) {
+				t.Errorf("%s: header parameter %q: required = %t", id, p.Value.Name, p.Value.Required)
 			}
 			if p.Value.In == "path" && (p.Value.Schema.Value.Format != "uuid" || !p.Value.Required) {
 				t.Errorf("%s: path parameter %q must be a required UUID (I2)", id, p.Value.Name)
@@ -727,11 +740,11 @@ func TestSpecPlaylistPreconditions(t *testing.T) {
 		"createPlaylist":     {etag: true},
 		"getPlaylist":        {etag: true},
 		"listPlaylistItems":  {etag: true},
-		"updatePlaylist":     {ifMatch: true},
+		"updatePlaylist":     {ifMatch: true, etag: true},
 		"deletePlaylist":     {ifMatch: true},
-		"removePlaylistItem": {ifMatch: true},
-		"addPlaylistItems":   {ifMatch: true, required: true},
-		"movePlaylistItem":   {ifMatch: true, required: true},
+		"removePlaylistItem": {ifMatch: true, etag: true},
+		"addPlaylistItems":   {ifMatch: true, required: true, etag: true},
+		"movePlaylistItem":   {ifMatch: true, required: true, etag: true},
 	}
 	for _, o := range operations(doc) {
 		id := o.op.OperationID
@@ -768,6 +781,69 @@ func TestSpecPlaylistPreconditions(t *testing.T) {
 	// The body carries the tag too: a proxy may weaken the header.
 	if !slices.Contains(doc.Components.Schemas["Playlist"].Value.Required, "etag") {
 		t.Error("Playlist must carry its etag in the body")
+	}
+}
+
+// requestHeaderRef is how an operation declares X-Vibrance-Request.
+const requestHeaderRef = "#/components/parameters/XVibranceRequest"
+
+// I4, §7.6: X-Vibrance-Request is a parameter of the specification, one
+// component that every operation other than a GET refers to, and no GET
+// does: a generated client and the documentation page send it without
+// being told. It is required, with "1" as its only value, and it is not a
+// security scheme, because it is not a credential.
+func TestSpecRequestHeader(t *testing.T) {
+	doc := loadSpec(t)
+
+	ref := doc.Components.Parameters["XVibranceRequest"]
+	if ref == nil {
+		t.Fatal("the parameter XVibranceRequest is not a component of the specification")
+	}
+	p := ref.Value
+	if p.Name != httpx.RequestHeader || p.In != "header" || !p.Required || p.Description == "" {
+		t.Errorf("the parameter is %q in %q, required = %t: want the required header %s, with a description",
+			p.Name, p.In, p.Required, httpx.RequestHeader)
+	}
+	if s := p.Schema.Value; !s.Type.Is("string") || !reflect.DeepEqual(s.Enum, []any{"1"}) {
+		t.Errorf("the schema of the parameter is %v with the values %v: want a string that is \"1\"", s.Type, s.Enum)
+	}
+	if !strings.Contains(p.Description, "`403 request_header_required`") {
+		t.Error("the description of the parameter must name `403 request_header_required`")
+	}
+
+	writes := 0
+	for _, o := range operations(doc) {
+		declared := 0
+		for _, p := range o.op.Parameters {
+			switch {
+			case p.Ref == requestHeaderRef:
+				declared++
+			case p.Value.In == "header" && strings.EqualFold(p.Value.Name, httpx.RequestHeader):
+				t.Errorf("%s declares %s by itself: it must refer to the component", o.op.OperationID, httpx.RequestHeader)
+			}
+		}
+		want := 1
+		if o.method == http.MethodGet {
+			want = 0
+		} else {
+			writes++
+		}
+		if declared != want {
+			t.Errorf("%s (%s) declares %s %d times, want %d", o.op.OperationID, o.method, httpx.RequestHeader, declared, want)
+		}
+		// The answer to a request without it is declared too.
+		if ref := o.op.Responses.Value("403"); ref == nil || ref.Ref != "#/components/responses/Forbidden" {
+			t.Errorf("%s: want the response 403 Forbidden", o.op.OperationID)
+		}
+	}
+	// The operations of DESIGN.md §8.3 that are not a GET.
+	if writes != 18 {
+		t.Errorf("%d operations other than GET, want 18", writes)
+	}
+	for name, scheme := range doc.Components.SecuritySchemes {
+		if name != "cookieAuth" && name != "bearerAuth" || strings.EqualFold(scheme.Value.Name, httpx.RequestHeader) {
+			t.Errorf("the security scheme %q: the header is not a credential, and the schemes are the cookie and the bearer token", name)
+		}
 	}
 }
 

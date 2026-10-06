@@ -20,8 +20,12 @@ info:
       is `403 origin_not_allowed`. No CORS header is ever sent: the API is used
       from its own origin, or by clients that are not browsers.
     - **`X-Vibrance-Request: 1`** is required on every request other than GET
-      and HEAD, signing in included; without it the answer is
-      `403 request_header_required`.
+      and HEAD, signing in included; without it, or with another value, the
+      answer is `403 request_header_required`. Every such operation declares
+      it as a required header parameter, so a generated client and the page
+      at `/api/docs` send it by themselves. It is not a credential: it only
+      tells the server that the request was not made by a page of another
+      site.
     - **A session.** Every operation needs a live session, except the ones
       marked as public. A session is the cookie `vibrance_session` that
       `POST /auth/login` sets, or a token of `POST /auth/tokens` sent as
@@ -87,7 +91,9 @@ info:
     `revision`. Its entity tag is the strong `"playlist:<id>:<revision>"`,
     quotes included, given both in the `ETag` header and in the `etag` field
     of the body (a proxy may weaken or drop the header; the field is always
-    right). Send it back as `If-Match` to make a change only if nobody changed
+    right). Every answer that carries one playlist has the header: reading
+    it, creating it, a page of its items, and every change of it, with the
+    tag of the new revision. Send it back as `If-Match` to make a change only if nobody changed
     the playlist in between: a tag of an older revision answers
     `412 precondition_failed`, and nothing is changed. A `W/` prefix is
     ignored, and the header may list several tags, separated by commas: one
@@ -105,9 +111,7 @@ info:
     - `GET /api/openapi.yaml`: this document, as the server carries it.
     - `GET /api/docs`: a page that shows this document and can send requests
       to this server. It is made of files the server carries and asks no
-      other host for anything. Its request client does not add
-      `X-Vibrance-Request` by itself: to try a request other than GET, add
-      the header `X-Vibrance-Request: 1` to it.
+      other host for anything.
     - `GET /`: a redirect to `/api/docs`.
     - `GET /health/live` and `GET /health/ready`: whether the process
       answers, and whether its startup is complete (`503 not_ready` until
@@ -171,17 +175,25 @@ paths:
       summary: Sign in with a cookie
       description: |
         Public. Checks the name and the password and starts a session of kind
-        `cookie`, which lasts 30 days and is renewed while it is used. The
-        cookie `vibrance_session` is `HttpOnly`, `SameSite=Strict`, `Path=/`,
-        and `Secure` when the public origin is `https`. Its `Max-Age` is 30
-        days from the sign-in and is not sent again when the session is
-        renewed: a browser signs in again 30 days after it signed in.
+        `cookie`. The session lasts 30 days from its last renewal: a request
+        made in the second half of that time gives it 30 days again, so a
+        browser stays signed in for as long as it is used, and signs in
+        again after 30 days without a request.
+
+        The cookie `vibrance_session` is `HttpOnly`, `SameSite=Strict`,
+        `Path=/`, and `Secure` when the public origin is `https`. It is set
+        here and never sent again: its `Max-Age` is 400 days, the most a
+        browser keeps a cookie, and says nothing of the session, which only
+        the server ends. A cookie that outlives its session answers
+        `401 login_required`.
 
         Passwords are checked one at a time, and a refused attempt takes about
         one second. A wrong name, a wrong password and a disabled account all
         answer `401 invalid_credentials`, so the answer does not tell whether
         the account exists.
       security: []
+      parameters:
+        - $ref: "#/components/parameters/XVibranceRequest"
       requestBody:
         required: true
         content:
@@ -199,7 +211,7 @@ paths:
               required: true
               schema:
                 type: string
-                example: vibrance_session=vb_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA; Path=/; Max-Age=2592000; HttpOnly; SameSite=Strict
+                example: vibrance_session=vb_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA; Path=/; Max-Age=34560000; HttpOnly; SameSite=Strict
           content:
             application/json:
               schema:
@@ -231,6 +243,8 @@ paths:
         token is in the answer, **once**: the server keeps only its hash. Send
         it as `Authorization: Bearer <token>`.
       security: []
+      parameters:
+        - $ref: "#/components/parameters/XVibranceRequest"
       requestBody:
         required: true
         content:
@@ -269,6 +283,8 @@ paths:
       description: |
         Revokes the session of the request, cookie or token, at once, and
         tells the browser to drop the cookie.
+      parameters:
+        - $ref: "#/components/parameters/XVibranceRequest"
       responses:
         "204":
           description: Signed out.
@@ -329,6 +345,8 @@ paths:
         check takes about one second, as a refused sign-in does).
         `422 password_invalid`: the new password is not 12 to 1024 bytes, or
         has control characters.
+      parameters:
+        - $ref: "#/components/parameters/XVibranceRequest"
       requestBody:
         required: true
         content:
@@ -393,6 +411,7 @@ paths:
         was lost, a token no longer needed. A session that does not exist, or
         is of another user, answers `404 session_not_found`.
       parameters:
+        - $ref: "#/components/parameters/XVibranceRequest"
         - $ref: "#/components/parameters/PathId"
       responses:
         "204":
@@ -453,6 +472,8 @@ paths:
         `a-z 0-9 . _ -` beginning with a letter or a digit.
         `422 password_invalid`: the password is not 12 to 1024 bytes, or has
         control characters.
+      parameters:
+        - $ref: "#/components/parameters/XVibranceRequest"
       requestBody:
         required: true
         content:
@@ -533,6 +554,7 @@ paths:
         `409 cannot_modify_self`: an admin cannot disable their own account;
         demoting it is allowed while another enabled admin is left.
       parameters:
+        - $ref: "#/components/parameters/XVibranceRequest"
         - $ref: "#/components/parameters/PathId"
       requestBody:
         required: true
@@ -580,6 +602,7 @@ paths:
         `409 last_admin`: it is the last enabled admin.
         `409 cannot_modify_self`: an admin cannot delete their own account.
       parameters:
+        - $ref: "#/components/parameters/XVibranceRequest"
         - $ref: "#/components/parameters/PathId"
       responses:
         "204":
@@ -617,6 +640,7 @@ paths:
         `422 password_invalid`: the password is not 12 to 1024 bytes, or has
         control characters.
       parameters:
+        - $ref: "#/components/parameters/XVibranceRequest"
         - $ref: "#/components/parameters/PathId"
       requestBody:
         required: true
@@ -692,6 +716,8 @@ paths:
         `GET /admin/library` again to follow the cycle. While MusicLib is in
         maintenance, or its library is not there, the cycle looks at nothing
         and the state says why.
+      parameters:
+        - $ref: "#/components/parameters/XVibranceRequest"
       responses:
         "202":
           description: Queued. The state as it is now.
@@ -1384,6 +1410,7 @@ paths:
         not available can be made a favorite: it exists, and is listed with
         `"available": false`.
       parameters:
+        - $ref: "#/components/parameters/XVibranceRequest"
         - $ref: "#/components/parameters/PathId"
       responses:
         "204":
@@ -1413,6 +1440,7 @@ paths:
         Idempotent: a track that is not a favorite answers `204` all the
         same. `404 track_not_found` when there is no such track.
       parameters:
+        - $ref: "#/components/parameters/XVibranceRequest"
         - $ref: "#/components/parameters/PathId"
       responses:
         "204":
@@ -1473,6 +1501,8 @@ paths:
         `422 invalid_request`: the name is not 1 to 200 characters, the
         description is over 2000, or one of them has the character U+0000.
         `422 too_many_playlists`: the user has 500 playlists already.
+      parameters:
+        - $ref: "#/components/parameters/XVibranceRequest"
       requestBody:
         required: true
         content:
@@ -1559,6 +1589,7 @@ paths:
         `422 invalid_request`: the name is not 1 to 200 characters, the
         description is over 2000, or one of them has the character U+0000.
       parameters:
+        - $ref: "#/components/parameters/XVibranceRequest"
         - $ref: "#/components/parameters/PathId"
         - $ref: "#/components/parameters/IfMatch"
       requestBody:
@@ -1573,6 +1604,8 @@ paths:
           headers:
             X-Request-Id:
               $ref: "#/components/headers/X-Request-Id"
+            ETag:
+              $ref: "#/components/headers/ETag"
           content:
             application/json:
               schema:
@@ -1610,6 +1643,7 @@ paths:
         `412 precondition_failed`: `If-Match` names an older revision; nothing
         is deleted.
       parameters:
+        - $ref: "#/components/parameters/XVibranceRequest"
         - $ref: "#/components/parameters/PathId"
         - $ref: "#/components/parameters/IfMatch"
       responses:
@@ -1712,6 +1746,7 @@ paths:
         `422 too_many_items`: the playlist would have more than 10000 items.
         `428 precondition_required`: a position without `If-Match`.
       parameters:
+        - $ref: "#/components/parameters/XVibranceRequest"
         - $ref: "#/components/parameters/PathId"
         - $ref: "#/components/parameters/IfMatch"
       requestBody:
@@ -1726,6 +1761,8 @@ paths:
           headers:
             X-Request-Id:
               $ref: "#/components/headers/X-Request-Id"
+            ETag:
+              $ref: "#/components/headers/ETag"
           content:
             application/json:
               schema:
@@ -1767,6 +1804,7 @@ paths:
         `412 precondition_failed`: `If-Match` names an older revision; nothing
         is removed.
       parameters:
+        - $ref: "#/components/parameters/XVibranceRequest"
         - $ref: "#/components/parameters/PathId"
         - $ref: "#/components/parameters/PathItemId"
         - $ref: "#/components/parameters/IfMatch"
@@ -1776,6 +1814,8 @@ paths:
           headers:
             X-Request-Id:
               $ref: "#/components/headers/X-Request-Id"
+            ETag:
+              $ref: "#/components/headers/ETag"
           content:
             application/json:
               schema:
@@ -1818,6 +1858,7 @@ paths:
         less one.
         `428 precondition_required`: no `If-Match`.
       parameters:
+        - $ref: "#/components/parameters/XVibranceRequest"
         - $ref: "#/components/parameters/PathId"
         - $ref: "#/components/parameters/PathItemId"
         - $ref: "#/components/parameters/IfMatch"
@@ -1833,6 +1874,8 @@ paths:
           headers:
             X-Request-Id:
               $ref: "#/components/headers/X-Request-Id"
+            ETag:
+              $ref: "#/components/headers/ETag"
           content:
             application/json:
               schema:
@@ -1865,12 +1908,24 @@ components:
       type: apiKey
       in: cookie
       name: vibrance_session
-      description: The session cookie that `POST /auth/login` sets. It lasts 30 days and is renewed while it is used.
+      description: The session cookie that `POST /auth/login` sets. Its session lasts 30 days and is renewed while it is used; the cookie itself is set once, with a `Max-Age` of 400 days, and is worth nothing once its session has ended.
     bearerAuth:
       type: http
       scheme: bearer
       description: A token of `POST /auth/tokens`, `vb_` and 43 characters. It lasts 90 days and is renewed while it is used.
   parameters:
+    XVibranceRequest:
+      name: X-Vibrance-Request
+      in: header
+      required: true
+      description: |
+        Always `1`. Every request other than GET and HEAD carries it, once:
+        a page of another site cannot send it. Without it, or with another
+        value, the answer is `403 request_header_required`, before the session,
+        the other parameters and the body are looked at; it is never a `400`.
+      schema:
+        type: string
+        enum: ["1"]
     PathId:
       name: id
       in: path
@@ -2006,7 +2061,8 @@ components:
       description: |
         `origin_not_allowed`: `Origin` was sent and is not the public origin
         of the server. `request_header_required`: a request other than GET
-        and HEAD without `X-Vibrance-Request: 1`. `forbidden`: the operation
+        and HEAD without `X-Vibrance-Request: 1`, or with another value or
+        with the header twice. `forbidden`: the operation
         is for admins and the user is not one.
       headers:
         X-Request-Id:

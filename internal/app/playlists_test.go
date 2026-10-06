@@ -369,6 +369,99 @@ func TestPlaylists(t *testing.T) {
 	}
 }
 
+// §8.1, erratum R2: every answer that carries one playlist has its entity
+// tag in the ETag header, once, and it is the etag of the body: the tag of
+// the revision the playlist has after the request. A client that changes a
+// playlist reads its next If-Match where it reads any other.
+func TestPlaylistAnswersCarryTheirETag(t *testing.T) {
+	w := newWorld(t, apiOrigin)
+	w.catalogEntry()
+	anna := w.as(w.anna)
+	revision := 0
+	var id string
+	// tagged checks the answer of an operation that made a revision, or
+	// that read the last one, and returns the tag.
+	tagged := func(where string, rec *httptest.ResponseRecorder, status int, changed bool, bodyTag func() (string, string)) string {
+		t.Helper()
+		wantStatus(t, where, rec, status)
+		if changed {
+			revision++
+		}
+		gotID, tag := bodyTag()
+		if id == "" {
+			id = gotID
+		}
+		want := fmt.Sprintf(`"playlist:%s:%d"`, id, revision)
+		if headers := rec.Header().Values("ETag"); len(headers) != 1 || headers[0] != want || tag != want {
+			t.Fatalf("%s: the ETag header is %q and the etag of the body %s, want both %s", where, headers, tag, want)
+		}
+		return want
+	}
+	playlist := func(rec *httptest.ResponseRecorder) func() (string, string) {
+		return func() (string, string) {
+			p := decode[api.Playlist](t, rec)
+			return p.Id, p.Etag
+		}
+	}
+	added := func(rec *httptest.ResponseRecorder) func() (string, string) {
+		return func() (string, string) {
+			p := decode[api.AddPlaylistItemsResult](t, rec).Playlist
+			return p.Id, p.Etag
+		}
+	}
+
+	rec := w.do("POST", "/playlists", map[string]any{"name": "tags", "description": ""}, anna)
+	tag := tagged("createPlaylist", rec, http.StatusCreated, true, playlist(rec))
+	path := "/playlists/" + id
+	rec = w.do("GET", path, nil, anna)
+	tagged("getPlaylist", rec, http.StatusOK, false, playlist(rec))
+
+	rec = w.do("POST", path+"/items", map[string]any{"track_ids": []string{entryTrack, entryTrack}, "position": nil}, anna)
+	tag = tagged("addPlaylistItems at the end", rec, http.StatusOK, true, added(rec))
+	rec = w.do("POST", path+"/items", map[string]any{"track_ids": []string{entryTrack}, "position": 0}, ifMatch(anna, tag))
+	tag = tagged("addPlaylistItems at a position", rec, http.StatusOK, true, added(rec))
+
+	// The header of a change is the If-Match of the next one.
+	rec = w.do("GET", path+"/items", nil, anna)
+	wantStatus(t, "listPlaylistItems", rec, http.StatusOK)
+	if got := rec.Header().Values("ETag"); len(got) != 1 || got[0] != tag {
+		t.Fatalf("listPlaylistItems: the ETag header is %q, want %s", got, tag)
+	}
+	items := decode[api.PlaylistItemList](t, rec).Items
+	if len(items) != 3 {
+		t.Fatalf("%d items, want 3", len(items))
+	}
+
+	rec = w.do("PUT", path, map[string]any{"name": "tags", "description": "again"}, ifMatch(anna, rec.Header().Get("ETag")))
+	tagged("updatePlaylist", rec, http.StatusOK, true, playlist(rec))
+	rec = w.do("POST", path+"/items/"+items[0].Id+"/move", map[string]any{"position": 2}, ifMatch(anna, rec.Header().Get("ETag")))
+	tagged("movePlaylistItem", rec, http.StatusOK, true, playlist(rec))
+	rec = w.do("DELETE", path+"/items/"+items[1].Id, nil, ifMatch(anna, rec.Header().Get("ETag")))
+	tagged("removePlaylistItem", rec, http.StatusOK, true, playlist(rec))
+	rec = w.do("DELETE", path+"/items/"+items[2].Id, nil, anna)
+	tag = tagged("removePlaylistItem without If-Match", rec, http.StatusOK, true, playlist(rec))
+	if revision != 7 {
+		t.Fatalf("%d revisions, want 7", revision)
+	}
+
+	// A change that is refused made no revision, and carries no tag: the
+	// one the client holds is still the last it was given.
+	stale := `"playlist:` + id + `:1"`
+	for where, rec := range map[string]*httptest.ResponseRecorder{
+		"an update with an old tag": w.do("PUT", path, map[string]any{"name": "x", "description": ""}, ifMatch(anna, stale)),
+		"a move without a tag":      w.do("POST", path+"/items/"+items[0].Id+"/move", map[string]any{"position": 0}, anna),
+		"an update not valid":       w.do("PUT", path, map[string]any{"name": "", "description": ""}, anna),
+	} {
+		if rec.Code < 400 || len(rec.Header().Values("ETag")) != 0 {
+			t.Errorf("%s: status %d with the ETag header %q", where, rec.Code, rec.Header().Values("ETag"))
+		}
+	}
+	rec = w.do("GET", path, nil, anna)
+	if got := tagged("getPlaylist at the end", rec, http.StatusOK, false, playlist(rec)); got != tag {
+		t.Fatalf("the playlist has the tag %s, the last change said %s", got, tag)
+	}
+}
+
 // playlistRows counts the playlists of a user and their items in the
 // database.
 func (w *world) playlistRows(userID string) (n [2]int) {

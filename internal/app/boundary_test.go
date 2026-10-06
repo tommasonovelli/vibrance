@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -299,6 +300,32 @@ func TestEveryOperationBehindTheBoundary(t *testing.T) {
 			req = o.example(t)
 			req.Header.Set(httpx.RequestHeader, "true")
 			check(o, "X-Vibrance-Request: true", req, http.StatusForbidden, "request_header_required")
+
+			// The specification declares the header with "1" as its only
+			// value: another value, or the header twice, is still the 403 of
+			// the boundary, never the 400 of the validation, also when the
+			// rest of the request is not valid either.
+			req = o.example(t)
+			req.Header.Set(httpx.RequestHeader, "2")
+			check(o, "X-Vibrance-Request: 2", req, http.StatusForbidden, "request_header_required")
+
+			req = o.example(t)
+			req.Header.Add(httpx.RequestHeader, "1")
+			check(o, "X-Vibrance-Request twice", req, http.StatusForbidden, "request_header_required")
+
+			for _, value := range []string{"", "2"} {
+				req = o.example(t)
+				req.Header.Del(httpx.RequestHeader)
+				if value != "" {
+					req.Header.Set(httpx.RequestHeader, value)
+				}
+				req.URL.Path = strings.Replace(req.URL.Path, someID, "1", 1)
+				req.URL.RawQuery = "limit=seven"
+				req.Body = io.NopCloser(strings.NewReader(`{"a":1,"a":2}`))
+				req.Header.Set("Content-Type", "text/plain")
+				check(o, "a request that is not valid, with X-Vibrance-Request "+strconv.Quote(value), req,
+					http.StatusForbidden, "request_header_required")
+			}
 		}
 		if strings.Contains(o.path, "{id}") {
 			ids++
@@ -335,7 +362,7 @@ func TestEveryOperationBehindTheBoundary(t *testing.T) {
 			check(o, "a body of 1 MiB + 1 byte", req, http.StatusRequestEntityTooLarge, "body_too_large")
 		}
 	}
-	if ids == 0 || bodies != 10 || writes == 0 {
+	if ids == 0 || bodies != 10 || writes != 18 {
 		t.Fatalf("checked %d operations with an id, %d with a body, %d that write", ids, bodies, writes)
 	}
 	for _, ev := range logs.events(t) {
