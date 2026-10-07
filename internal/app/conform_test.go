@@ -75,8 +75,10 @@ func redacted(rec *httptest.ResponseRecorder) string { return redact(rec.Body.St
 
 // routeOf finds the operation of doc that req asks for: the path under
 // /api/v1 is compared segment by segment, a {parameter} matching any
-// segment, and HEAD is the GET of the path. It is false unless exactly one
-// path matches and it has the method.
+// segment, and HEAD is the GET of the path. Of two paths that match, the
+// one with fewer parameters is the one asked for, as for the router of
+// net/http (/tracks/random, not /tracks/{id}). It is false unless one path
+// matches so and it has the method.
 func routeOf(doc *openapi3.T, req *http.Request) (*routers.Route, bool) {
 	path, ok := strings.CutPrefix(req.URL.Path, api.BasePath)
 	if !ok {
@@ -86,18 +88,25 @@ func routeOf(doc *openapi3.T, req *http.Request) (*routers.Route, bool) {
 	if method == http.MethodHead {
 		method = http.MethodGet
 	}
-	var found *routers.Route
+	var (
+		found     *routers.Route
+		params    int
+		ambiguous bool
+	)
 	for template, item := range doc.Paths.Map() {
 		op := item.GetOperation(method)
 		if op == nil || !matches(template, path) {
 			continue
 		}
-		if found != nil {
-			return nil, false
+		n := strings.Count(template, "{")
+		switch {
+		case found == nil || n < params:
+			found, params, ambiguous = &routers.Route{Spec: doc, Path: template, PathItem: item, Method: method, Operation: op}, n, false
+		case n == params:
+			ambiguous = true
 		}
-		found = &routers.Route{Spec: doc, Path: template, PathItem: item, Method: method, Operation: op}
 	}
-	return found, found != nil
+	return found, found != nil && !ambiguous
 }
 
 // matches tells whether path is an instance of the path template of the
@@ -137,6 +146,12 @@ func TestRouteOf(t *testing.T) {
 				t.Errorf("HEAD %s: found %v", req.URL.Path, route)
 			}
 		}
+	}
+	if route, ok := routeOf(doc, httptest.NewRequest(http.MethodGet, api.BasePath+"/tracks/random", nil)); !ok || route.Path != "/tracks/random" {
+		t.Errorf("GET /tracks/random: found %v", route)
+	}
+	if route, ok := routeOf(doc, httptest.NewRequest(http.MethodGet, api.BasePath+"/tracks/"+someID, nil)); !ok || route.Path != "/tracks/{id}" {
+		t.Errorf("GET /tracks/{id}: found %v", route)
 	}
 	for _, target := range []string{"/server", "/api/v1/nothing", "/api/v1/tracks//audio", "/api/v1/tracks/" + someID + "/x"} {
 		if route, ok := routeOf(doc, httptest.NewRequest(http.MethodGet, target, nil)); ok {

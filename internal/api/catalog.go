@@ -190,3 +190,28 @@ func trackOf(t catalog.Track) Track {
 	}
 	return track
 }
+
+// ListRandomTracks chooses available tracks at random.
+func (s Server) ListRandomTracks(ctx context.Context, req ListRandomTracksRequestObject) (ListRandomTracksResponseObject, error) {
+	p, err := principal(ctx)
+	if err != nil {
+		return nil, err
+	}
+	limit := defaultLimit
+	if req.Params.Limit != nil {
+		limit = *req.Params.Limit
+	}
+	artist := ""
+	if req.Params.Artist != nil {
+		artist = req.Params.Artist.String()
+	}
+	tracks, err := s.catalog.Load().ListRandomTracks(ctx, p.UserID, artist, limit)
+	if err != nil {
+		return nil, err
+	}
+	body := RandomTrackList{Tracks: make([]Track, 0, len(tracks))}
+	for _, t := range tracks {
+		body.Tracks = append(body.Tracks, trackOf(t))
+	}
+	return ListRandomTracks200JSONResponse{Body: body}, nil
+}

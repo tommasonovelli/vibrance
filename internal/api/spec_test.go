@@ -103,6 +103,10 @@ var designOperations = []designOperation{
 	{"GET", "/tracks", "listTracks", "user", 200, []designError{{400, "invalid_cursor"}}},
 	{"GET", "/catalog/summary", "getCatalogSummary", "user", 200, nil},
 	{"GET", "/me/favorites/summary", "getFavoritesSummary", "user", 200, nil},
+	{"GET", "/tracks/random", "listRandomTracks", "user", 200, nil},
+	{"POST", "/me/favorites/tracks", "addFavoriteTracks", "user", 204, []designError{{422, "unknown_track"}}},
+	{"DELETE", "/me/sessions", "revokeOtherSessions", "user", 204, nil},
+	{"GET", "/tracks/{id}/playlists", "listTrackPlaylists", "user", 200, []designError{{404, "track_not_found"}}},
 }
 
 // designErrorCodes is the table of DESIGN.md §8.4, with the `*_not_found`
@@ -841,9 +845,10 @@ func TestSpecRequestHeader(t *testing.T) {
 			t.Errorf("%s: want the response 403 Forbidden", o.op.OperationID)
 		}
 	}
-	// The operations of DESIGN.md §8.3 that are not a GET.
-	if writes != 18 {
-		t.Errorf("%d operations other than GET, want 18", writes)
+	// The operations of DESIGN.md §8.3 that are not a GET, and the two of
+	// its erratum W1-W6 (step W3).
+	if writes != 20 {
+		t.Errorf("%d operations other than GET, want 20", writes)
 	}
 	for name, scheme := range doc.Components.SecuritySchemes {
 		if name != "cookieAuth" && name != "bearerAuth" || strings.EqualFold(scheme.Value.Name, httpx.RequestHeader) {
@@ -876,7 +881,7 @@ func TestSpecLists(t *testing.T) {
 			t.Errorf("%s: takes `after` = %t, want %t", id, has, isPaginated)
 		}
 		limit, hasLimit := params["limit"]
-		if hasLimit != (isPaginated || id == "search") {
+		if hasLimit != (isPaginated || id == "search" || id == "listRandomTracks") {
 			t.Errorf("%s: takes `limit` = %t", id, hasLimit)
 		}
 		if !isPaginated {
@@ -899,6 +904,19 @@ func TestSpecLists(t *testing.T) {
 	}
 
 	for _, o := range operations(doc) {
+		if o.op.OperationID == "listRandomTracks" {
+			// Not paginated (docs/proposals/web-client-api.md B1): a limit
+			// as the lists have, and an answer of at most that many tracks.
+			for _, p := range o.op.Parameters {
+				if p.Value.Name == "limit" {
+					checkLimit(t, "listRandomTracks", p.Value, 50, 200)
+				}
+			}
+			body := o.op.Responses.Value("200").Value.Content.Get("application/json").Schema.Value
+			if tracks := body.Properties["tracks"]; len(body.Properties) != 1 || tracks == nil || tracks.Value.MaxItems == nil || *tracks.Value.MaxItems != 200 {
+				t.Errorf("listRandomTracks: the answer must be {tracks}, at most 200")
+			}
+		}
 		if o.op.OperationID != "search" {
 			continue
 		}

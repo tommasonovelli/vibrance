@@ -69,6 +69,10 @@ func (e *explainer) QueryRowContext(ctx context.Context, query string, args ...a
 	return e.db.QueryRowContext(ctx, query, args...)
 }
 
+// itemsOfATrack is the index of the items of a playlist by their track
+// (step W3).
+const itemsOfATrack = "playlist_items_track_idx"
+
 // planCase is one query of the store with what its plan must be.
 type planCase struct {
 	name string
@@ -79,6 +83,8 @@ type planCase struct {
 	// table: only where the rows are few by construction, or where the
 	// query is meant to read everything.
 	sorts, scans bool
+	// avoid is an index the plan must not use; "" for none.
+	avoid string
 }
 
 // checkQueryPlans verifies on the full dataset, with the statistics SQLite
@@ -124,6 +130,11 @@ func checkQueryPlans(t *testing.T, stateDir string) {
 		t.Fatalf("the tracks: %d, %v", len(tracks), err)
 	}
 	track, playlist := tracks[0], playlists[0].Playlist.ID
+	items, err := q.ListPlaylistItems(ctx, store.ListPlaylistItemsParams{UserID: admin.ID, PlaylistID: playlist, AfterPosition: -1, PageSize: 1})
+	if err != nil || len(items) != 1 {
+		t.Fatalf("the first item of a playlist: %d, %v", len(items), err)
+	}
+	playlistTrack := items[0].Track.ID
 
 	cases := append(albumListCases(album, page), artistAlbumCases(album, page)...)
 	cases = append(cases, trackListCases(track, admin.ID, page)...)
@@ -165,39 +176,63 @@ func checkQueryPlans(t *testing.T, stateDir string) {
 			_, err := q.ListFavoritesAfter(ctx, store.ListFavoritesAfterParams{UserID: admin.ID, CreatedAt: epoch + 1_000_000_000, AfterID: track.ID, PageSize: page})
 			return err
 		}},
-		{name: "GetPlaylistOfUser", index: "playlist_items_position_idx", run: func(q *store.Queries) error {
+		{name: "GetPlaylistOfUser", index: "playlist_items_position_idx", avoid: itemsOfATrack, run: func(q *store.Queries) error {
 			_, err := q.GetPlaylistOfUser(ctx, store.GetPlaylistOfUserParams{ID: playlist, UserID: admin.ID})
 			return err
 		}},
-		{name: "GetPlaylistStateOfUser", index: "playlist_items_position_idx", run: func(q *store.Queries) error {
+		{name: "GetPlaylistStateOfUser", index: "playlist_items_position_idx", avoid: itemsOfATrack, run: func(q *store.Queries) error {
 			_, err := q.GetPlaylistStateOfUser(ctx, store.GetPlaylistStateOfUserParams{ID: playlist, UserID: admin.ID})
 			return err
 		}},
-		{name: "RenumberPlaylistItems", index: "playlist_items_position_idx", scans: true, sorts: true, run: func(q *store.Queries) error {
+		{name: "RenumberPlaylistItems", index: "playlist_items_position_idx", avoid: itemsOfATrack, scans: true, sorts: true, run: func(q *store.Queries) error {
 			return q.RenumberPlaylistItems(ctx, playlist)
 		}},
 		// The playlists of every user are a small table, 500 for each user at
 		// most, and those of one user are sorted.
-		{name: "ListPlaylistsOfUser", index: "playlist_items_position_idx", sorts: true, scans: true, run: func(q *store.Queries) error {
+		{name: "ListPlaylistsOfUser", index: "playlist_items_position_idx", avoid: itemsOfATrack, sorts: true, scans: true, run: func(q *store.Queries) error {
 			_, err := q.ListPlaylistsOfUser(ctx, admin.ID)
 			return err
 		}},
-		{name: "ListPlaylistItems", index: "playlist_items_position_idx", run: func(q *store.Queries) error {
+		{name: "ListPlaylistItems", index: "playlist_items_position_idx", avoid: itemsOfATrack, run: func(q *store.Queries) error {
 			_, err := q.ListPlaylistItems(ctx, store.ListPlaylistItemsParams{UserID: admin.ID, PlaylistID: playlist, AfterPosition: 100, AfterID: track.ID, PageSize: page})
 			return err
 		}},
 		// The covers of a playlist (step W2): the items in their order from
 		// a key, each track by its id.
-		{name: "NextPlaylistCover", index: "playlist_items_position_idx", run: func(q *store.Queries) error {
+		{name: "NextPlaylistCover", index: "playlist_items_position_idx", avoid: itemsOfATrack, run: func(q *store.Queries) error {
 			_, err := q.NextPlaylistCover(ctx, store.NextPlaylistCoverParams{PlaylistID: playlist, AfterPosition: -1})
 			return err // the first items of the playlist have a cover
 		}},
-		{name: "NextPlaylistCoverAfter", index: "playlist_items_position_idx", run: func(q *store.Queries) error {
+		{name: "NextPlaylistCoverAfter", index: "playlist_items_position_idx", avoid: itemsOfATrack, run: func(q *store.Queries) error {
 			_, err := q.NextPlaylistCover(ctx, store.NextPlaylistCoverParams{PlaylistID: playlist, AfterPosition: 100, AfterID: track.ID,
 				Seen1: album.ID})
 			if errors.Is(err, sql.ErrNoRows) {
 				return nil
 			}
+			return err
+		}},
+		// The playlists of the user that hold a track (step W3), from the
+		// items of the track; and the items of a track that the references
+		// of the users move when its audio is elsewhere (P6).
+		{name: "ListPlaylistRefsOfUserWithTrack", index: itemsOfATrack, sorts: true, run: func(q *store.Queries) error {
+			_, err := q.ListPlaylistRefsOfUserWithTrack(ctx, store.ListPlaylistRefsOfUserWithTrackParams{TrackID: playlistTrack, UserID: admin.ID})
+			return err
+		}},
+		{name: "ListPlaylistIDsByTrack (P6)", index: itemsOfATrack, run: func(q *store.Queries) error {
+			_, err := q.ListPlaylistIDsByTrack(ctx, playlistTrack)
+			return err
+		}},
+		{name: "MovePlaylistItems (P6)", index: itemsOfATrack, run: func(q *store.Queries) error {
+			return q.MovePlaylistItems(ctx, store.MovePlaylistItemsParams{NewID: playlistTrack, OldID: playlistTrack})
+		}},
+		// The tracks chosen at random (step W3): the keys of every available
+		// track, or of those of one artist, sorted by a random value.
+		{name: "ListRandomTracks (every available track)", index: "tracks_first_seen_idx", sorts: true, run: func(q *store.Queries) error {
+			_, err := q.ListRandomTracks(ctx, store.ListRandomTracksParams{UserID: admin.ID, PageSize: 50})
+			return err
+		}},
+		{name: "ListRandomTracksOfArtist", index: "albums_artist_id_idx", sorts: true, run: func(q *store.Queries) error {
+			_, err := q.ListRandomTracksOfArtist(ctx, store.ListRandomTracksOfArtistParams{UserID: admin.ID, ArtistID: album.ArtistID, PageSize: 50})
 			return err
 		}},
 		// The summaries (step W2). The catalog is counted on the available
@@ -296,6 +331,9 @@ func checkQueryPlans(t *testing.T, stateDir string) {
 		fmt.Printf("PLAN %s (%s, plan included)\n       %s\n", c.name, ms(took), joined)
 		if c.index != "" && !strings.Contains(joined, "INDEX "+c.index) {
 			t.Errorf("%s does not use %s", c.name, c.index)
+		}
+		if c.avoid != "" && strings.Contains(joined, "INDEX "+c.avoid) {
+			t.Errorf("%s uses %s", c.name, c.avoid)
 		}
 		if !c.sorts && strings.Contains(joined, "TEMP B-TREE") {
 			t.Errorf("%s sorts its rows instead of reading them in the order of an index", c.name)

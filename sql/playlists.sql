@@ -45,6 +45,22 @@ FROM playlists
 WHERE playlists.user_id = sqlc.arg(user_id)
 ORDER BY playlists.created_at, playlists.id;
 
+-- name: ListPlaylistRefsOfUserWithTrack :many
+-- ListPlaylistRefsOfUserWithTrack returns the id and the name of every
+-- playlist of a user that has at least one item with a track, the oldest
+-- first, as ListPlaylistsOfUser (GET /tracks/{id}/playlists,
+-- docs/proposals/web-client-api.md B4). It names the owner, like the three
+-- queries above: the playlists of another user are never listed (DESIGN.md
+-- 8.6, I6). The items of the track, and so their playlists, are read from
+-- playlist_items_track_idx, and each playlist by its key: a track is in a
+-- few playlists, and the playlists of every user are not read.
+SELECT playlists.id, playlists.name
+FROM playlists
+WHERE playlists.id IN (SELECT playlist_items.playlist_id FROM playlist_items
+                       WHERE playlist_items.track_id = sqlc.arg(track_id))
+  AND playlists.user_id = sqlc.arg(user_id)
+ORDER BY playlists.created_at, playlists.id;
+
 -- name: CountPlaylistsOfUser :one
 -- CountPlaylistsOfUser counts the playlists of a user, for the limit of
 -- DESIGN.md 5.2.

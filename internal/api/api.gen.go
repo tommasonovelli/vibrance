@@ -458,6 +458,21 @@ func (e CreateTokenParamsXVibranceRequest) Valid() bool {
 	}
 }
 
+// Defines values for AddFavoriteTracksParamsXVibranceRequest.
+const (
+	AddFavoriteTracksParamsXVibranceRequestN1 AddFavoriteTracksParamsXVibranceRequest = "1"
+)
+
+// Valid indicates whether the value is a known member of the AddFavoriteTracksParamsXVibranceRequest enum.
+func (e AddFavoriteTracksParamsXVibranceRequest) Valid() bool {
+	switch e {
+	case AddFavoriteTracksParamsXVibranceRequestN1:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for RemoveFavoriteTrackParamsXVibranceRequest.
 const (
 	RemoveFavoriteTrackParamsXVibranceRequestN1 RemoveFavoriteTrackParamsXVibranceRequest = "1"
@@ -497,6 +512,21 @@ const (
 func (e ChangePasswordParamsXVibranceRequest) Valid() bool {
 	switch e {
 	case ChangePasswordParamsXVibranceRequestN1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RevokeOtherSessionsParamsXVibranceRequest.
+const (
+	RevokeOtherSessionsParamsXVibranceRequestN1 RevokeOtherSessionsParamsXVibranceRequest = "1"
+)
+
+// Valid indicates whether the value is a known member of the RevokeOtherSessionsParamsXVibranceRequest enum.
+func (e RevokeOtherSessionsParamsXVibranceRequest) Valid() bool {
+	switch e {
+	case RevokeOtherSessionsParamsXVibranceRequestN1:
 		return true
 	default:
 		return false
@@ -1040,6 +1070,14 @@ type FavoriteList struct {
 	Next *Cursor `json:"next"`
 }
 
+// FavoriteTracksRequest The tracks to make favorites.
+//
+// Example: {"track_ids":["0199a5c0-7b1e-7c3a-9d2f-4b6a8c0e1f23","0199a5c1-0c4d-7b88-8e21-3f5a7c9d1b46"]}
+type FavoriteTracksRequest struct {
+	// TrackIds The tracks, in the order the list of favorites is to show them. An id may be repeated; it counts once, at its first place.
+	TrackIds []openapi_types.UUID `json:"track_ids"`
+}
+
 // FavoritesSummary How many favorite tracks the user has.
 //
 // Example: {"duration_ms":20460000,"track_count":86}
@@ -1333,6 +1371,25 @@ type PlaylistItemList struct {
 // PlaylistList The playlists of the user, the oldest first.
 type PlaylistList struct {
 	Playlists []Playlist `json:"playlists"`
+}
+
+// PlaylistRef A playlist of the user, by its id and its name.
+type PlaylistRef struct {
+	// Id A UUID in its canonical form, lowercase with hyphens. An id has one spelling, in requests as in responses.
+	//
+	// Example: 0199a5c0-7b1e-7c3a-9d2f-4b6a8c0e1f23
+	Id   Id     `json:"id"`
+	Name string `json:"name"`
+}
+
+// PlaylistRefList Playlists of the user, the oldest first.
+type PlaylistRefList struct {
+	Playlists []PlaylistRef `json:"playlists"`
+}
+
+// RandomTrackList Available tracks chosen at random, none twice, in a random order.
+type RandomTrackList struct {
+	Tracks []Track `json:"tracks"`
 }
 
 // ReplayGain The ReplayGain values in the tags of the file. Each is `null` when the file does not have it.
@@ -1866,6 +1923,18 @@ type ListFavoriteTracksParams struct {
 	After *After `form:"after,omitempty" json:"after,omitempty"`
 }
 
+// AddFavoriteTracksParams defines parameters for AddFavoriteTracks.
+type AddFavoriteTracksParams struct {
+	// XVibranceRequest Always `1`. Every request other than GET and HEAD carries it, once:
+	// a page of another site cannot send it. Without it, or with another
+	// value, the answer is `403 request_header_required`, before the session,
+	// the other parameters and the body are looked at; it is never a `400`.
+	XVibranceRequest AddFavoriteTracksParamsXVibranceRequest `json:"X-Vibrance-Request"`
+}
+
+// AddFavoriteTracksParamsXVibranceRequest defines parameters for AddFavoriteTracks.
+type AddFavoriteTracksParamsXVibranceRequest string
+
 // RemoveFavoriteTrackParams defines parameters for RemoveFavoriteTrack.
 type RemoveFavoriteTrackParams struct {
 	// XVibranceRequest Always `1`. Every request other than GET and HEAD carries it, once:
@@ -1901,6 +1970,18 @@ type ChangePasswordParams struct {
 
 // ChangePasswordParamsXVibranceRequest defines parameters for ChangePassword.
 type ChangePasswordParamsXVibranceRequest string
+
+// RevokeOtherSessionsParams defines parameters for RevokeOtherSessions.
+type RevokeOtherSessionsParams struct {
+	// XVibranceRequest Always `1`. Every request other than GET and HEAD carries it, once:
+	// a page of another site cannot send it. Without it, or with another
+	// value, the answer is `403 request_header_required`, before the session,
+	// the other parameters and the body are looked at; it is never a `400`.
+	XVibranceRequest RevokeOtherSessionsParamsXVibranceRequest `json:"X-Vibrance-Request"`
+}
+
+// RevokeOtherSessionsParamsXVibranceRequest defines parameters for RevokeOtherSessions.
+type RevokeOtherSessionsParamsXVibranceRequest string
 
 // RevokeSessionParams defines parameters for RevokeSession.
 type RevokeSessionParams struct {
@@ -2073,6 +2154,15 @@ type ListTracksParamsSort string
 // ListTracksParamsOrder defines parameters for ListTracks.
 type ListTracksParamsOrder string
 
+// ListRandomTracksParams defines parameters for ListRandomTracks.
+type ListRandomTracksParams struct {
+	// Artist The id of an artist, to choose only among the tracks of its albums. An id that no artist has gives an empty list, not an error.
+	Artist *openapi_types.UUID `form:"artist,omitempty" json:"artist,omitempty"`
+
+	// Limit The most tracks in the answer.
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
 // GetTrackAudioParams defines parameters for GetTrackAudio.
 type GetTrackAudioParams struct {
 	// Profile Reserved for transcoding, which this version does not have. Leave
@@ -2104,6 +2194,9 @@ type LoginJSONRequestBody = LoginRequest
 
 // CreateTokenJSONRequestBody defines body for CreateToken for application/json ContentType.
 type CreateTokenJSONRequestBody = CreateTokenRequest
+
+// AddFavoriteTracksJSONRequestBody defines body for AddFavoriteTracks for application/json ContentType.
+type AddFavoriteTracksJSONRequestBody = FavoriteTracksRequest
 
 // ChangePasswordJSONRequestBody defines body for ChangePassword for application/json ContentType.
 type ChangePasswordJSONRequestBody = ChangePasswordRequest
@@ -2182,6 +2275,9 @@ type ServerInterface interface {
 	// ListFavoriteTracks The favorite tracks, the most recent first
 	// (GET /me/favorites/tracks)
 	ListFavoriteTracks(w http.ResponseWriter, r *http.Request, params ListFavoriteTracksParams)
+	// AddFavoriteTracks Make several tracks favorites
+	// (POST /me/favorites/tracks)
+	AddFavoriteTracks(w http.ResponseWriter, r *http.Request, params AddFavoriteTracksParams)
 	// RemoveFavoriteTrack Make a track no longer a favorite
 	// (DELETE /me/favorites/tracks/{id})
 	RemoveFavoriteTrack(w http.ResponseWriter, r *http.Request, id PathId, params RemoveFavoriteTrackParams)
@@ -2191,6 +2287,9 @@ type ServerInterface interface {
 	// ChangePassword Change the password
 	// (PUT /me/password)
 	ChangePassword(w http.ResponseWriter, r *http.Request, params ChangePasswordParams)
+	// RevokeOtherSessions Sign out every other session
+	// (DELETE /me/sessions)
+	RevokeOtherSessions(w http.ResponseWriter, r *http.Request, params RevokeOtherSessionsParams)
 	// ListSessions The live sessions of the user
 	// (GET /me/sessions)
 	ListSessions(w http.ResponseWriter, r *http.Request)
@@ -2233,6 +2332,9 @@ type ServerInterface interface {
 	// ListTracks The available tracks, in a chosen order
 	// (GET /tracks)
 	ListTracks(w http.ResponseWriter, r *http.Request, params ListTracksParams)
+	// ListRandomTracks Available tracks chosen at random
+	// (GET /tracks/random)
+	ListRandomTracks(w http.ResponseWriter, r *http.Request, params ListRandomTracksParams)
 	// GetTrack One track
 	// (GET /tracks/{id})
 	GetTrack(w http.ResponseWriter, r *http.Request, id PathId)
@@ -2242,6 +2344,9 @@ type ServerInterface interface {
 	// GetTrackLyrics The lyrics of a track
 	// (GET /tracks/{id}/lyrics)
 	GetTrackLyrics(w http.ResponseWriter, r *http.Request, id PathId)
+	// ListTrackPlaylists The playlists of the user that hold a track
+	// (GET /tracks/{id}/playlists)
+	ListTrackPlaylists(w http.ResponseWriter, r *http.Request, id PathId)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -3041,6 +3146,51 @@ func (siw *ServerInterfaceWrapper) ListFavoriteTracks(w http.ResponseWriter, r *
 	handler.ServeHTTP(w, r)
 }
 
+// AddFavoriteTracks operation middleware
+func (siw *ServerInterfaceWrapper) AddFavoriteTracks(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params AddFavoriteTracksParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Vibrance-Request" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Vibrance-Request")]; found {
+		var XVibranceRequest AddFavoriteTracksParamsXVibranceRequest
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Vibrance-Request", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Vibrance-Request", valueList[0], &XVibranceRequest, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Vibrance-Request", Err: err})
+			return
+		}
+
+		params.XVibranceRequest = XVibranceRequest
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Vibrance-Request is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Vibrance-Request", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AddFavoriteTracks(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // RemoveFavoriteTrack operation middleware
 func (siw *ServerInterfaceWrapper) RemoveFavoriteTrack(w http.ResponseWriter, r *http.Request) {
 
@@ -3185,6 +3335,51 @@ func (siw *ServerInterfaceWrapper) ChangePassword(w http.ResponseWriter, r *http
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ChangePassword(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RevokeOtherSessions operation middleware
+func (siw *ServerInterfaceWrapper) RevokeOtherSessions(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RevokeOtherSessionsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Vibrance-Request" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Vibrance-Request")]; found {
+		var XVibranceRequest RevokeOtherSessionsParamsXVibranceRequest
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Vibrance-Request", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Vibrance-Request", valueList[0], &XVibranceRequest, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Vibrance-Request", Err: err})
+			return
+		}
+
+		params.XVibranceRequest = XVibranceRequest
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Vibrance-Request is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Vibrance-Request", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RevokeOtherSessions(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3943,6 +4138,52 @@ func (siw *ServerInterfaceWrapper) ListTracks(w http.ResponseWriter, r *http.Req
 	handler.ServeHTTP(w, r)
 }
 
+// ListRandomTracks operation middleware
+func (siw *ServerInterfaceWrapper) ListRandomTracks(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListRandomTracksParams
+
+	// ------------- Optional query parameter "artist" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "artist", r.URL.Query(), &params.Artist, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "artist"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "artist", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListRandomTracks(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetTrack operation middleware
 func (siw *ServerInterfaceWrapper) GetTrack(w http.ResponseWriter, r *http.Request) {
 
@@ -4096,6 +4337,32 @@ func (siw *ServerInterfaceWrapper) GetTrackLyrics(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
+// ListTrackPlaylists operation middleware
+func (siw *ServerInterfaceWrapper) ListTrackPlaylists(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "id" -------------
+	var id PathId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListTrackPlaylists(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 type UnescapedCookieParamError struct {
 	ParamName string
 	Err       error
@@ -4222,6 +4489,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/auth/logout", wrapper.Logout)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me", wrapper.GetMe)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/me/password", wrapper.ChangePassword)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/me/sessions", wrapper.RevokeOtherSessions)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me/sessions", wrapper.ListSessions)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/me/sessions/{id}", wrapper.RevokeSession)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/users", wrapper.ListUsers)
@@ -4237,6 +4505,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/albums", wrapper.ListAlbums)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/albums/{id}", wrapper.GetAlbum)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/tracks", wrapper.ListTracks)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/tracks/random", wrapper.ListRandomTracks)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/tracks/{id}", wrapper.GetTrack)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/catalog/summary", wrapper.GetCatalogSummary)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/search", wrapper.Search)
@@ -4245,8 +4514,10 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/tracks/{id}/lyrics", wrapper.GetTrackLyrics)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me/favorites/summary", wrapper.GetFavoritesSummary)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me/favorites/tracks", wrapper.ListFavoriteTracks)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/me/favorites/tracks", wrapper.AddFavoriteTracks)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/me/favorites/tracks/{id}", wrapper.RemoveFavoriteTrack)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/me/favorites/tracks/{id}", wrapper.AddFavoriteTrack)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/tracks/{id}/playlists", wrapper.ListTrackPlaylists)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/playlists", wrapper.ListPlaylists)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/playlists", wrapper.CreatePlaylist)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/playlists/{id}", wrapper.DeletePlaylist)
@@ -7084,6 +7355,149 @@ func (response ListFavoriteTracks503JSONResponse) VisitListFavoriteTracksRespons
 	return err
 }
 
+type AddFavoriteTracksRequestObject struct {
+	Params AddFavoriteTracksParams
+	Body   *AddFavoriteTracksJSONRequestBody
+}
+
+type AddFavoriteTracksResponseObject interface {
+	VisitAddFavoriteTracksResponse(w http.ResponseWriter) error
+}
+
+type AddFavoriteTracks204ResponseHeaders struct {
+	XRequestId openapi_types.UUID
+}
+
+type AddFavoriteTracks204Response struct {
+	Headers AddFavoriteTracks204ResponseHeaders
+}
+
+func (response AddFavoriteTracks204Response) VisitAddFavoriteTracksResponse(w http.ResponseWriter) error {
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(204)
+	return nil
+}
+
+type AddFavoriteTracks400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response AddFavoriteTracks400JSONResponse) VisitAddFavoriteTracksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddFavoriteTracks401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response AddFavoriteTracks401JSONResponse) VisitAddFavoriteTracksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddFavoriteTracks403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response AddFavoriteTracks403JSONResponse) VisitAddFavoriteTracksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddFavoriteTracks413JSONResponse struct{ PayloadTooLargeJSONResponse }
+
+func (response AddFavoriteTracks413JSONResponse) VisitAddFavoriteTracksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(413)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddFavoriteTracks421JSONResponse struct{ MisdirectedRequestJSONResponse }
+
+func (response AddFavoriteTracks421JSONResponse) VisitAddFavoriteTracksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(421)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddFavoriteTracks422JSONResponse struct{ UnprocessableJSONResponse }
+
+func (response AddFavoriteTracks422JSONResponse) VisitAddFavoriteTracksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddFavoriteTracks500JSONResponse struct{ InternalJSONResponse }
+
+func (response AddFavoriteTracks500JSONResponse) VisitAddFavoriteTracksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddFavoriteTracks503JSONResponse struct{ UnavailableJSONResponse }
+
+func (response AddFavoriteTracks503JSONResponse) VisitAddFavoriteTracksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type RemoveFavoriteTrackRequestObject struct {
 	Id     PathId `json:"id"`
 	Params RemoveFavoriteTrackParams
@@ -7471,6 +7885,103 @@ func (response ChangePassword500JSONResponse) VisitChangePasswordResponse(w http
 type ChangePassword503JSONResponse struct{ UnavailableJSONResponse }
 
 func (response ChangePassword503JSONResponse) VisitChangePasswordResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeOtherSessionsRequestObject struct {
+	Params RevokeOtherSessionsParams
+}
+
+type RevokeOtherSessionsResponseObject interface {
+	VisitRevokeOtherSessionsResponse(w http.ResponseWriter) error
+}
+
+type RevokeOtherSessions204ResponseHeaders struct {
+	XRequestId openapi_types.UUID
+}
+
+type RevokeOtherSessions204Response struct {
+	Headers RevokeOtherSessions204ResponseHeaders
+}
+
+func (response RevokeOtherSessions204Response) VisitRevokeOtherSessionsResponse(w http.ResponseWriter) error {
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(204)
+	return nil
+}
+
+type RevokeOtherSessions401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response RevokeOtherSessions401JSONResponse) VisitRevokeOtherSessionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeOtherSessions403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response RevokeOtherSessions403JSONResponse) VisitRevokeOtherSessionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeOtherSessions421JSONResponse struct{ MisdirectedRequestJSONResponse }
+
+func (response RevokeOtherSessions421JSONResponse) VisitRevokeOtherSessionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(421)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeOtherSessions500JSONResponse struct{ InternalJSONResponse }
+
+func (response RevokeOtherSessions500JSONResponse) VisitRevokeOtherSessionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeOtherSessions503JSONResponse struct{ UnavailableJSONResponse }
+
+func (response RevokeOtherSessions503JSONResponse) VisitRevokeOtherSessionsResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
@@ -9460,6 +9971,126 @@ func (response ListTracks503JSONResponse) VisitListTracksResponse(w http.Respons
 	return err
 }
 
+type ListRandomTracksRequestObject struct {
+	Params ListRandomTracksParams
+}
+
+type ListRandomTracksResponseObject interface {
+	VisitListRandomTracksResponse(w http.ResponseWriter) error
+}
+
+type ListRandomTracks200ResponseHeaders struct {
+	XRequestId openapi_types.UUID
+}
+
+type ListRandomTracks200JSONResponse struct {
+	Body    RandomTrackList
+	Headers ListRandomTracks200ResponseHeaders
+}
+
+func (response ListRandomTracks200JSONResponse) VisitListRandomTracksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListRandomTracks400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response ListRandomTracks400JSONResponse) VisitListRandomTracksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListRandomTracks401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response ListRandomTracks401JSONResponse) VisitListRandomTracksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListRandomTracks403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response ListRandomTracks403JSONResponse) VisitListRandomTracksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListRandomTracks421JSONResponse struct{ MisdirectedRequestJSONResponse }
+
+func (response ListRandomTracks421JSONResponse) VisitListRandomTracksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(421)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListRandomTracks500JSONResponse struct{ InternalJSONResponse }
+
+func (response ListRandomTracks500JSONResponse) VisitListRandomTracksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListRandomTracks503JSONResponse struct{ UnavailableJSONResponse }
+
+func (response ListRandomTracks503JSONResponse) VisitListRandomTracksResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetTrackRequestObject struct {
 	Id PathId `json:"id"`
 }
@@ -10075,6 +10706,141 @@ func (response GetTrackLyrics503JSONResponse) VisitGetTrackLyricsResponse(w http
 	return err
 }
 
+type ListTrackPlaylistsRequestObject struct {
+	Id PathId `json:"id"`
+}
+
+type ListTrackPlaylistsResponseObject interface {
+	VisitListTrackPlaylistsResponse(w http.ResponseWriter) error
+}
+
+type ListTrackPlaylists200ResponseHeaders struct {
+	XRequestId openapi_types.UUID
+}
+
+type ListTrackPlaylists200JSONResponse struct {
+	Body    PlaylistRefList
+	Headers ListTrackPlaylists200ResponseHeaders
+}
+
+func (response ListTrackPlaylists200JSONResponse) VisitListTrackPlaylistsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListTrackPlaylists400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response ListTrackPlaylists400JSONResponse) VisitListTrackPlaylistsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListTrackPlaylists401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response ListTrackPlaylists401JSONResponse) VisitListTrackPlaylistsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListTrackPlaylists403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response ListTrackPlaylists403JSONResponse) VisitListTrackPlaylistsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListTrackPlaylists404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response ListTrackPlaylists404JSONResponse) VisitListTrackPlaylistsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListTrackPlaylists421JSONResponse struct{ MisdirectedRequestJSONResponse }
+
+func (response ListTrackPlaylists421JSONResponse) VisitListTrackPlaylistsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(421)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListTrackPlaylists500JSONResponse struct{ InternalJSONResponse }
+
+func (response ListTrackPlaylists500JSONResponse) VisitListTrackPlaylistsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListTrackPlaylists503JSONResponse struct{ UnavailableJSONResponse }
+
+func (response ListTrackPlaylists503JSONResponse) VisitListTrackPlaylistsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// GetLibraryStatus The state of the library and of the scanner
@@ -10137,6 +10903,9 @@ type StrictServerInterface interface {
 	// ListFavoriteTracks The favorite tracks, the most recent first
 	// (GET /me/favorites/tracks)
 	ListFavoriteTracks(ctx context.Context, request ListFavoriteTracksRequestObject) (ListFavoriteTracksResponseObject, error)
+	// AddFavoriteTracks Make several tracks favorites
+	// (POST /me/favorites/tracks)
+	AddFavoriteTracks(ctx context.Context, request AddFavoriteTracksRequestObject) (AddFavoriteTracksResponseObject, error)
 	// RemoveFavoriteTrack Make a track no longer a favorite
 	// (DELETE /me/favorites/tracks/{id})
 	RemoveFavoriteTrack(ctx context.Context, request RemoveFavoriteTrackRequestObject) (RemoveFavoriteTrackResponseObject, error)
@@ -10146,6 +10915,9 @@ type StrictServerInterface interface {
 	// ChangePassword Change the password
 	// (PUT /me/password)
 	ChangePassword(ctx context.Context, request ChangePasswordRequestObject) (ChangePasswordResponseObject, error)
+	// RevokeOtherSessions Sign out every other session
+	// (DELETE /me/sessions)
+	RevokeOtherSessions(ctx context.Context, request RevokeOtherSessionsRequestObject) (RevokeOtherSessionsResponseObject, error)
 	// ListSessions The live sessions of the user
 	// (GET /me/sessions)
 	ListSessions(ctx context.Context, request ListSessionsRequestObject) (ListSessionsResponseObject, error)
@@ -10188,6 +10960,9 @@ type StrictServerInterface interface {
 	// ListTracks The available tracks, in a chosen order
 	// (GET /tracks)
 	ListTracks(ctx context.Context, request ListTracksRequestObject) (ListTracksResponseObject, error)
+	// ListRandomTracks Available tracks chosen at random
+	// (GET /tracks/random)
+	ListRandomTracks(ctx context.Context, request ListRandomTracksRequestObject) (ListRandomTracksResponseObject, error)
 	// GetTrack One track
 	// (GET /tracks/{id})
 	GetTrack(ctx context.Context, request GetTrackRequestObject) (GetTrackResponseObject, error)
@@ -10197,6 +10972,9 @@ type StrictServerInterface interface {
 	// GetTrackLyrics The lyrics of a track
 	// (GET /tracks/{id}/lyrics)
 	GetTrackLyrics(ctx context.Context, request GetTrackLyricsRequestObject) (GetTrackLyricsResponseObject, error)
+	// ListTrackPlaylists The playlists of the user that hold a track
+	// (GET /tracks/{id}/playlists)
+	ListTrackPlaylists(ctx context.Context, request ListTrackPlaylistsRequestObject) (ListTrackPlaylistsResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -10787,6 +11565,39 @@ func (sh *strictHandler) ListFavoriteTracks(w http.ResponseWriter, r *http.Reque
 	}
 }
 
+// AddFavoriteTracks operation middleware
+func (sh *strictHandler) AddFavoriteTracks(w http.ResponseWriter, r *http.Request, params AddFavoriteTracksParams) {
+	var request AddFavoriteTracksRequestObject
+
+	request.Params = params
+
+	var body AddFavoriteTracksJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AddFavoriteTracks(ctx, request.(AddFavoriteTracksRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AddFavoriteTracks")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AddFavoriteTracksResponseObject); ok {
+		if err := validResponse.VisitAddFavoriteTracksResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // RemoveFavoriteTrack operation middleware
 func (sh *strictHandler) RemoveFavoriteTrack(w http.ResponseWriter, r *http.Request, id PathId, params RemoveFavoriteTrackParams) {
 	var request RemoveFavoriteTrackRequestObject
@@ -10867,6 +11678,32 @@ func (sh *strictHandler) ChangePassword(w http.ResponseWriter, r *http.Request, 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ChangePasswordResponseObject); ok {
 		if err := validResponse.VisitChangePasswordResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RevokeOtherSessions operation middleware
+func (sh *strictHandler) RevokeOtherSessions(w http.ResponseWriter, r *http.Request, params RevokeOtherSessionsParams) {
+	var request RevokeOtherSessionsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RevokeOtherSessions(ctx, request.(RevokeOtherSessionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RevokeOtherSessions")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RevokeOtherSessionsResponseObject); ok {
+		if err := validResponse.VisitRevokeOtherSessionsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -11269,6 +12106,32 @@ func (sh *strictHandler) ListTracks(w http.ResponseWriter, r *http.Request, para
 	}
 }
 
+// ListRandomTracks operation middleware
+func (sh *strictHandler) ListRandomTracks(w http.ResponseWriter, r *http.Request, params ListRandomTracksParams) {
+	var request ListRandomTracksRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListRandomTracks(ctx, request.(ListRandomTracksRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListRandomTracks")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListRandomTracksResponseObject); ok {
+		if err := validResponse.VisitListRandomTracksResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // GetTrack operation middleware
 func (sh *strictHandler) GetTrack(w http.ResponseWriter, r *http.Request, id PathId) {
 	var request GetTrackRequestObject
@@ -11341,6 +12204,32 @@ func (sh *strictHandler) GetTrackLyrics(w http.ResponseWriter, r *http.Request, 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetTrackLyricsResponseObject); ok {
 		if err := validResponse.VisitGetTrackLyricsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListTrackPlaylists operation middleware
+func (sh *strictHandler) ListTrackPlaylists(w http.ResponseWriter, r *http.Request, id PathId) {
+	var request ListTrackPlaylistsRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListTrackPlaylists(ctx, request.(ListTrackPlaylistsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListTrackPlaylists")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListTrackPlaylistsResponseObject); ok {
+		if err := validResponse.VisitListTrackPlaylistsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

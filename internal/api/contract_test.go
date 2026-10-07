@@ -72,6 +72,12 @@ func TestMethodNotAllowed(t *testing.T) {
 				t.Errorf("%s: Allow %q, want %q", where, got, want)
 			}
 		}
+		// A method net/http does not name is refused too. On /tracks/random,
+		// which /tracks/{id} also matches, the refusal is that of
+		// /tracks/{id}, with its Allow.
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, httptest.NewRequest("PROPFIND", target, nil))
+		wantError(t, "PROPFIND "+path, rec, http.StatusMethodNotAllowed, "method_not_allowed")
 	}
 	if paths == 0 || refused == 0 {
 		t.Fatalf("%d paths, %d refusals", paths, refused)
@@ -314,8 +320,8 @@ func TestBodyLimitOnEveryOperationWithABody(t *testing.T) {
 			wantError(t, o.op.OperationID+" with "+name, rec, http.StatusRequestEntityTooLarge, "body_too_large")
 		}
 	}
-	if bodies != 10 {
-		t.Fatalf("%d operations with a body, want 10", bodies)
+	if bodies != 11 {
+		t.Fatalf("%d operations with a body, want 11", bodies)
 	}
 }
 

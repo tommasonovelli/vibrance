@@ -396,6 +396,21 @@ func (s *Service) Revoke(ctx context.Context, p Principal, sessionID string) err
 	return nil
 }
 
+// RevokeOthers ends every session of the user of the request, cookies and
+// tokens, except the session of the request itself
+// (docs/proposals/web-client-api.md B3). With no other session it changes
+// nothing, and is not an error.
+func (s *Service) RevokeOthers(ctx context.Context, p Principal) error {
+	err := s.store.WithWriteTx(ctx, func(q *store.Queries) error {
+		_, err := q.DeleteOtherSessionsOfUser(ctx, store.DeleteOtherSessionsOfUserParams{UserID: p.UserID, ID: p.SessionID})
+		return err
+	})
+	if err != nil {
+		return fmt.Errorf("auth: revoking the other sessions: %w", err)
+	}
+	return nil
+}
+
 // ChangePassword replaces the password of the user of the request and
 // revokes every other session of that user (§7.3); the session of the
 // request stays. A new password that is not valid is 422 password_invalid. A

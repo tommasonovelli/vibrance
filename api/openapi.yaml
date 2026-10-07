@@ -402,6 +402,34 @@ paths:
           $ref: "#/components/responses/Internal"
         "503":
           $ref: "#/components/responses/Unavailable"
+    delete:
+      operationId: revokeOtherSessions
+      tags: [Account]
+      summary: Sign out every other session
+      description: |
+        Revokes, at once, every session of the user of the request except
+        the one of this request: cookies of other browsers and tokens of
+        other devices alike. The session of the request stays, and the
+        sessions of other users are not touched. Idempotent: with no other
+        session the answer is `204` all the same.
+      parameters:
+        - $ref: "#/components/parameters/XVibranceRequest"
+      responses:
+        "204":
+          description: The other sessions are revoked.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/Unavailable"
   /me/sessions/{id}:
     delete:
       operationId: revokeSession
@@ -985,6 +1013,56 @@ paths:
           $ref: "#/components/responses/Internal"
         "503":
           $ref: "#/components/responses/Unavailable"
+  /tracks/random:
+    get:
+      operationId: listRandomTracks
+      tags: [Catalog]
+      summary: Available tracks chosen at random
+      description: |
+        Up to `limit` available tracks, chosen at random, none twice in the
+        same answer, in a random order. Not paginated: ask again for more,
+        and a later answer may repeat a track. Fewer than `limit` when fewer
+        tracks are available. `artist` keeps only the tracks of the albums
+        of one artist, as in `GET /tracks`; an id that is no artist's gives
+        an empty list.
+      parameters:
+        - name: artist
+          in: query
+          description: The id of an artist, to choose only among the tracks of its albums. An id that no artist has gives an empty list, not an error.
+          schema:
+            type: string
+            format: uuid
+            pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        - name: limit
+          in: query
+          description: The most tracks in the answer.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: The tracks.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RandomTrackList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/Unavailable"
   /tracks/{id}:
     get:
       operationId: getTrack
@@ -1535,6 +1613,50 @@ paths:
           $ref: "#/components/responses/Internal"
         "503":
           $ref: "#/components/responses/Unavailable"
+    post:
+      operationId: addFavoriteTracks
+      tags: [Favorites]
+      summary: Make several tracks favorites
+      description: |
+        Makes every track of `track_ids` a favorite, in one transaction: all
+        or nothing. Idempotent: a track that is a favorite already stays one,
+        with the date it had. The new favorites get dates one millisecond
+        apart, the first id the most recent, so the list of favorites shows
+        them in the order of the request; a repeated id counts once, at its
+        first place. `422 unknown_track` when an id is no track's;
+        `details.track_ids` lists those ids, each once, in the order of the
+        request, and nothing is changed. A track that is not available can
+        be made a favorite.
+      parameters:
+        - $ref: "#/components/parameters/XVibranceRequest"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FavoriteTracksRequest"
+      responses:
+        "204":
+          description: The tracks are favorites.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/Unavailable"
   /me/favorites/tracks/{id}:
     put:
       operationId: addFavoriteTrack
@@ -1585,6 +1707,42 @@ paths:
           headers:
             X-Request-Id:
               $ref: "#/components/headers/X-Request-Id"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /tracks/{id}/playlists:
+    get:
+      operationId: listTrackPlaylists
+      tags: [Playlists]
+      summary: The playlists of the user that hold a track
+      description: |
+        The playlists of the user of the request that have at least one item
+        with this track, the oldest first, as `GET /playlists`. Never the
+        playlists of another user. A track that is not available is looked
+        for all the same. `404 track_not_found` when there is no such track.
+      parameters:
+        - $ref: "#/components/parameters/PathId"
+      responses:
+        "200":
+          description: The playlists.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaylistRefList"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -3069,6 +3227,16 @@ components:
             $ref: "#/components/schemas/Track"
         next:
           $ref: "#/components/schemas/Cursor"
+    RandomTrackList:
+      type: object
+      description: "Available tracks chosen at random, none twice, in a random order."
+      required: [tracks]
+      properties:
+        tracks:
+          type: array
+          maxItems: 200
+          items:
+            $ref: "#/components/schemas/Track"
     CatalogSummary:
       type: object
       description: "How much music is available."
@@ -3207,6 +3375,25 @@ components:
       example:
         track_count: 86
         duration_ms: 20460000
+    FavoriteTracksRequest:
+      type: object
+      description: "The tracks to make favorites."
+      additionalProperties: false
+      required: [track_ids]
+      properties:
+        track_ids:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          description: The tracks, in the order the list of favorites is to show them. An id may be repeated; it counts once, at its first place.
+          items:
+            type: string
+            format: uuid
+            pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      example:
+        track_ids:
+          - 0199a5c0-7b1e-7c3a-9d2f-4b6a8c0e1f23
+          - 0199a5c1-0c4d-7b88-8e21-3f5a7c9d1b46
     Playlist:
       type: object
       description: "A playlist of the user, without its items."
@@ -3275,6 +3462,25 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Playlist"
+    PlaylistRef:
+      type: object
+      description: "A playlist of the user, by its id and its name."
+      required: [id, name]
+      properties:
+        id:
+          $ref: "#/components/schemas/Id"
+        name:
+          type: string
+    PlaylistRefList:
+      type: object
+      description: "Playlists of the user, the oldest first."
+      required: [playlists]
+      properties:
+        playlists:
+          type: array
+          maxItems: 500
+          items:
+            $ref: "#/components/schemas/PlaylistRef"
     PlaylistInput:
       type: object
       description: "The name and the description of a playlist: both are sent, at creation and at every change."

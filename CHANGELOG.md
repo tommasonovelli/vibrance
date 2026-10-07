@@ -10,6 +10,10 @@ Versions follow [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 - **Every track in one list.** `GET /api/v1/tracks` lists the available tracks, paged, by title, by artist, album after album, or by when Vibrance first saw them, in either direction, optionally only those of the albums of one artist. A track that MusicLib moves to another album keeps its place among the recently added. The first start after the upgrade computes the sort keys of every track once before it serves.
 - **Covers of the playlists.** Every playlist the API returns carries `covers`: up to four covers of distinct albums from its available items, in their order, for a mosaic.
 - **How much there is.** `GET /api/v1/catalog/summary` counts the available artists, albums and tracks and their duration; `GET /api/v1/me/favorites/summary` counts the favorites of the user and the duration of the available ones.
+- **Shuffle.** `GET /api/v1/tracks/random` chooses up to 200 available tracks at random, none twice in one answer, from the whole library or from the albums of one artist.
+- **Several favorites at once.** `POST /api/v1/me/favorites/tracks` makes a list of tracks favorites in one request, all or none, and the list of the favorites shows them in the order sent.
+- **Sign out everywhere else.** `DELETE /api/v1/me/sessions` ends every session of the account, cookies and tokens, except the one of the request.
+- **The playlists that hold a track.** `GET /api/v1/tracks/{id}/playlists` lists the playlists of the user that have the track. A new migration adds the index it reads.
 
 ## [0.1.0] - 2026-10-06
 

@@ -49,6 +49,7 @@ var authorizationMatrix = map[string]access{
 	"getMe":               {s401, s200, s200, 0},
 	"changePassword":      {s401, s204, s204, 0},
 	"listSessions":        {s401, s200, s200, 0},
+	"revokeOtherSessions": {s401, s204, s204, 0},
 	"revokeSession":       {s401, s204, s204, s404},
 	"listUsers":           {s401, s403, s200, 0},
 	"createUser":          {s401, s403, s201, 0},
@@ -62,6 +63,7 @@ var authorizationMatrix = map[string]access{
 	"getArtist":           {s401, s200, s200, 0},
 	"listAlbums":          {s401, s200, s200, 0},
 	"listTracks":          {s401, s200, s200, 0},
+	"listRandomTracks":    {s401, s200, s200, 0},
 	"getAlbum":            {s401, s200, s200, 0},
 	"getTrack":            {s401, s200, s200, 0},
 	"getCatalogSummary":   {s401, s200, s200, 0},
@@ -72,8 +74,10 @@ var authorizationMatrix = map[string]access{
 	"listFavoriteTracks":  {s401, s200, s200, 0},
 	"getFavoritesSummary": {s401, s200, s200, 0},
 	"addFavoriteTrack":    {s401, s204, s204, 0},
+	"addFavoriteTracks":   {s401, s204, s204, 0},
 	"removeFavoriteTrack": {s401, s204, s204, 0},
 	"listPlaylists":       {s401, s200, s200, 0},
+	"listTrackPlaylists":  {s401, s200, s200, 0},
 	"createPlaylist":      {s401, s201, s201, 0},
 	"getPlaylist":         {s401, s200, s200, s404},
 	"updatePlaylist":      {s401, s200, s200, s404},
@@ -105,6 +109,13 @@ var matrixRequests = map[string]matrixRequest{
 		return "PUT", "/me/password", map[string]any{"current_password": owner.password, "new_password": "a new password of the matrix"}, ""
 	},
 	"listSessions": func(*world, *account, *account) (string, string, any, string) { return "GET", "/me/sessions", nil, "" },
+	// The sessions revoked are those of the session of the request: no
+	// request names another user (TestRevokeOtherSessions proves that the
+	// sessions of the others stay).
+	"revokeOtherSessions": func(w *world, _, owner *account) (string, string, any, string) {
+		w.token(owner)
+		return "DELETE", "/me/sessions", nil, ""
+	},
 	"revokeSession": func(w *world, _, owner *account) (string, string, any, string) {
 		return "DELETE", "/me/sessions/" + w.token(owner).Session.ID, nil, ""
 	},
@@ -147,6 +158,10 @@ var matrixRequests = map[string]matrixRequest{
 		w.catalogEntry()
 		return "GET", "/tracks", nil, ""
 	},
+	"listRandomTracks": func(w *world, _, _ *account) (string, string, any, string) {
+		w.catalogEntry()
+		return "GET", "/tracks/random", nil, ""
+	},
 	"getAlbum": func(w *world, _, _ *account) (string, string, any, string) {
 		w.catalogEntry()
 		return "GET", "/albums/" + entryAlbum, nil, ""
@@ -185,6 +200,10 @@ var matrixRequests = map[string]matrixRequest{
 		w.catalogEntry()
 		return "PUT", "/me/favorites/tracks/" + entryTrack, nil, ""
 	},
+	"addFavoriteTracks": func(w *world, _, _ *account) (string, string, any, string) {
+		w.catalogEntry()
+		return "POST", "/me/favorites/tracks", map[string]any{"track_ids": []string{entryTrack}}, ""
+	},
 	"removeFavoriteTrack": func(w *world, _, _ *account) (string, string, any, string) {
 		w.catalogEntry()
 		return "DELETE", "/me/favorites/tracks/" + entryTrack, nil, ""
@@ -192,6 +211,13 @@ var matrixRequests = map[string]matrixRequest{
 	// A playlist is of owner, with one item: the row says what another user,
 	// and an admin, get on it.
 	"listPlaylists": func(*world, *account, *account) (string, string, any, string) { return "GET", "/playlists", nil, "" },
+	// The track is of nobody, and the playlists listed are those of the
+	// session: the playlist of owner with the track is listed to owner, and
+	// to nobody else (TestTrackPlaylists).
+	"listTrackPlaylists": func(w *world, _, owner *account) (string, string, any, string) {
+		w.playlistWithItem(owner)
+		return "GET", "/tracks/" + entryTrack + "/playlists", nil, ""
+	},
 	"createPlaylist": func(*world, *account, *account) (string, string, any, string) {
 		return "POST", "/playlists", map[string]any{"name": "A playlist of the matrix", "description": ""}, ""
 	},

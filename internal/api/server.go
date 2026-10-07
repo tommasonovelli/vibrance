@@ -123,9 +123,52 @@ func Register(mux *http.ServeMux, doc *openapi3.T, srv StrictServerInterface, au
 		Middlewares:      []MiddlewareFunc{authenticate, httpx.NewContract(doc, BasePath, log).Check},
 		ErrorHandlerFunc: e.badParameter,
 	})
-	for path, item := range doc.Paths.Map() {
-		mux.Handle(BasePath+path, httpx.MethodNotAllowed(log, allowed(item)))
+	paths := doc.Paths.Map()
+	for path, item := range paths {
+		refuse := httpx.MethodNotAllowed(log, allowed(item))
+		if !shadowed(path, paths) {
+			mux.Handle(BasePath+path, refuse)
+			continue
+		}
+		// A path that another path of the specification also matches, as
+		// /tracks/random and /tracks/{id}: a pattern of it without a method
+		// would conflict with the operations of the other, which have one,
+		// and the mux would refuse it. It is refused by method instead, for
+		// every method net/http names; another method reaches the refusal
+		// of the other path, a 405 all the same.
+		for _, method := range httpMethods {
+			if item.GetOperation(method) == nil && (method != http.MethodHead || item.Get == nil) {
+				mux.Handle(method+" "+BasePath+path, refuse)
+			}
+		}
 	}
+}
+
+// httpMethods are the methods net/http names.
+var httpMethods = []string{http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch,
+	http.MethodDelete, http.MethodConnect, http.MethodOptions, http.MethodTrace}
+
+// shadowed tells whether another of paths matches path as a pattern: each
+// segment is the same, or a parameter of the other.
+func shadowed(path string, paths map[string]*openapi3.PathItem) bool {
+	segments := strings.Split(path, "/")
+	for other := range paths {
+		those := strings.Split(other, "/")
+		if other == path || len(those) != len(segments) {
+			continue
+		}
+		matches := true
+		for i, s := range those {
+			if s != segments[i] && !strings.HasPrefix(s, "{") {
+				matches = false
+				break
+			}
+		}
+		if matches {
+			return true
+		}
+	}
+	return false
 }
 
 type requestKey struct{}

@@ -843,6 +843,53 @@ func TestRevoke(t *testing.T) {
 	wantRefusal(t, err, http.StatusUnauthorized, CodeLoginRequired)
 }
 
+// "Sign out everywhere else" (docs/proposals/web-client-api.md B3): every
+// other session of the user goes, cookies and tokens, a token as the
+// session of the request included; the session of the request stays, and
+// so do the sessions of everyone else. Again, with nothing left to revoke,
+// it changes nothing and is not an error.
+func TestRevokeOthers(t *testing.T) {
+	for _, kind := range []string{KindCookie, KindToken} {
+		t.Run(kind, func(t *testing.T) {
+			f := newFixture(t)
+			f.user(t, "alice", alicePassword, RoleUser)
+			f.user(t, "bob", bobPassword, RoleAdmin)
+			current := f.login(t, "alice", alicePassword)
+			if kind == KindToken {
+				current = f.token(t, "alice", alicePassword)
+			}
+			others := []SignIn{f.login(t, "alice", alicePassword), f.token(t, "alice", alicePassword), f.login(t, "alice", alicePassword)}
+			bob := []SignIn{f.login(t, "bob", bobPassword), f.token(t, "bob", bobPassword)}
+			p := f.principal(t, current)
+
+			for range 2 {
+				if err := f.RevokeOthers(t.Context(), p); err != nil {
+					t.Fatal(err)
+				}
+				for _, in := range others {
+					_, err := f.Authenticate(t.Context(), in.Session.Kind, in.Token)
+					wantRefusal(t, err, http.StatusUnauthorized, CodeLoginRequired)
+				}
+				f.principal(t, current)
+				for _, in := range bob {
+					f.principal(t, in)
+				}
+				if rows := f.sessions(t); len(rows) != 3 {
+					t.Fatalf("%d sessions are left, want the current one and the two of bob", len(rows))
+				}
+			}
+			// The admin that signs out everywhere else leaves alice signed in.
+			if err := f.RevokeOthers(t.Context(), f.principal(t, bob[0])); err != nil {
+				t.Fatal(err)
+			}
+			f.principal(t, current)
+			f.principal(t, bob[0])
+			_, err := f.Authenticate(t.Context(), bob[1].Session.Kind, bob[1].Token)
+			wantRefusal(t, err, http.StatusUnauthorized, CodeLoginRequired)
+		})
+	}
+}
+
 // §7.3: a change of password revokes every other session of the user, and
 // leaves the session of the request and the sessions of everyone else.
 func TestChangePasswordRevokesTheOtherSessions(t *testing.T) {

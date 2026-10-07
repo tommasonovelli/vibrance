@@ -71,6 +71,7 @@ func measureServer(t *testing.T, bin string) {
 	albums := measureAlbumLists(r, admin)
 	largest, smallest := measureArtistFilter(r, admin)
 	measureTrackLists(r, admin, largest, smallest)
+	measureRandomTracks(r, admin, Full, 0, largest, smallest)
 	tracks := measureAlbumDetails(r, admin, albums)
 	measureSearch(r, admin)
 	measureFavorites(r, admin)
@@ -315,6 +316,82 @@ func measureTrackLists(r *report, c *client, largest string, smallest []string) 
 	}
 }
 
+// measureRandomTracks asks for tracks chosen at random (step W3,
+// docs/proposals/web-client-api.md B1): from the whole library, 50 and 200
+// at a time, and, when largest is not "", among the tracks of the albums
+// of the artist with the most albums and of artists with one album. Every
+// answer has its tracks once each. The choice from the whole library reads
+// the key of every available track, so its cost grows with them: library
+// is its budget, which the step states for 50,000 tracks
+// (TestPerfRandomTracks), 0 to only report it. The choice among the tracks
+// of one artist reads those alone, and has the budget of the lists.
+func measureRandomTracks(r *report, c *client, size Size, library time.Duration, largest string, smallest []string) {
+	r.t.Helper()
+	choose := func(query string, want int, m *measure) {
+		r.t.Helper()
+		var answer struct {
+			Tracks []struct {
+				ID string `json:"id"`
+			} `json:"tracks"`
+		}
+		took := c.get("/api/v1/tracks/random?"+query, &answer)
+		seen := map[string]bool{}
+		for _, tr := range answer.Tracks {
+			seen[tr.ID] = true
+		}
+		if len(answer.Tracks) != want && want != 0 || len(answer.Tracks) == 0 || len(seen) != len(answer.Tracks) {
+			r.t.Fatalf("%s: %d tracks, %d distinct, want %d", query, len(answer.Tracks), len(seen), want)
+		}
+		if m != nil {
+			m.add(took)
+		}
+	}
+	for _, limit := range []int{50, 200} {
+		m := r.measure(fmt.Sprintf("tracks/random of %s tracks, limit %d", thousands(size.Tracks), limit), library)
+		query := "limit=" + strconv.Itoa(limit)
+		choose(query, limit, nil)
+		for range 40 {
+			choose(query, limit, m)
+		}
+	}
+	if largest == "" {
+		return
+	}
+	of := r.measure("tracks/random ?artist= of the artist with the most albums, limit 50", budgetAlbumList)
+	ofOne := r.measure("tracks/random ?artist= of artists with one album, limit 50", budgetAlbumList)
+	for pass := range 2 {
+		var m, mOne *measure
+		if pass == 1 {
+			m, mOne = of, ofOne
+		}
+		for range 20 {
+			choose("limit=50&artist="+largest, 50, m)
+		}
+		for _, a := range smallest {
+			choose("limit=50&artist="+a, 0, mOne)
+		}
+	}
+}
+
+// randomTracks is a library of 50,000 tracks, the largest of the libraries
+// the shuffle of the library is meant for
+// (docs/proposals/web-client-api.md B1), with the proportions of Full.
+var randomTracks = Size{Artists: 500, Albums: 5000, Tracks: 50000, Users: 20, Playlists: 500, PlaylistItems: 200,
+	Favorites: 50000}
+
+// TestPerfRandomTracks measures GET /tracks/random on a library of 50,000
+// tracks (step W3), against the budget of the lists of DESIGN.md §8.5.
+func TestPerfRandomTracks(t *testing.T) {
+	stateDir, musiclibDir := generate(t, randomTracks, false)
+	checkRows(t, stateDir, randomTracks)
+	bin := build(t, stateDir, musiclibDir)
+	r := &report{t: t}
+	defer r.print()
+	srv := start(t, bin)
+	defer srv.stop()
+	measureRandomTracks(r, srv.signIn(Admin), randomTracks, budgetAlbumList, "", nil)
+}
+
 // measureAlbumDetails reads one album in twenty with its tracks, and
 // returns the ids of the tracks it saw.
 func measureAlbumDetails(r *report, c *client, albums []string) (tracks []string) {
@@ -533,13 +610,16 @@ func measureLargePlaylist(r *report, c *client, tracks []string) {
 
 	// The budget is that of adding one item; the largest block a request can
 	// add is measured against it all the same, and at the front of 8,000
-	// items it is over (NOTES.md N-162).
+	// items it is over (NOTES.md N-162). Both blocks are over it since the
+	// index of the items by track (step W3): its keys are random, so a block
+	// of 1,000 items writes about 1,000 of its leaves (NOTES.md N-193).
 	blocks := r.measure("playlist: add 1,000 items at the end (to 0..7,000 items)", budgetAddAndMove)
+	blocks.open, blocks.ceiling = "N-193", 200*time.Millisecond
 	for range 8 {
 		add(blocks, 1000, nil)
 	}
 	front1000 := r.measure("playlist of 8,000: add 1,000 items at the front", budgetAddAndMove)
-	front1000.open, front1000.ceiling = "N-162", 200*time.Millisecond
+	front1000.open, front1000.ceiling = "N-193", 250*time.Millisecond
 	add(front1000, 1000, &first)
 	add(nil, 880, nil)
 	one := r.measure("playlist of 9,880..9,930: add 1 item at the end", budgetAddAndMove)

@@ -44,6 +44,57 @@ func (s *Service) AddFavorite(ctx context.Context, userID, trackID string) error
 	return changeFailure("adding a favorite", err)
 }
 
+// AddFavorites makes every track of trackIDs, available or not, a favorite
+// of userID, in one write transaction: all or nothing
+// (docs/proposals/web-client-api.md B2). It is idempotent: a track that is
+// a favorite already keeps its moment. A repeated id counts once, at its
+// first place. The list of the favorites is ordered by moment, to the
+// millisecond: one moment for the whole request would order its tracks by
+// their ids, so the new favorites get moments one millisecond apart, the
+// first id now, the second now-1, and so on, and the list, the most recent
+// first, shows them in the order given. Ids that are no tracks are 422
+// unknown_track, with those ids in details.track_ids, each once, in the
+// order given.
+func (s *Service) AddFavorites(ctx context.Context, userID string, trackIDs []string) error {
+	ids := distinct(trackIDs)
+	now := s.now().UnixMilli()
+	err := s.store.WithWriteTx(ctx, func(q *store.Queries) error {
+		var unknown []string
+		for _, id := range ids {
+			found, err := q.TrackExists(ctx, id)
+			if err != nil {
+				return err
+			}
+			if !found {
+				unknown = append(unknown, id)
+			}
+		}
+		if len(unknown) != 0 {
+			return refusedTracks(CodeUnknownTrack, "Some tracks do not exist.", unknown)
+		}
+		for i, id := range ids {
+			if err := q.AddFavorite(ctx, store.AddFavoriteParams{UserID: userID, TrackID: id, CreatedAt: now - int64(i)}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	return changeFailure("adding favorites", err)
+}
+
+// distinct returns ids without repetitions, each at its first place.
+func distinct(ids []string) []string {
+	seen := make(map[string]bool, len(ids))
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
 // RemoveFavorite makes a track no longer a favorite of userID. It is
 // idempotent: a track that is not a favorite changes nothing. A track that
 // does not exist is 404 track_not_found.
@@ -69,8 +120,8 @@ func knownTrack(ctx context.Context, q *store.Queries, id string) error {
 	return nil
 }
 
-// changeFailure is the error of a change of the favorites or of a playlist:
-// a refusal as it is, anything else with what was being done.
+// changeFailure is the error of an operation on the favorites or the
+// playlists: a refusal as it is, anything else with what was being done.
 func changeFailure(doing string, err error) error {
 	var refusal *httpx.Error
 	switch {

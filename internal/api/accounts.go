@@ -113,6 +113,19 @@ func (s Server) RevokeSession(ctx context.Context, req RevokeSessionRequestObjec
 	return RevokeSession204Response{}, nil
 }
 
+// RevokeOtherSessions revokes every session of the account of the request
+// but the session of the request.
+func (s Server) RevokeOtherSessions(ctx context.Context, _ RevokeOtherSessionsRequestObject) (RevokeOtherSessionsResponseObject, error) {
+	p, err := principal(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.accounts.Load().RevokeOthers(ctx, p); err != nil {
+		return nil, err
+	}
+	return RevokeOtherSessions204Response{}, nil
+}
+
 // ListUsers lists every account.
 func (s Server) ListUsers(ctx context.Context, _ ListUsersRequestObject) (ListUsersResponseObject, error) {
 	users, err := s.accounts.Load().ListUsers(ctx)

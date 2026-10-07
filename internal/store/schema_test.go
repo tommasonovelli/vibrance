@@ -193,7 +193,8 @@ func TestSchemaColumns(t *testing.T) {
 // id), which the list of the artists needs (DESIGN.md S15), and tracks(id,
 // available, duration_ms), which the duration of a playlist is read from
 // (DESIGN.md S24), and the four orders of the list of the tracks (step W1),
-// and no others.
+// and playlist_items(track_id, playlist_id), which the playlists of a track
+// are read from (step W3), and no others.
 func TestSchemaIndexes(t *testing.T) {
 	s := newStore(t)
 	want := []string{
@@ -205,6 +206,7 @@ func TestSchemaIndexes(t *testing.T) {
 		"artists_sort_idx ON artists (sort_key, id)",
 		"favorites_user_created_idx ON favorites (user_id, created_at, track_id)",
 		"playlist_items_position_idx ON playlist_items (playlist_id, position, id)",
+		"playlist_items_track_idx ON playlist_items (track_id, playlist_id)",
 		"sessions_expires_at_idx ON sessions (expires_at)",
 		"sessions_user_id_idx ON sessions (user_id)",
 		"tracks_album_disc_no_idx ON tracks (album_id, disc, no)",

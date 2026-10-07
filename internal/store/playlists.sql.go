@@ -341,6 +341,56 @@ func (q *Queries) ListPlaylistItems(ctx context.Context, arg ListPlaylistItemsPa
 	return items, nil
 }
 
+const listPlaylistRefsOfUserWithTrack = `-- name: ListPlaylistRefsOfUserWithTrack :many
+SELECT playlists.id, playlists.name
+FROM playlists
+WHERE playlists.id IN (SELECT playlist_items.playlist_id FROM playlist_items
+                       WHERE playlist_items.track_id = ?1)
+  AND playlists.user_id = ?2
+ORDER BY playlists.created_at, playlists.id
+`
+
+type ListPlaylistRefsOfUserWithTrackParams struct {
+	TrackID string
+	UserID  string
+}
+
+type ListPlaylistRefsOfUserWithTrackRow struct {
+	ID   string
+	Name string
+}
+
+// ListPlaylistRefsOfUserWithTrack returns the id and the name of every
+// playlist of a user that has at least one item with a track, the oldest
+// first, as ListPlaylistsOfUser (GET /tracks/{id}/playlists,
+// docs/proposals/web-client-api.md B4). It names the owner, like the three
+// queries above: the playlists of another user are never listed (DESIGN.md
+// 8.6, I6). The items of the track, and so their playlists, are read from
+// playlist_items_track_idx, and each playlist by its key: a track is in a
+// few playlists, and the playlists of every user are not read.
+func (q *Queries) ListPlaylistRefsOfUserWithTrack(ctx context.Context, arg ListPlaylistRefsOfUserWithTrackParams) ([]ListPlaylistRefsOfUserWithTrackRow, error) {
+	rows, err := q.db.QueryContext(ctx, listPlaylistRefsOfUserWithTrack, arg.TrackID, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlaylistRefsOfUserWithTrackRow
+	for rows.Next() {
+		var i ListPlaylistRefsOfUserWithTrackRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPlaylistsOfUser = `-- name: ListPlaylistsOfUser :many
 SELECT playlists.id, playlists.user_id, playlists.name, playlists.description, playlists.revision, playlists.created_at, playlists.updated_at,
     (SELECT count(*) FROM playlist_items

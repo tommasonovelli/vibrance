@@ -65,7 +65,7 @@ type DeleteOtherSessionsOfUserParams struct {
 }
 
 // DeleteOtherSessionsOfUser revokes every session of a user but one, the
-// one that asked for a change of password.
+// one that asked for a change of password or to sign out everywhere else.
 func (q *Queries) DeleteOtherSessionsOfUser(ctx context.Context, arg DeleteOtherSessionsOfUserParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, deleteOtherSessionsOfUser, arg.UserID, arg.ID)
 	if err != nil {

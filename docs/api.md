@@ -43,6 +43,12 @@ curl -sS -H "$AUTH" "$BASE/me"
 
 The examples below use the token. `POST /auth/logout` with it ends its session.
 
+`GET /me/sessions` lists the sessions of the account, the one of the request marked `current`. `DELETE /me/sessions/SESSION_ID` ends one of them; `DELETE /me/sessions` ends every one but the session of the request, cookies and tokens alike ("sign out everywhere else"):
+
+```sh
+curl -sS -H "$AUTH" -H 'X-Vibrance-Request: 1' -X DELETE "$BASE/me/sessions"   # 204: only this session is left
+```
+
 ## Albums
 
 Lists are paginated with `limit` (default 50, at most 200) and `after`: send the `next` of a page as the `after` of the following request, with the same other parameters, until `next` is `null`.
@@ -63,6 +69,22 @@ The cover of an album is at the `cover.url` of the album (`/api/v1/albums/ALBUM_
 ```sh
 curl -sS -H "$AUTH" "$BASE/tracks?sort=added&order=desc&limit=50"
 curl -sS -H "$AUTH" "$BASE/tracks?sort=album&artist=ARTIST_ID"
+```
+
+`GET /tracks/random` chooses up to `limit` available tracks at random (default 50, at most 200), none twice in one answer, optionally among the tracks of the albums of one artist. It has no cursor: to shuffle on, ask again, and a later answer may repeat a track.
+
+```sh
+curl -sS -H "$AUTH" "$BASE/tracks/random?limit=50"
+curl -sS -H "$AUTH" "$BASE/tracks/random?artist=ARTIST_ID"
+```
+
+## Favorites
+
+`PUT /me/favorites/tracks/TRACK_ID` makes one track a favorite, `DELETE` the same path undoes it. `POST /me/favorites/tracks` makes several favorites at once, all or none: an album, for example. The list of the favorites, the most recent first, then shows them in the order sent. Tracks that are favorites already keep their date; an id that is no track answers `422 unknown_track`, with the ids in `details.track_ids`, and changes nothing.
+
+```sh
+curl -sS -H "$AUTH" -H 'X-Vibrance-Request: 1' -H 'Content-Type: application/json' \n  -d '{"track_ids":["TRACK_ID_1","TRACK_ID_2"]}' "$BASE/me/favorites/tracks"   # 204
+curl -sS -H "$AUTH" "$BASE/me/favorites/tracks?limit=50"
 ```
 
 ## How much there is
@@ -110,6 +132,8 @@ curl -sS -H "$AUTH" "$BASE/playlists/PLAYLIST_ID/items"
 ```
 
 Every playlist carries `covers`: up to four covers of distinct albums, from the items whose track is available, in the order of the items, skipping albums without a cover; empty when there is none. Draw one cover with fewer than four, a 2×2 mosaic with four.
+
+`GET /tracks/TRACK_ID/playlists` lists, by id and name, the playlists of the user that hold a track, for the check marks of an "Add to playlist" menu.
 
 Without `If-Match` the move answers `428 precondition_required`. With the `etag` of an older revision it answers `412 precondition_failed` and changes nothing: read the playlist again (`GET /playlists/PLAYLIST_ID`), apply the change to what it is now, and send it with the new `etag`.
 

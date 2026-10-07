@@ -296,3 +296,31 @@ var trackOrders = map[[2]string]trackOrder{
 		},
 	},
 }
+
+// ListRandomTracks returns up to limit available tracks chosen at random,
+// none twice, in a random order (GET /tracks/random,
+// docs/proposals/web-client-api.md B1), each with whether it is a favorite
+// of userID. artistID, when not "", chooses only among the tracks of the
+// available albums of that artist, as TrackQuery.ArtistID; an id that is no
+// artist's gives no track. There is no cursor: a later call chooses again,
+// and may choose a track again.
+func (s *Service) ListRandomTracks(ctx context.Context, userID, artistID string, limit int) ([]Track, error) {
+	var rows []trackRow
+	err := s.store.Read(ctx, func(q *store.Queries) (err error) {
+		if artistID == "" {
+			rows, err = trackRows(q.ListRandomTracks(ctx, store.ListRandomTracksParams{UserID: userID, PageSize: int64(limit)}))
+		} else {
+			rows, err = trackRows(q.ListRandomTracksOfArtist(ctx, store.ListRandomTracksOfArtistParams{UserID: userID,
+				ArtistID: artistID, PageSize: int64(limit)}))
+		}
+		return err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("catalog: choosing tracks at random: %w", err)
+	}
+	tracks := make([]Track, 0, len(rows))
+	for _, r := range rows {
+		tracks = append(tracks, trackInAlbum(r))
+	}
+	return tracks, nil
+}

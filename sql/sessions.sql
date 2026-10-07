@@ -41,7 +41,7 @@ DELETE FROM sessions WHERE user_id = ?;
 
 -- name: DeleteOtherSessionsOfUser :execrows
 -- DeleteOtherSessionsOfUser revokes every session of a user but one, the
--- one that asked for a change of password.
+-- one that asked for a change of password or to sign out everywhere else.
 DELETE FROM sessions WHERE user_id = sqlc.arg(user_id) AND id <> sqlc.arg(id);
 
 -- name: DeleteExpiredSessions :execrows

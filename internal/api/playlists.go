@@ -32,6 +32,23 @@ func (s Server) ListPlaylists(ctx context.Context, _ ListPlaylistsRequestObject)
 	return ListPlaylists200JSONResponse{Body: body}, nil
 }
 
+// ListTrackPlaylists lists the playlists of the user that hold a track.
+func (s Server) ListTrackPlaylists(ctx context.Context, req ListTrackPlaylistsRequestObject) (ListTrackPlaylistsResponseObject, error) {
+	p, err := principal(ctx)
+	if err != nil {
+		return nil, err
+	}
+	refs, err := s.catalog.Load().ListTrackPlaylists(ctx, p.UserID, req.Id.String())
+	if err != nil {
+		return nil, err
+	}
+	body := PlaylistRefList{Playlists: make([]PlaylistRef, 0, len(refs))}
+	for _, r := range refs {
+		body.Playlists = append(body.Playlists, PlaylistRef{Id: r.ID, Name: r.Name})
+	}
+	return ListTrackPlaylists200JSONResponse{Body: body}, nil
+}
+
 // CreatePlaylist makes an empty playlist of the user.
 func (s Server) CreatePlaylist(ctx context.Context, req CreatePlaylistRequestObject) (CreatePlaylistResponseObject, error) {
 	p, err := principal(ctx)

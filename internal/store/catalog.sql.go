@@ -3209,6 +3209,214 @@ func (q *Queries) ListAvailableTracksOfAlbum(ctx context.Context, arg ListAvaila
 	return items, nil
 }
 
+const listRandomTracks = `-- name: ListRandomTracks :many
+SELECT tracks.seq, tracks.id, tracks.album_id, tracks.fingerprint, tracks.fp_version, tracks.occurrence, tracks.disc, tracks."no", tracks.title, tracks.artist, tracks.genre, tracks.rel_path, tracks.file_size, tracks.file_mtime_ns, tracks.file_sha256, tracks.codec, tracks.sample_rate, tracks.channels, tracks.bit_depth, tracks.bitrate, tracks.duration_ms, tracks.lyrics_rel, tracks.lyrics_sha256, tracks.rg_track_gain, tracks.rg_track_peak, tracks.rg_album_gain, tracks.rg_album_peak, tracks.available, tracks.updated_at, tracks.title_key, tracks.artist_key, tracks.album_key, tracks.first_seen_at,
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = ?1 AND favorites.track_id = tracks.id) AS favorite
+FROM tracks NOT INDEXED
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.seq IN (
+    SELECT t.seq
+    FROM tracks AS t INDEXED BY tracks_first_seen_idx
+    WHERE t.available = 1
+    ORDER BY random()
+    LIMIT ?2
+)
+ORDER BY random()
+`
+
+type ListRandomTracksParams struct {
+	UserID   string
+	PageSize int64
+}
+
+type ListRandomTracksRow struct {
+	Track            Track
+	AlbumTitle       string
+	AlbumYear        sql.NullInt64
+	AlbumCoverSha256 sql.NullString
+	AlbumArtistID    string
+	AlbumArtistName  string
+	Favorite         bool
+}
+
+// ListRandomTracks returns up to page_size available tracks chosen at
+// random, none twice, in a random order (GET /tracks/random,
+// docs/proposals/web-client-api.md B1). The inner query reads the key of
+// every available track from tracks_first_seen_idx, the smallest index that
+// begins with available, and keeps page_size of them by a random value;
+// the outer one reads what the API shows for those rows alone, found by
+// their key and by no index, as the lists of one artist do. A key is a
+// row: a track cannot be chosen twice.
+func (q *Queries) ListRandomTracks(ctx context.Context, arg ListRandomTracksParams) ([]ListRandomTracksRow, error) {
+	rows, err := q.db.QueryContext(ctx, listRandomTracks, arg.UserID, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRandomTracksRow
+	for rows.Next() {
+		var i ListRandomTracksRow
+		if err := rows.Scan(
+			&i.Track.Seq,
+			&i.Track.ID,
+			&i.Track.AlbumID,
+			&i.Track.Fingerprint,
+			&i.Track.FpVersion,
+			&i.Track.Occurrence,
+			&i.Track.Disc,
+			&i.Track.No,
+			&i.Track.Title,
+			&i.Track.Artist,
+			&i.Track.Genre,
+			&i.Track.RelPath,
+			&i.Track.FileSize,
+			&i.Track.FileMtimeNs,
+			&i.Track.FileSha256,
+			&i.Track.Codec,
+			&i.Track.SampleRate,
+			&i.Track.Channels,
+			&i.Track.BitDepth,
+			&i.Track.Bitrate,
+			&i.Track.DurationMs,
+			&i.Track.LyricsRel,
+			&i.Track.LyricsSha256,
+			&i.Track.RgTrackGain,
+			&i.Track.RgTrackPeak,
+			&i.Track.RgAlbumGain,
+			&i.Track.RgAlbumPeak,
+			&i.Track.Available,
+			&i.Track.UpdatedAt,
+			&i.Track.TitleKey,
+			&i.Track.ArtistKey,
+			&i.Track.AlbumKey,
+			&i.Track.FirstSeenAt,
+			&i.AlbumTitle,
+			&i.AlbumYear,
+			&i.AlbumCoverSha256,
+			&i.AlbumArtistID,
+			&i.AlbumArtistName,
+			&i.Favorite,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRandomTracksOfArtist = `-- name: ListRandomTracksOfArtist :many
+SELECT tracks.seq, tracks.id, tracks.album_id, tracks.fingerprint, tracks.fp_version, tracks.occurrence, tracks.disc, tracks."no", tracks.title, tracks.artist, tracks.genre, tracks.rel_path, tracks.file_size, tracks.file_mtime_ns, tracks.file_sha256, tracks.codec, tracks.sample_rate, tracks.channels, tracks.bit_depth, tracks.bitrate, tracks.duration_ms, tracks.lyrics_rel, tracks.lyrics_sha256, tracks.rg_track_gain, tracks.rg_track_peak, tracks.rg_album_gain, tracks.rg_album_peak, tracks.available, tracks.updated_at, tracks.title_key, tracks.artist_key, tracks.album_key, tracks.first_seen_at,
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = ?1 AND favorites.track_id = tracks.id) AS favorite
+FROM tracks NOT INDEXED
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.seq IN (
+    SELECT t.seq
+    FROM albums AS a INDEXED BY albums_artist_id_idx
+    JOIN tracks AS t INDEXED BY tracks_album_disc_no_idx ON t.album_id = a.id
+    WHERE a.artist_id = ?2 AND a.available = 1 AND t.available = 1
+    ORDER BY random()
+    LIMIT ?3
+)
+ORDER BY random()
+`
+
+type ListRandomTracksOfArtistParams struct {
+	UserID   string
+	ArtistID string
+	PageSize int64
+}
+
+type ListRandomTracksOfArtistRow struct {
+	Track            Track
+	AlbumTitle       string
+	AlbumYear        sql.NullInt64
+	AlbumCoverSha256 sql.NullString
+	AlbumArtistID    string
+	AlbumArtistName  string
+	Favorite         bool
+}
+
+// ListRandomTracksOfArtist is ListRandomTracks among the available tracks
+// of the available albums of one artist (the artist of the album, as for
+// GET /tracks?artist=): their albums from albums_artist_id_idx and their
+// tracks from tracks_album_disc_no_idx, as the lists of one artist.
+func (q *Queries) ListRandomTracksOfArtist(ctx context.Context, arg ListRandomTracksOfArtistParams) ([]ListRandomTracksOfArtistRow, error) {
+	rows, err := q.db.QueryContext(ctx, listRandomTracksOfArtist, arg.UserID, arg.ArtistID, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRandomTracksOfArtistRow
+	for rows.Next() {
+		var i ListRandomTracksOfArtistRow
+		if err := rows.Scan(
+			&i.Track.Seq,
+			&i.Track.ID,
+			&i.Track.AlbumID,
+			&i.Track.Fingerprint,
+			&i.Track.FpVersion,
+			&i.Track.Occurrence,
+			&i.Track.Disc,
+			&i.Track.No,
+			&i.Track.Title,
+			&i.Track.Artist,
+			&i.Track.Genre,
+			&i.Track.RelPath,
+			&i.Track.FileSize,
+			&i.Track.FileMtimeNs,
+			&i.Track.FileSha256,
+			&i.Track.Codec,
+			&i.Track.SampleRate,
+			&i.Track.Channels,
+			&i.Track.BitDepth,
+			&i.Track.Bitrate,
+			&i.Track.DurationMs,
+			&i.Track.LyricsRel,
+			&i.Track.LyricsSha256,
+			&i.Track.RgTrackGain,
+			&i.Track.RgTrackPeak,
+			&i.Track.RgAlbumGain,
+			&i.Track.RgAlbumPeak,
+			&i.Track.Available,
+			&i.Track.UpdatedAt,
+			&i.Track.TitleKey,
+			&i.Track.ArtistKey,
+			&i.Track.AlbumKey,
+			&i.Track.FirstSeenAt,
+			&i.AlbumTitle,
+			&i.AlbumYear,
+			&i.AlbumCoverSha256,
+			&i.AlbumArtistID,
+			&i.AlbumArtistName,
+			&i.Favorite,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTracksByAddedAsc = `-- name: ListTracksByAddedAsc :many
 SELECT tracks.seq, tracks.id, tracks.album_id, tracks.fingerprint, tracks.fp_version, tracks.occurrence, tracks.disc, tracks."no", tracks.title, tracks.artist, tracks.genre, tracks.rel_path, tracks.file_size, tracks.file_mtime_ns, tracks.file_sha256, tracks.codec, tracks.sample_rate, tracks.channels, tracks.bit_depth, tracks.bitrate, tracks.duration_ms, tracks.lyrics_rel, tracks.lyrics_sha256, tracks.rg_track_gain, tracks.rg_track_peak, tracks.rg_album_gain, tracks.rg_album_peak, tracks.available, tracks.updated_at, tracks.title_key, tracks.artist_key, tracks.album_key, tracks.first_seen_at,
     albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,

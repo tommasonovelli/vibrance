@@ -4,7 +4,7 @@
 # on it and fails when a budget is missed.
 #
 # Usage: scripts/perf.sh [go-test-run-pattern]     default: ^TestPerf
-#   scripts/perf.sh                  the whole suite, about 17 minutes
+#   scripts/perf.sh                  the whole suite, about 25 minutes
 #   scripts/perf.sh TestPerfScan     one test
 #
 # It prints one line `PERF | measure | n | p50 | p95 | max | budget | verdict`

@@ -813,6 +813,55 @@ WHERE tracks.seq IN (
 )
 ORDER BY tracks.first_seen_at DESC, tracks.id DESC;
 
+-- name: ListRandomTracks :many
+-- ListRandomTracks returns up to page_size available tracks chosen at
+-- random, none twice, in a random order (GET /tracks/random,
+-- docs/proposals/web-client-api.md B1). The inner query reads the key of
+-- every available track from tracks_first_seen_idx, the smallest index that
+-- begins with available, and keeps page_size of them by a random value;
+-- the outer one reads what the API shows for those rows alone, found by
+-- their key and by no index, as the lists of one artist do. A key is a
+-- row: a track cannot be chosen twice.
+SELECT sqlc.embed(tracks),
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = sqlc.arg(user_id) AND favorites.track_id = tracks.id) AS favorite
+FROM tracks NOT INDEXED
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.seq IN (
+    SELECT t.seq
+    FROM tracks AS t INDEXED BY tracks_first_seen_idx
+    WHERE t.available = 1
+    ORDER BY random()
+    LIMIT sqlc.arg(page_size)
+)
+ORDER BY random();
+
+-- name: ListRandomTracksOfArtist :many
+-- ListRandomTracksOfArtist is ListRandomTracks among the available tracks
+-- of the available albums of one artist (the artist of the album, as for
+-- GET /tracks?artist=): their albums from albums_artist_id_idx and their
+-- tracks from tracks_album_disc_no_idx, as the lists of one artist.
+SELECT sqlc.embed(tracks),
+    albums.title AS album_title, albums.year AS album_year, albums.cover_sha256 AS album_cover_sha256,
+    albums.artist_id AS album_artist_id, artists.name AS album_artist_name,
+    EXISTS (SELECT 1 FROM favorites
+            WHERE favorites.user_id = sqlc.arg(user_id) AND favorites.track_id = tracks.id) AS favorite
+FROM tracks NOT INDEXED
+JOIN albums ON albums.id = tracks.album_id
+JOIN artists ON artists.id = albums.artist_id
+WHERE tracks.seq IN (
+    SELECT t.seq
+    FROM albums AS a INDEXED BY albums_artist_id_idx
+    JOIN tracks AS t INDEXED BY tracks_album_disc_no_idx ON t.album_id = a.id
+    WHERE a.artist_id = sqlc.arg(artist_id) AND a.available = 1 AND t.available = 1
+    ORDER BY random()
+    LIMIT sqlc.arg(page_size)
+)
+ORDER BY random();
+
 -- name: GetCatalogSummary :one
 -- GetCatalogSummary counts what is available to listen to: the artists
 -- that have an available album (those GET /artists lists), the available

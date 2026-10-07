@@ -310,6 +310,36 @@ func (s *Service) ListPlaylists(ctx context.Context, userID string) ([]Playlist,
 	return playlists, nil
 }
 
+// PlaylistRef is a playlist by its id and its name.
+type PlaylistRef struct {
+	ID   string
+	Name string
+}
+
+// ListTrackPlaylists returns the playlists of userID that have at least one
+// item with the track trackID, available or not, the oldest first, as
+// ListPlaylists (docs/proposals/web-client-api.md B4). The playlists of
+// other users are never among them. A track that does not exist is 404
+// track_not_found.
+func (s *Service) ListTrackPlaylists(ctx context.Context, userID, trackID string) ([]PlaylistRef, error) {
+	var rows []store.ListPlaylistRefsOfUserWithTrackRow
+	err := s.store.Read(ctx, func(q *store.Queries) (err error) {
+		if err = knownTrack(ctx, q, trackID); err != nil {
+			return err
+		}
+		rows, err = q.ListPlaylistRefsOfUserWithTrack(ctx, store.ListPlaylistRefsOfUserWithTrackParams{TrackID: trackID, UserID: userID})
+		return err
+	})
+	if err != nil {
+		return nil, changeFailure("listing the playlists of a track", err)
+	}
+	refs := make([]PlaylistRef, 0, len(rows))
+	for _, r := range rows {
+		refs = append(refs, PlaylistRef{ID: r.ID, Name: r.Name})
+	}
+	return refs, nil
+}
+
 // CreatePlaylist makes an empty playlist of userID. A name or a description
 // out of their limits is 422 invalid_request; a user that has 500 playlists
 // already, 422 too_many_playlists (§5.2). An account that was deleted since
@@ -509,12 +539,7 @@ func (s *Service) AddPlaylistItems(ctx context.Context, userID, id string, track
 // the order of the request.
 func addableTracks(ctx context.Context, q *store.Queries, trackIDs []string) error {
 	var unknown, unavailable []string
-	seen := make(map[string]bool, len(trackIDs))
-	for _, id := range trackIDs {
-		if seen[id] {
-			continue
-		}
-		seen[id] = true
+	for _, id := range distinct(trackIDs) {
 		available, err := q.GetTrackAvailability(ctx, id)
 		switch {
 		case noRows(ctx, err):
