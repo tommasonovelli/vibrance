@@ -126,6 +126,46 @@ func (s Server) RevokeOtherSessions(ctx context.Context, _ RevokeOtherSessionsRe
 	return RevokeOtherSessions204Response{}, nil
 }
 
+// GetSettings returns the preferences of the account of the request.
+func (s Server) GetSettings(ctx context.Context, _ GetSettingsRequestObject) (GetSettingsResponseObject, error) {
+	p, err := principal(ctx)
+	if err != nil {
+		return nil, err
+	}
+	settings, err := s.accounts.Load().Settings(ctx, p)
+	if err != nil {
+		return nil, err
+	}
+	return GetSettings200JSONResponse{Body: settingsOf(settings)}, nil
+}
+
+// UpdateSettings changes the preferences of the account of the request
+// that the body sends; the validation of the specification has refused
+// any other key and any value outside the enums.
+func (s Server) UpdateSettings(ctx context.Context, req UpdateSettingsRequestObject) (UpdateSettingsResponseObject, error) {
+	p, err := principal(ctx)
+	if err != nil {
+		return nil, err
+	}
+	u := auth.SettingsUpdate{SingleKeyShortcuts: req.Body.SingleKeyShortcuts}
+	if v := req.Body.VolumeLeveling; v != nil {
+		u.VolumeLeveling = (*string)(v)
+	}
+	if v := req.Body.Theme; v != nil {
+		u.Theme = (*string)(v)
+	}
+	settings, err := s.accounts.Load().UpdateSettings(ctx, p, u)
+	if err != nil {
+		return nil, err
+	}
+	return UpdateSettings200JSONResponse{Body: settingsOf(settings)}, nil
+}
+
+func settingsOf(s auth.Settings) Settings {
+	return Settings{VolumeLeveling: SettingsVolumeLeveling(s.VolumeLeveling), SingleKeyShortcuts: s.SingleKeyShortcuts,
+		Theme: SettingsTheme(s.Theme)}
+}
+
 // ListUsers lists every account.
 func (s Server) ListUsers(ctx context.Context, _ ListUsersRequestObject) (ListUsersResponseObject, error) {
 	users, err := s.accounts.Load().ListUsers(ctx)

@@ -82,6 +82,13 @@ type Session struct {
 	ExpiresAt  int64
 }
 
+type Setting struct {
+	UserID             string
+	VolumeLeveling     string
+	SingleKeyShortcuts int64
+	Theme              string
+}
+
 type Track struct {
 	Seq          int64
 	ID           string

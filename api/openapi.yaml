@@ -462,6 +462,78 @@ paths:
           $ref: "#/components/responses/Internal"
         "503":
           $ref: "#/components/responses/Unavailable"
+  /me/settings:
+    get:
+      operationId: getSettings
+      tags: [Account]
+      summary: The preferences of the user
+      description: |
+        The preferences of the user of the request, the same on every device
+        the user signs in from. A user who never saved any gets the
+        defaults: `volume_leveling` `automatic`, `single_key_shortcuts`
+        `false`, `theme` `dark`.
+      responses:
+        "200":
+          description: The preferences.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+    patch:
+      operationId: updateSettings
+      tags: [Account]
+      summary: Change some preferences of the user
+      description: |
+        The fields sent take their new value; the others keep theirs, so a
+        client sends only the preferences it knows. The answer is every
+        preference, as saved. An unknown key, a `null` or a value that is
+        not one of the listed ones answers `400 invalid_request`, and
+        nothing changes.
+      parameters:
+        - $ref: "#/components/parameters/XVibranceRequest"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SettingsUpdate"
+      responses:
+        "200":
+          description: The preferences as saved.
+          headers:
+            X-Request-Id:
+              $ref: "#/components/headers/X-Request-Id"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "421":
+          $ref: "#/components/responses/MisdirectedRequest"
+        "500":
+          $ref: "#/components/responses/Internal"
+        "503":
+          $ref: "#/components/responses/Unavailable"
   /admin/users:
     get:
       operationId: listUsers
@@ -2839,6 +2911,40 @@ components:
           description: 12 to 1024 bytes, no control characters.
       example:
         password: correct horse battery staple
+    Settings:
+      type: object
+      description: "The preferences of a user, the same on every device."
+      required: [volume_leveling, single_key_shortcuts, theme]
+      properties:
+        volume_leveling:
+          type: string
+          enum: [automatic, "off"]
+          description: "`automatic`: the album gain for the songs of an album played in order, the track gain otherwise. `off`: no gain."
+        single_key_shortcuts:
+          type: boolean
+          description: Whether L, Q, S, R, M, F, `/` and `?` work without a modifier (WCAG 2.1.4).
+        theme:
+          type: string
+          enum: [dark, light]
+      example:
+        volume_leveling: automatic
+        single_key_shortcuts: false
+        theme: dark
+    SettingsUpdate:
+      type: object
+      description: "The preferences to change; the ones left out keep their value."
+      additionalProperties: false
+      properties:
+        volume_leveling:
+          type: string
+          enum: [automatic, "off"]
+        single_key_shortcuts:
+          type: boolean
+        theme:
+          type: string
+          enum: [dark, light]
+      example:
+        theme: light
     Cover:
       type: object
       description: "The cover of an album. `url` is ready to use, for example as the `src` of an image; add `&size=256` for a thumbnail."

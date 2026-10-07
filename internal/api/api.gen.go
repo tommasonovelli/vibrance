@@ -260,6 +260,78 @@ func (e SessionKind) Valid() bool {
 	}
 }
 
+// Defines values for SettingsTheme.
+const (
+	SettingsThemeDark  SettingsTheme = "dark"
+	SettingsThemeLight SettingsTheme = "light"
+)
+
+// Valid indicates whether the value is a known member of the SettingsTheme enum.
+func (e SettingsTheme) Valid() bool {
+	switch e {
+	case SettingsThemeDark:
+		return true
+	case SettingsThemeLight:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SettingsVolumeLeveling.
+const (
+	SettingsVolumeLevelingAutomatic SettingsVolumeLeveling = "automatic"
+	SettingsVolumeLevelingOff       SettingsVolumeLeveling = "off"
+)
+
+// Valid indicates whether the value is a known member of the SettingsVolumeLeveling enum.
+func (e SettingsVolumeLeveling) Valid() bool {
+	switch e {
+	case SettingsVolumeLevelingAutomatic:
+		return true
+	case SettingsVolumeLevelingOff:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SettingsUpdateTheme.
+const (
+	SettingsUpdateThemeDark  SettingsUpdateTheme = "dark"
+	SettingsUpdateThemeLight SettingsUpdateTheme = "light"
+)
+
+// Valid indicates whether the value is a known member of the SettingsUpdateTheme enum.
+func (e SettingsUpdateTheme) Valid() bool {
+	switch e {
+	case SettingsUpdateThemeDark:
+		return true
+	case SettingsUpdateThemeLight:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SettingsUpdateVolumeLeveling.
+const (
+	SettingsUpdateVolumeLevelingAutomatic SettingsUpdateVolumeLeveling = "automatic"
+	SettingsUpdateVolumeLevelingOff       SettingsUpdateVolumeLeveling = "off"
+)
+
+// Valid indicates whether the value is a known member of the SettingsUpdateVolumeLeveling enum.
+func (e SettingsUpdateVolumeLeveling) Valid() bool {
+	switch e {
+	case SettingsUpdateVolumeLevelingAutomatic:
+		return true
+	case SettingsUpdateVolumeLevelingOff:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for XVibranceRequest.
 const (
 	XVibranceRequestN1 XVibranceRequest = "1"
@@ -542,6 +614,21 @@ const (
 func (e RevokeSessionParamsXVibranceRequest) Valid() bool {
 	switch e {
 	case RevokeSessionParamsXVibranceRequestN1:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UpdateSettingsParamsXVibranceRequest.
+const (
+	UpdateSettingsParamsXVibranceRequestN1 UpdateSettingsParamsXVibranceRequest = "1"
+)
+
+// Valid indicates whether the value is a known member of the UpdateSettingsParamsXVibranceRequest enum.
+func (e UpdateSettingsParamsXVibranceRequest) Valid() bool {
+	switch e {
+	case UpdateSettingsParamsXVibranceRequestN1:
 		return true
 	default:
 		return false
@@ -1492,6 +1579,39 @@ type SessionList struct {
 	Sessions []Session `json:"sessions"`
 }
 
+// Settings The preferences of a user, the same on every device.
+//
+// Example: {"single_key_shortcuts":false,"theme":"dark","volume_leveling":"automatic"}
+type Settings struct {
+	// SingleKeyShortcuts Whether L, Q, S, R, M, F, `/` and `?` work without a modifier (WCAG 2.1.4).
+	SingleKeyShortcuts bool          `json:"single_key_shortcuts"`
+	Theme              SettingsTheme `json:"theme"`
+
+	// VolumeLeveling `automatic`: the album gain for the songs of an album played in order, the track gain otherwise. `off`: no gain.
+	VolumeLeveling SettingsVolumeLeveling `json:"volume_leveling"`
+}
+
+// SettingsTheme defines model for Settings.Theme.
+type SettingsTheme string
+
+// SettingsVolumeLeveling `automatic`: the album gain for the songs of an album played in order, the track gain otherwise. `off`: no gain.
+type SettingsVolumeLeveling string
+
+// SettingsUpdate The preferences to change; the ones left out keep their value.
+//
+// Example: {"theme":"light"}
+type SettingsUpdate struct {
+	SingleKeyShortcuts *bool                         `json:"single_key_shortcuts,omitempty"`
+	Theme              *SettingsUpdateTheme          `json:"theme,omitempty"`
+	VolumeLeveling     *SettingsUpdateVolumeLeveling `json:"volume_leveling,omitempty"`
+}
+
+// SettingsUpdateTheme defines model for SettingsUpdate.Theme.
+type SettingsUpdateTheme string
+
+// SettingsUpdateVolumeLeveling defines model for SettingsUpdate.VolumeLeveling.
+type SettingsUpdateVolumeLeveling string
+
 // Timestamp A moment, RFC 3339 in UTC, always with three digits of milliseconds and `Z`.
 //
 // Example: 2026-09-30T12:34:56.000Z
@@ -1995,6 +2115,18 @@ type RevokeSessionParams struct {
 // RevokeSessionParamsXVibranceRequest defines parameters for RevokeSession.
 type RevokeSessionParamsXVibranceRequest string
 
+// UpdateSettingsParams defines parameters for UpdateSettings.
+type UpdateSettingsParams struct {
+	// XVibranceRequest Always `1`. Every request other than GET and HEAD carries it, once:
+	// a page of another site cannot send it. Without it, or with another
+	// value, the answer is `403 request_header_required`, before the session,
+	// the other parameters and the body are looked at; it is never a `400`.
+	XVibranceRequest UpdateSettingsParamsXVibranceRequest `json:"X-Vibrance-Request"`
+}
+
+// UpdateSettingsParamsXVibranceRequest defines parameters for UpdateSettings.
+type UpdateSettingsParamsXVibranceRequest string
+
 // CreatePlaylistParams defines parameters for CreatePlaylist.
 type CreatePlaylistParams struct {
 	// XVibranceRequest Always `1`. Every request other than GET and HEAD carries it, once:
@@ -2201,6 +2333,9 @@ type AddFavoriteTracksJSONRequestBody = FavoriteTracksRequest
 // ChangePasswordJSONRequestBody defines body for ChangePassword for application/json ContentType.
 type ChangePasswordJSONRequestBody = ChangePasswordRequest
 
+// UpdateSettingsJSONRequestBody defines body for UpdateSettings for application/json ContentType.
+type UpdateSettingsJSONRequestBody = SettingsUpdate
+
 // CreatePlaylistJSONRequestBody defines body for CreatePlaylist for application/json ContentType.
 type CreatePlaylistJSONRequestBody = PlaylistInput
 
@@ -2296,6 +2431,12 @@ type ServerInterface interface {
 	// RevokeSession Revoke a session
 	// (DELETE /me/sessions/{id})
 	RevokeSession(w http.ResponseWriter, r *http.Request, id PathId, params RevokeSessionParams)
+	// GetSettings The preferences of the user
+	// (GET /me/settings)
+	GetSettings(w http.ResponseWriter, r *http.Request)
+	// UpdateSettings Change some preferences of the user
+	// (PATCH /me/settings)
+	UpdateSettings(w http.ResponseWriter, r *http.Request, params UpdateSettingsParams)
 	// ListPlaylists The playlists of the user
 	// (GET /playlists)
 	ListPlaylists(w http.ResponseWriter, r *http.Request)
@@ -3457,6 +3598,65 @@ func (siw *ServerInterfaceWrapper) RevokeSession(w http.ResponseWriter, r *http.
 	handler.ServeHTTP(w, r)
 }
 
+// GetSettings operation middleware
+func (siw *ServerInterfaceWrapper) GetSettings(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetSettings(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateSettings operation middleware
+func (siw *ServerInterfaceWrapper) UpdateSettings(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateSettingsParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-Vibrance-Request" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-Vibrance-Request")]; found {
+		var XVibranceRequest UpdateSettingsParamsXVibranceRequest
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-Vibrance-Request", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-Vibrance-Request", valueList[0], &XVibranceRequest, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-Vibrance-Request", Err: err})
+			return
+		}
+
+		params.XVibranceRequest = XVibranceRequest
+
+	} else {
+		err := fmt.Errorf("Header parameter X-Vibrance-Request is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-Vibrance-Request", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateSettings(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListPlaylists operation middleware
 func (siw *ServerInterfaceWrapper) ListPlaylists(w http.ResponseWriter, r *http.Request) {
 
@@ -4492,6 +4692,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/me/sessions", wrapper.RevokeOtherSessions)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me/sessions", wrapper.ListSessions)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/me/sessions/{id}", wrapper.RevokeSession)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/me/settings", wrapper.GetSettings)
+	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/me/settings", wrapper.UpdateSettings)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/admin/users", wrapper.ListUsers)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/admin/users", wrapper.CreateUser)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/admin/users/{id}", wrapper.DeleteUser)
@@ -8226,6 +8428,246 @@ func (response RevokeSession503JSONResponse) VisitRevokeSessionResponse(w http.R
 	return err
 }
 
+type GetSettingsRequestObject struct {
+}
+
+type GetSettingsResponseObject interface {
+	VisitGetSettingsResponse(w http.ResponseWriter) error
+}
+
+type GetSettings200ResponseHeaders struct {
+	XRequestId openapi_types.UUID
+}
+
+type GetSettings200JSONResponse struct {
+	Body    Settings
+	Headers GetSettings200ResponseHeaders
+}
+
+func (response GetSettings200JSONResponse) VisitGetSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSettings401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response GetSettings401JSONResponse) VisitGetSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSettings403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response GetSettings403JSONResponse) VisitGetSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSettings421JSONResponse struct{ MisdirectedRequestJSONResponse }
+
+func (response GetSettings421JSONResponse) VisitGetSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(421)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSettings500JSONResponse struct{ InternalJSONResponse }
+
+func (response GetSettings500JSONResponse) VisitGetSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetSettings503JSONResponse struct{ UnavailableJSONResponse }
+
+func (response GetSettings503JSONResponse) VisitGetSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSettingsRequestObject struct {
+	Params UpdateSettingsParams
+	Body   *UpdateSettingsJSONRequestBody
+}
+
+type UpdateSettingsResponseObject interface {
+	VisitUpdateSettingsResponse(w http.ResponseWriter) error
+}
+
+type UpdateSettings200ResponseHeaders struct {
+	XRequestId openapi_types.UUID
+}
+
+type UpdateSettings200JSONResponse struct {
+	Body    Settings
+	Headers UpdateSettings200ResponseHeaders
+}
+
+func (response UpdateSettings200JSONResponse) VisitUpdateSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSettings400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response UpdateSettings400JSONResponse) VisitUpdateSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSettings401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response UpdateSettings401JSONResponse) VisitUpdateSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSettings403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response UpdateSettings403JSONResponse) VisitUpdateSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSettings413JSONResponse struct{ PayloadTooLargeJSONResponse }
+
+func (response UpdateSettings413JSONResponse) VisitUpdateSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(413)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSettings421JSONResponse struct{ MisdirectedRequestJSONResponse }
+
+func (response UpdateSettings421JSONResponse) VisitUpdateSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(421)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSettings500JSONResponse struct{ InternalJSONResponse }
+
+func (response UpdateSettings500JSONResponse) VisitUpdateSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateSettings503JSONResponse struct{ UnavailableJSONResponse }
+
+func (response UpdateSettings503JSONResponse) VisitUpdateSettingsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Request-Id", fmt.Sprint(response.Headers.XRequestId))
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListPlaylistsRequestObject struct {
 }
 
@@ -10924,6 +11366,12 @@ type StrictServerInterface interface {
 	// RevokeSession Revoke a session
 	// (DELETE /me/sessions/{id})
 	RevokeSession(ctx context.Context, request RevokeSessionRequestObject) (RevokeSessionResponseObject, error)
+	// GetSettings The preferences of the user
+	// (GET /me/settings)
+	GetSettings(ctx context.Context, request GetSettingsRequestObject) (GetSettingsResponseObject, error)
+	// UpdateSettings Change some preferences of the user
+	// (PATCH /me/settings)
+	UpdateSettings(ctx context.Context, request UpdateSettingsRequestObject) (UpdateSettingsResponseObject, error)
 	// ListPlaylists The playlists of the user
 	// (GET /playlists)
 	ListPlaylists(ctx context.Context, request ListPlaylistsRequestObject) (ListPlaylistsResponseObject, error)
@@ -11755,6 +12203,63 @@ func (sh *strictHandler) RevokeSession(w http.ResponseWriter, r *http.Request, i
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(RevokeSessionResponseObject); ok {
 		if err := validResponse.VisitRevokeSessionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetSettings operation middleware
+func (sh *strictHandler) GetSettings(w http.ResponseWriter, r *http.Request) {
+	var request GetSettingsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetSettings(ctx, request.(GetSettingsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetSettings")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetSettingsResponseObject); ok {
+		if err := validResponse.VisitGetSettingsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateSettings operation middleware
+func (sh *strictHandler) UpdateSettings(w http.ResponseWriter, r *http.Request, params UpdateSettingsParams) {
+	var request UpdateSettingsRequestObject
+
+	request.Params = params
+
+	var body UpdateSettingsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateSettings(ctx, request.(UpdateSettingsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateSettings")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateSettingsResponseObject); ok {
+		if err := validResponse.VisitUpdateSettingsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

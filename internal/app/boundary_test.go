@@ -123,8 +123,8 @@ func specOperations(t *testing.T) (*openapi3.T, []operation) {
 		return ops[i].method < ops[j].method
 	})
 	// The 37 operations of DESIGN.md §8.3 and those its erratum W1-W6 adds.
-	if len(ops) != 44 {
-		t.Fatalf("the specification has %d operations, want the 44 of DESIGN.md §8.3 and its erratum W1-W6", len(ops))
+	if len(ops) != 46 {
+		t.Fatalf("the specification has %d operations, want the 46 of DESIGN.md §8.3 and its erratum W1-W6", len(ops))
 	}
 	return doc, ops
 }
@@ -363,7 +363,7 @@ func TestEveryOperationBehindTheBoundary(t *testing.T) {
 			check(o, "a body of 1 MiB + 1 byte", req, http.StatusRequestEntityTooLarge, "body_too_large")
 		}
 	}
-	if ids == 0 || bodies != 11 || writes != 20 {
+	if ids == 0 || bodies != 12 || writes != 21 {
 		t.Fatalf("checked %d operations with an id, %d with a body, %d that write", ids, bodies, writes)
 	}
 	for _, ev := range logs.events(t) {

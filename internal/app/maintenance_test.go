@@ -153,7 +153,7 @@ func TestBackupAndRestoreKeepEverything(t *testing.T) {
 		t.Fatalf("the backup folder has %v: a temporary folder is left", got)
 	}
 	sum, size := fileSHA256(t, filepath.Join(dest, backupDatabase))
-	want := Manifest{AppVersion: buildinfo.Version, SchemaVersion: 4, CreatedAt: "2026-10-05T21:30:00.000Z",
+	want := Manifest{AppVersion: buildinfo.Version, SchemaVersion: 5, CreatedAt: "2026-10-05T21:30:00.000Z",
 		Database: ManifestDatabase{File: backupDatabase, Size: size, SHA256: sum},
 		Counts:   ManifestCounts{Users: 3, Playlists: 1, PlaylistItems: 3, Favorites: 3, Artists: 6, Albums: 6, Tracks: 14}}
 	if m != want || readBackupManifest(t, dest) != want {

@@ -49,6 +49,14 @@ The examples below use the token. `POST /auth/logout` with it ends its session.
 curl -sS -H "$AUTH" -H 'X-Vibrance-Request: 1' -X DELETE "$BASE/me/sessions"   # 204: only this session is left
 ```
 
+`GET /me/settings` answers the preferences of the account, the same on every device: `volume_leveling` (`automatic` or `off`), `single_key_shortcuts` (`true` or `false`) and `theme` (`dark` or `light`). An account that never saved any gets the defaults, `automatic`, `false` and `dark`. `PATCH /me/settings` changes only the fields it sends, so a client sends only the preferences it knows; the answer is every preference. An unknown key, a `null` or another value answers `400 invalid_request` and changes nothing.
+
+```sh
+curl -sS -H "$AUTH" "$BASE/me/settings"
+curl -sS -H "$AUTH" -H 'X-Vibrance-Request: 1' -H 'Content-Type: application/json' \
+  -X PATCH -d '{"theme":"light"}' "$BASE/me/settings"   # 200: every preference, the theme now light
+```
+
 ## Albums
 
 Lists are paginated with `limit` (default 50, at most 200) and `after`: send the `next` of a page as the `after` of the following request, with the same other parameters, until `next` is `null`.
@@ -83,7 +91,8 @@ curl -sS -H "$AUTH" "$BASE/tracks/random?artist=ARTIST_ID"
 `PUT /me/favorites/tracks/TRACK_ID` makes one track a favorite, `DELETE` the same path undoes it. `POST /me/favorites/tracks` makes several favorites at once, all or none: an album, for example. The list of the favorites, the most recent first, then shows them in the order sent. Tracks that are favorites already keep their date; an id that is no track answers `422 unknown_track`, with the ids in `details.track_ids`, and changes nothing.
 
 ```sh
-curl -sS -H "$AUTH" -H 'X-Vibrance-Request: 1' -H 'Content-Type: application/json' \n  -d '{"track_ids":["TRACK_ID_1","TRACK_ID_2"]}' "$BASE/me/favorites/tracks"   # 204
+curl -sS -H "$AUTH" -H 'X-Vibrance-Request: 1' -H 'Content-Type: application/json' \
+  -d '{"track_ids":["TRACK_ID_1","TRACK_ID_2"]}' "$BASE/me/favorites/tracks"   # 204
 curl -sS -H "$AUTH" "$BASE/me/favorites/tracks?limit=50"
 ```
 

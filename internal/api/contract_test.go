@@ -320,8 +320,8 @@ func TestBodyLimitOnEveryOperationWithABody(t *testing.T) {
 			wantError(t, o.op.OperationID+" with "+name, rec, http.StatusRequestEntityTooLarge, "body_too_large")
 		}
 	}
-	if bodies != 11 {
-		t.Fatalf("%d operations with a body, want 11", bodies)
+	if bodies != 12 {
+		t.Fatalf("%d operations with a body, want 12", bodies)
 	}
 }
 

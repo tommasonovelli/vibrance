@@ -107,6 +107,8 @@ var designOperations = []designOperation{
 	{"POST", "/me/favorites/tracks", "addFavoriteTracks", "user", 204, []designError{{422, "unknown_track"}}},
 	{"DELETE", "/me/sessions", "revokeOtherSessions", "user", 204, nil},
 	{"GET", "/tracks/{id}/playlists", "listTrackPlaylists", "user", 200, []designError{{404, "track_not_found"}}},
+	{"GET", "/me/settings", "getSettings", "user", 200, nil},
+	{"PATCH", "/me/settings", "updateSettings", "user", 200, nil},
 }
 
 // designErrorCodes is the table of DESIGN.md §8.4, with the `*_not_found`
@@ -845,10 +847,10 @@ func TestSpecRequestHeader(t *testing.T) {
 			t.Errorf("%s: want the response 403 Forbidden", o.op.OperationID)
 		}
 	}
-	// The operations of DESIGN.md §8.3 that are not a GET, and the two of
-	// its erratum W1-W6 (step W3).
-	if writes != 20 {
-		t.Errorf("%d operations other than GET, want 20", writes)
+	// The operations of DESIGN.md §8.3 that are not a GET, and the three of
+	// its erratum W1-W6 (steps W3 and W4).
+	if writes != 21 {
+		t.Errorf("%d operations other than GET, want 21", writes)
 	}
 	for name, scheme := range doc.Components.SecuritySchemes {
 		if name != "cookieAuth" && name != "bearerAuth" || strings.EqualFold(scheme.Value.Name, httpx.RequestHeader) {

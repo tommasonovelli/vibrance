@@ -51,6 +51,8 @@ var authorizationMatrix = map[string]access{
 	"listSessions":        {s401, s200, s200, 0},
 	"revokeOtherSessions": {s401, s204, s204, 0},
 	"revokeSession":       {s401, s204, s204, s404},
+	"getSettings":         {s401, s200, s200, 0},
+	"updateSettings":      {s401, s200, s200, 0},
 	"listUsers":           {s401, s403, s200, 0},
 	"createUser":          {s401, s403, s201, 0},
 	"getUser":             {s401, s403, s200, 0},
@@ -115,6 +117,13 @@ var matrixRequests = map[string]matrixRequest{
 	"revokeOtherSessions": func(w *world, _, owner *account) (string, string, any, string) {
 		w.token(owner)
 		return "DELETE", "/me/sessions", nil, ""
+	},
+	// The settings are those of the session of the request: no request
+	// names another user (TestSettingsOverTheAPI proves that the settings of
+	// one user are not those of another).
+	"getSettings": func(*world, *account, *account) (string, string, any, string) { return "GET", "/me/settings", nil, "" },
+	"updateSettings": func(*world, *account, *account) (string, string, any, string) {
+		return "PATCH", "/me/settings", map[string]any{"theme": "light"}, ""
 	},
 	"revokeSession": func(w *world, _, owner *account) (string, string, any, string) {
 		return "DELETE", "/me/sessions/" + w.token(owner).Session.ID, nil, ""

@@ -14,6 +14,7 @@ Versions follow [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 - **Several favorites at once.** `POST /api/v1/me/favorites/tracks` makes a list of tracks favorites in one request, all or none, and the list of the favorites shows them in the order sent.
 - **Sign out everywhere else.** `DELETE /api/v1/me/sessions` ends every session of the account, cookies and tokens, except the one of the request.
 - **The playlists that hold a track.** `GET /api/v1/tracks/{id}/playlists` lists the playlists of the user that have the track. A new migration adds the index it reads.
+- **The same preferences on every device.** `GET /api/v1/me/settings` answers the preferences of the user: volume leveling (`automatic` or `off`), single-key shortcuts and the theme (`dark` or `light`), with the defaults `automatic`, `false` and `dark` for a user who never saved any. `PATCH /api/v1/me/settings` changes only the fields it sends and answers every preference. They are deleted with the account. A new migration adds their table.
 
 ## [0.1.0] - 2026-10-06
 

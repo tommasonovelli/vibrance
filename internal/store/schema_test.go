@@ -144,6 +144,14 @@ var wantSchema = []struct {
 		req("position", "integer"),
 		req("added_at", "integer"),
 	}},
+	// The preferences of a user, which migrations/00005 adds (step W4): no
+	// defaults, a row holds every value.
+	{"settings", []column{
+		{name: "user_id", typ: "text", notNull: true, pk: 1},
+		req("volume_leveling", "text"),
+		req("single_key_shortcuts", "integer"),
+		req("theme", "text"),
+	}},
 }
 
 // The tables and their columns are those of §5.2: names, types, order,
@@ -231,8 +239,8 @@ func TestSchemaIndexes(t *testing.T) {
 	}
 }
 
-// The foreign keys are those of §5.2: what belongs to a user is deleted
-// with it, and nothing may take an artist, an album or a track away.
+// The foreign keys are those of §5.2, and that of the settings (step W4):
+// what belongs to a user is deleted with it, and nothing may take an artist, an album or a track away.
 func TestSchemaForeignKeys(t *testing.T) {
 	s := newStore(t)
 	want := []string{
@@ -243,6 +251,7 @@ func TestSchemaForeignKeys(t *testing.T) {
 		"playlist_items.track_id -> tracks.id RESTRICT",
 		"playlists.user_id -> users.id CASCADE",
 		"sessions.user_id -> users.id CASCADE",
+		"settings.user_id -> users.id CASCADE",
 		"tracks.album_id -> albums.id RESTRICT",
 	}
 	got := strings1(t, s.read, `
@@ -308,6 +317,8 @@ func (f *fixture) valid(table string) row {
 			"created_at": 1, "updated_at": 1}
 	case "playlist_items":
 		return row{"id": uuid(n), "playlist_id": f.insert("playlists"), "track_id": f.insert("tracks"), "position": 0, "added_at": 1}
+	case "settings":
+		return row{"user_id": f.insert("users"), "volume_leveling": "automatic", "single_key_shortcuts": 0, "theme": "dark"}
 	}
 	f.t.Fatalf("no valid row for table %q", table)
 	return nil
@@ -449,6 +460,16 @@ func TestSchemaChecks(t *testing.T) {
 
 		{"position 5", "playlist_items", row{"position": 5}, ""},
 		{"position -1", "playlist_items", row{"position": -1}, "playlist_items_position_check"},
+
+		{"volume leveling off", "settings", row{"volume_leveling": "off"}, ""},
+		{"unknown volume leveling", "settings", row{"volume_leveling": "track"}, "settings_volume_leveling_check"},
+		{"volume leveling in upper case", "settings", row{"volume_leveling": "Off"}, "settings_volume_leveling_check"},
+		{"single-key shortcuts 1", "settings", row{"single_key_shortcuts": 1}, ""},
+		{"single-key shortcuts 2", "settings", row{"single_key_shortcuts": 2}, "settings_single_key_shortcuts_check"},
+		{"single-key shortcuts -1", "settings", row{"single_key_shortcuts": -1}, "settings_single_key_shortcuts_check"},
+		{"theme light", "settings", row{"theme": "light"}, ""},
+		{"unknown theme", "settings", row{"theme": "auto"}, "settings_theme_check"},
+		{"empty theme", "settings", row{"theme": ""}, "settings_theme_check"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := f.valid(tc.table)
@@ -471,8 +492,13 @@ func TestSchemaChecks(t *testing.T) {
 				sets = append(sets, `"`+c+`" = ?`)
 				args = append(args, tc.set[c])
 			}
+			// The key of the row: its id, or its user for the settings.
+			key := "id"
+			if tc.table == "settings" {
+				key = "user_id"
+			}
 			_, err = s.write.ExecContext(t.Context(),
-				fmt.Sprintf(`UPDATE %q SET %s WHERE id = ?`, tc.table, strings.Join(sets, ", ")), append(args, valid["id"])...)
+				fmt.Sprintf(`UPDATE %q SET %s WHERE %q = ?`, tc.table, strings.Join(sets, ", "), key), append(args, valid[key])...)
 			wantSQLite(t, err, sqliteConstraintCheck, "CHECK constraint failed: "+tc.check)
 		})
 	}
@@ -582,6 +608,8 @@ func TestSchemaUnique(t *testing.T) {
 		{"playlists", []string{"user_id", "name"}, 0, ""},
 		{"playlist_items", []string{"id"}, sqliteConstraintPK, "playlist_items.id"},
 		{"playlist_items", []string{"playlist_id", "track_id", "position"}, 0, ""},
+		{"settings", []string{"user_id"}, sqliteConstraintPK, "settings.user_id"},
+		{"settings", []string{"volume_leveling", "single_key_shortcuts", "theme"}, 0, ""},
 	} {
 		t.Run(tc.table+" "+strings.Join(tc.same, "+"), func(t *testing.T) {
 			first := f.valid(tc.table)
@@ -628,6 +656,7 @@ func TestSchemaForeignKeysRefuseMissingParents(t *testing.T) {
 		{"playlists", "user_id"},
 		{"playlist_items", "playlist_id"},
 		{"playlist_items", "track_id"},
+		{"settings", "user_id"},
 	} {
 		t.Run(tc.table+"."+tc.column, func(t *testing.T) {
 			r := f.valid(tc.table)
@@ -657,7 +686,7 @@ func counts(t *testing.T, db queryer, tables ...string) string {
 }
 
 // Deleting a user deletes its sessions, favorites, playlists and their
-// items, and nothing of anybody else (§7.5). An artist, an album or a
+// items, and its settings (step W4), and nothing of anybody else (§7.5). An artist, an album or a
 // track that something refers to cannot be deleted (I3).
 func TestSchemaDeleteRules(t *testing.T) {
 	s := newStore(t)
@@ -683,6 +712,7 @@ func TestSchemaDeleteRules(t *testing.T) {
 			{"favorites", row{"user_id": user, "track_id": track, "created_at": 1}},
 			{"playlists", playlist},
 			{"playlist_items", item},
+			{"settings", row{"user_id": user, "volume_leveling": "off", "single_key_shortcuts": 1, "theme": "light"}},
 		} {
 			if err := insertRow(ctx, s.write, ins.table, ins.r); err != nil {
 				t.Fatal(err)
@@ -698,9 +728,10 @@ func TestSchemaDeleteRules(t *testing.T) {
 			string1(t, s.write, `SELECT count(*) FROM playlists WHERE user_id IN (?, ?)`, alice, bob), " playlists, ",
 			string1(t, s.write, `SELECT count(*) FROM playlist_items WHERE playlist_id IN
 				(SELECT id FROM playlists WHERE user_id IN (?, ?))`, alice, bob), " items, ",
-			string1(t, s.write, `SELECT count(*) FROM playlist_items WHERE track_id = ?`, track), " items of the track")
+			string1(t, s.write, `SELECT count(*) FROM playlist_items WHERE track_id = ?`, track), " items of the track, ",
+			string1(t, s.write, `SELECT count(*) FROM settings WHERE user_id IN (?, ?)`, alice, bob), " settings")
 	}
-	if got, want := owned(), "2 sessions, 2 favorites, 2 playlists, 2 items, 2 items of the track"; got != want {
+	if got, want := owned(), "2 sessions, 2 favorites, 2 playlists, 2 items, 2 items of the track, 2 settings"; got != want {
 		t.Fatalf("before: %s, want %s", got, want)
 	}
 	library := counts(t, s.write, "artists", "albums", "tracks")
@@ -715,7 +746,7 @@ func TestSchemaDeleteRules(t *testing.T) {
 	}
 
 	mustExec(t, s.write, `DELETE FROM users WHERE id = ?`, alice)
-	if got, want := owned(), "1 sessions, 1 favorites, 1 playlists, 1 items, 1 items of the track"; got != want {
+	if got, want := owned(), "1 sessions, 1 favorites, 1 playlists, 1 items, 1 items of the track, 1 settings"; got != want {
 		t.Fatalf("after deleting one user: %s, want %s", got, want)
 	}
 	if got := string1(t, s.write, `SELECT count(*) FROM favorites WHERE user_id = ?`, bob); got != "1" {

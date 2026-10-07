@@ -14,6 +14,7 @@ sql:
       - migrations/00001_schema.sql
       - migrations/00003_track_lists.sql
       - migrations/00004_playlist_items_track.sql
+      - migrations/00005_settings.sql
     queries: sql
     gen:
       go:
