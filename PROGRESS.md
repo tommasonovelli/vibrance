@@ -41,8 +41,8 @@ Design: DESIGN.md (versione 0.1). Orchestratore: aggiorna questo file a ogni pas
 | F1 | `TestLibraryStatusConcurrently` deterministico | done | 1 | 41ed37a | 2026-10-06 · branch `dev-web-ui` · causa riprodotta dal revisore (7 su 150 sul vecchio test): un ciclo accodato fra due letture; ora 300/300 senza `-race` e 100/100 con; il server non cambia |
 | W2 | Copertine delle playlist e riepiloghi (A2, A3, A4) | done | 1 | b0bdba1 | 2026-10-06 · branch `dev-web-ui` · perf del revisore: playlist da 10.000 elementi 20 ms p95, riepiloghi 28 e 5,5 ms; `GET /playlists` con 500 × 10.000 elementi circa 9 s, già nella 0.1.0, accettato (N-188); debito: `GET /playlists` con 500 × 200 da 260 a 400 ms per le copertine, senza budget |
 | W3 | Casuale, preferiti in blocco, sessioni, playlist di una traccia (B1–B4) | done | 1 | 07c6c4a | 2026-10-07 · branch `dev-web-ui` · B1 a 50.000 tracce p95 20–24 ms (budget 30); il nuovo indice per traccia porta un blocco di 1.000 elementi oltre i 100 ms di `add`: misure aperte con tetti 200 e 250 ms (N-193); `perf.sh` ora circa 25 minuti |
-| W4 | Impostazioni (B5) | todo | | | branch `dev-web-ui` |
-| W5 | Dati per il gapless (B6) | todo | | | branch `dev-web-ui` · spike prima |
+| W4 | Impostazioni (B5) | done | 1 | e9a83f7 | 2026-10-07 · branch `dev-web-ui` · migrazione 00005; mutazioni del revisore: campi non inviati azzerati o riportati ai predefiniti, lettura fuori dalla transazione (modifica persa 3 su 3); `PATCH {}` valido (N-194); l'interfaccia usa ancora `PUT` |
+| W5 | Dati per il gapless (B6) | deferred | | | 2026-10-07 · rinviato dal proprietario: non si fa in questo giro; lo spike resta il primo passo quando riprende |
 | W6 | Servire l'interfaccia web (C1) | todo | | | branch `dev-web-ui` |
 
 Stati: `todo`, `in-progress`, `done`, `blocked`.
