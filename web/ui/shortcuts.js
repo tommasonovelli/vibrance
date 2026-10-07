@@ -1,8 +1,10 @@
 // The keys that work everywhere (proposal 7.6). A single character as a
-// shortcut must be possible to turn off (WCAG 2.1.4), so L, Q, S, R, M and F
-// answer only when the setting is on, here or in Account. Space, Ctrl or Cmd
-// with the arrows, ? and Esc are always on; none of them while a field has the
-// focus. (Ctrl or Cmd+K and / belong to app.js, Enter to the lists.)
+// shortcut must be possible to turn off (WCAG 2.1.4), so L, Q, S, R, M, F, /
+// and ? answer only when the setting is on, here or in Account: / and ? are
+// single characters too, with or without Shift. Space, Ctrl or Cmd with the
+// arrows, Ctrl or Cmd+/ and Esc are always on. None of them while a field has
+// the focus, but Ctrl or Cmd+/, which types nothing. (Ctrl or Cmd+K and / belong
+// to app.js, Enter to the lists.)
 import * as player from './player.js';
 import { saveSetting, settings } from './settings.js';
 import { $, announce, openSheet } from './ui.js';
@@ -23,6 +25,7 @@ const single = {
   r: () => { player.cycleRepeat(); announce({ off: 'Repeat off', all: 'Repeat all', one: 'Repeat one' }[player.getRepeat()]); },
   m: () => { player.toggleMute(); announce(player.isMuted() ? 'Muted' : 'Sound on'); },
   f: () => (onNow() ? toggleNow('fullscreen') : navigate('/now-playing')),
+  '?': () => openShortcuts(),
 };
 
 export function initShortcuts() {
@@ -31,6 +34,12 @@ export function initShortcuts() {
     const field = typing(event.target);
     const command = event.ctrlKey || event.metaKey;
     if (document.querySelector('dialog[open]')) return; // a sheet has its own keys
+    // Some keyboards need Shift for the slash: Shift is not looked at.
+    if (command && !event.altKey && event.key === '/') {
+      event.preventDefault();
+      openShortcuts();
+      return;
+    }
     if (command && !event.altKey && !event.shiftKey && !field && (event.key === 'ArrowRight' || event.key === 'ArrowLeft')) {
       event.preventDefault();
       if (event.key === 'ArrowRight') player.next(); else player.previous();
@@ -41,9 +50,6 @@ export function initShortcuts() {
       if (pressable(event.target) || !player.current()) return;
       event.preventDefault(); // the page does not scroll
       player.toggle();
-    } else if (event.key === '?') {
-      event.preventDefault();
-      openShortcuts();
     } else if (event.key === 'Escape') {
       if (onNow() && !document.querySelector('.menu[popover]')) navigate(lastPage());
     } else if (!event.repeat && settings().single_key_shortcuts) {

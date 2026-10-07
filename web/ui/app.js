@@ -8,7 +8,7 @@ import * as player from './player.js';
 import { initBar } from './bar.js';
 import { initQueue } from './queue.js';
 import { initShortcuts } from './shortcuts.js';
-import { loadSettings } from './settings.js';
+import { loadSettings, settings } from './settings.js';
 import * as status from './status.js';
 
 // Each path and the module of its view, loaded when first needed.
@@ -33,8 +33,9 @@ function goSearch() {
   if (location.pathname === '/search') $('#q')?.focus(); else router.navigate('/search');
 }
 
-// Ctrl or Cmd+K, and /, open the one global search. Esc closes a menu or a
-// sheet by itself: ui.js and <dialog> see to it.
+// Ctrl or Cmd+K, always, and / when single-key shortcuts are on (a single
+// character key, WCAG 2.1.4), open the one global search. Esc closes a menu
+// or a sheet by itself: ui.js and <dialog> see to it.
 function keys() {
   document.addEventListener('keydown', event => {
     if (document.querySelector('dialog[open]')) return;
@@ -42,7 +43,7 @@ function keys() {
     if (command && event.key.toLowerCase() === 'k') {
       event.preventDefault();
       goSearch();
-    } else if (event.key === '/' && !command && !event.altKey && !typing(event.target)) {
+    } else if (event.key === '/' && !command && !event.altKey && !typing(event.target) && settings().single_key_shortcuts) {
       event.preventDefault();
       goSearch();
     }

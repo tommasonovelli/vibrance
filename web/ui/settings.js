@@ -1,9 +1,10 @@
 // The preferences that follow the person from device to device (B5,
-// GET and PUT /me/settings): volume leveling and single-key shortcuts. The
-// last answer is kept in localStorage, which is also all there is while the
-// server has no such endpoint. `theme` is one of them (PUT replaces the whole
-// object): it is put on <html> here, by Account's choice, by the sidebar's
-// button and by what the server remembers.
+// GET and PATCH /me/settings): volume leveling, single-key shortcuts and the
+// theme. The last answer is kept in localStorage, which is also all there is
+// while the server cannot be reached. A change sends only the field that
+// changed, so a value this browser holds from before never overwrites one
+// set on another device. The theme is put on <html> here, by Account's
+// choice, by the sidebar's button and by what the server remembers.
 import { api } from './api.js';
 
 const KEY = 'vibrance.settings';
@@ -16,7 +17,7 @@ function stored() {
 
 // prefs.js put the theme of this browser on <html> before the first paint.
 // A browser that was never given one takes the account's theme when it comes;
-// one that has a choice keeps it, and the next change tells the server.
+// one that has a choice keeps it, and tells the server when it changes it.
 let value = { ...defaults, ...stored(), theme: root.dataset.theme === 'light' ? 'light' : 'dark' };
 let onServer = false; // the server answered with them, so they follow the person
 
@@ -54,7 +55,7 @@ export async function saveSetting(key, next) {
   if (key === 'theme') applyTheme(next);
   keep();
   try {
-    await api.put('/me/settings', value);
+    await api.patch('/me/settings', { [key]: next });
     onServer = true;
   } catch { /* kept on this device */ }
 }

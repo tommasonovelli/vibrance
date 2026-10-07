@@ -8,7 +8,10 @@
 // positions carries the tag of the revision the page holds (If-Match), and a
 // change made on an older one answers 412; then the page reads the playlist
 // again and says so. The page's requests go one after another, each with the
-// tag the one before gave.
+// tag the one before gave. A removal names its item by id, not by position,
+// so it carries no tag (proposal 7.2): a change made in between does not make
+// it wrong, and a tag that is old by then would make it fail where nobody
+// sees the answer.
 import { api, coverUrl, isStale } from '../api.js';
 import { $, announce, clone, emptyState, formatAgo, formatDate, formatLength, openMenu, plural, setCover, setTitle, show, staleToast, toast } from '../ui.js';
 import * as act from '../actions.js';
@@ -18,19 +21,14 @@ import { navigate } from '../router.js';
 const PAGE = 100;
 
 // Songs taken out wait for the end of their toast before the server hears
-// of it; one toast at a time, so at most one removal waits. If the page
-// goes away first, it is sent then (proposal 7.2).
-let waiting = null; // { id, ids, etag(), close(), sent }
+// of it; one toast at a time, so at most one removal waits. If the page is
+// hidden or goes away first, it is sent then, and its toast ends without
+// Undo (proposal 7.2).
+let waiting = null; // { id, close(), leave(), sent, sentAlready }
 let sending = Promise.resolve(); // the last removal sent
-addEventListener('pagehide', () => {
-  if (!waiting || waiting.sentAlready) return;
-  const { id, ids, etag } = waiting;
-  waiting.sentAlready = true;
-  // Requests that leave with the page cannot wait for each other's tag: the
-  // first carries the one the page holds, the rest name their item, which is
-  // all a removal needs.
-  ids.forEach((item, i) => api.del(`/playlists/${id}/items/${item}`, { ifMatch: i ? undefined : etag(), keepalive: true }).catch(() => {}));
-});
+const leave = () => { if (waiting && !waiting.sentAlready) waiting.leave(); };
+addEventListener('pagehide', leave);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') leave(); });
 
 export async function render(main, params, signal) {
   const id = params.id;
@@ -242,6 +240,10 @@ export async function render(main, params, signal) {
   // `before` is the row the song goes in front of; null is the end. Its place
   // changes here first; the server is told in turn, with the tag the page holds.
   function reorder(row, before) {
+    // A move sends a position, and the server still counts a song that waits
+    // to be taken out: that removal is sent first, and the move waits for its
+    // answer in turn. Its toast ends without Undo (proposal 7.2).
+    if (waiting?.id === id) waiting.close();
     const from = list.rows.indexOf(row);
     list.move(row, before);
     const position = list.rows.indexOf(row);
@@ -286,7 +288,8 @@ export async function render(main, params, signal) {
     showHead();
     outward();
 
-    const entry = { id, ids: rows.map(row => row.item.id), etag: () => etag, sent: null, sentAlready: false, close: () => {} };
+    let hiding = false;
+    const entry = { id, sent: null, sentAlready: false, close: () => {}, leave: () => { hiding = true; entry.close(); } };
     const shown = toast({
       title: rows.length === 1 ? `Removed from ${playlist.name}` : `Removed ${plural(rows.length, 'song')} from ${playlist.name}`,
       sub: rows.length === 1 ? `${first.title} · ${first.artist}` : '',
@@ -302,7 +305,7 @@ export async function render(main, params, signal) {
       },
       done: undone => {
         if (waiting === entry) waiting = null;
-        if (!undone && !entry.sentAlready) sending = entry.sent = send(rows);
+        if (!undone && !entry.sentAlready) sending = entry.sent = send(rows, hiding);
         entry.sentAlready = true;
       },
     });
@@ -311,13 +314,19 @@ export async function render(main, params, signal) {
   }
 
   // The rows leave the list at the moment their request is queued, so the
-  // positions of later moves count without them, as the server will.
-  function send(rows) {
+  // positions of later moves count without them, as the server will. When
+  // the page is being hidden the requests start at once, with keepalive: a
+  // page that goes away may run nothing later. Their answers are still
+  // taken in turn.
+  function send(rows, hiding) {
     const ids = rows.map(row => row.item.id);
     for (const row of rows) list.drop(row);
-    return Promise.all(ids.map(item => serial(async () => {
+    const remove = item => api.del(`${itemsUrl}/${item}`, { keepalive: true });
+    const started = hiding ? ids.map(remove) : [];
+    started.forEach(request => request.catch(() => {})); // answered below, in turn
+    return Promise.all(ids.map((item, i) => serial(async () => {
       try {
-        const next = await api.del(`${itemsUrl}/${item}`, { ifMatch: etag });
+        const next = await (hiding ? started[i] : remove(item));
         removed.delete(item);
         accept(next);
       } catch (error) {

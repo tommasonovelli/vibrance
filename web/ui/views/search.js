@@ -7,6 +7,7 @@ import * as act from '../actions.js';
 import { albumCard, cardActions, grid, personCard, trackList } from '../list.js';
 
 const KINDS = [['all', 'All', null], ['artists', 'Artists', 'artist'], ['albums', 'Albums', 'album'], ['songs', 'Songs', 'track']];
+const SONGS = 50; // the most songs a search answers, the limit of the contract
 const plain = text => text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
 
 // The words of the query, as the server reads them, to underline where they
@@ -176,7 +177,15 @@ export async function render(main, params, signal) {
       if (found.artists.length) add(out, 'Artists', artistsOf(found.artists, words));
       if (found.albums.length) add(out, 'Albums', albumsOf(found.albums, words));
     } else if (kind === 'songs') {
-      add(out, 'Songs', songsOf(found.tracks, q, words), { note: found.tracks.length === 1 ? '1 song' : `${found.tracks.length} songs` });
+      const songs = add(out, 'Songs', songsOf(found.tracks, q, words), { note: found.tracks.length === 1 ? '1 song' : `${found.tracks.length} songs` });
+      // The search has no totals and no next page (proposal 4.6): a full
+      // answer may have left songs out, and only more words find them.
+      if (found.tracks.length === SONGS) {
+        const more = document.createElement('p');
+        more.className = 'length';
+        more.textContent = `Showing the first ${SONGS}. Type more words to narrow the search.`;
+        songs.append(more);
+      }
     } else if (kind === 'artists') {
       add(out, 'Artists', artistsOf(found.artists, words));
     } else {
@@ -204,7 +213,7 @@ export async function render(main, params, signal) {
     const done = results.children.length ? () => {} : pending(results, 't-ph-rows');
     try {
       const types = KINDS.find(([key]) => key === kind)[2];
-      draw(await api.get('/search', { q, types, limit: kind === 'songs' ? 50 : 10 }, { signal: stop }), q);
+      draw(await api.get('/search', { q, types, limit: kind === 'songs' ? SONGS : 10 }, { signal: stop }), q);
     } catch (error) {
       if (stop.aborted) return;
       results.replaceChildren(errorNotice(error, run));

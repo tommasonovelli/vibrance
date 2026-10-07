@@ -75,15 +75,15 @@ Every operation of `api/openapi.yaml` the screens need, plus the additions of [d
 | `POST /me/favorites/tracks` (**B2**) | several favorites at once | one `PUT` per song |
 | `DELETE /me/sessions` (**B3**) | "Sign out everywhere else" | one `DELETE` per session |
 | `GET /tracks/{id}/playlists` (**B4**) | check marks in "Add to playlist" | no check marks |
-| `GET`, `PUT /me/settings` (**B5**) | leveling, single-key shortcuts and theme on every device | kept in this browser |
+| `GET`, `PATCH /me/settings` (**B5**) | leveling, single-key shortcuts and theme on every device; a change sends only the field that changed | kept in this browser |
 | `B6` (gapless data) | not used | |
 | `/server`, `/me`, `/me/password`, `/me/sessions`, `/auth/login`, `/auth/logout` | sign in, version, account | |
 | `/albums`, `/albums/{id}`, `/artists`, `/artists/{id}`, `/search`, `/tracks/{id}`, `/tracks/{id}/lyrics`, `/tracks/{id}/audio`, `/albums/{id}/cover` | the catalog and the player | |
-| `/playlists`, `/playlists/{id}`, `/playlists/{id}/items`, `.../items/{item}`, `.../items/{item}/move`, `/me/favorites/tracks`, `/me/favorites/tracks/{id}` | playlists (`ETag` and `If-Match`; `412` reads the playlist again) and favorites | |
+| `/playlists`, `/playlists/{id}`, `/playlists/{id}/items`, `.../items/{item}`, `.../items/{item}/move`, `/me/favorites/tracks`, `/me/favorites/tracks/{id}` | playlists (`ETag` and `If-Match`; `412` reads the playlist again) and favorites. "Remove from this playlist" sends its `DELETE` when the toast ends, or when the page is hidden (with `keepalive`), and without `If-Match` (proposal 7.2) | |
 | `/admin/library`, `/admin/library/scan`, `/admin/users`, `/admin/users/{id}`, `/admin/users/{id}/password` | Administration, admins only | |
 
 A cover is always asked for with `coverUrl()`: the URL carries the cover hash, only the sizes 256 (rows, grids, bar, queue) and 640 (heads, Now playing, Media Session) are used, and `original` only to download, so the browser downloads each cover once.
 
 ## Checking it
 
-There is no test suite in this folder yet. The interface was checked against a throwaway mock of the API, in a real browser, outside the repository.
+There is no JavaScript test suite. `scripts/check.sh` checks that the server embeds and serves every file of this folder with its headers (`internal/app/ui_test.go`). The interface itself is checked by hand in a real browser, on the real server, with the console open: a refusal of the `Content-Security-Policy` shows there. Every request it makes was compared with `api/openapi.yaml` (step U1 of DESIGN.md).
