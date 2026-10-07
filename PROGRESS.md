@@ -44,7 +44,7 @@ Design: DESIGN.md (versione 0.1). Orchestratore: aggiorna questo file a ogni pas
 | W4 | Impostazioni (B5) | done | 1 | e9a83f7 | 2026-10-07 · branch `dev-web-ui` · migrazione 00005; mutazioni del revisore: campi non inviati azzerati o riportati ai predefiniti, lettura fuori dalla transazione (modifica persa 3 su 3); `PATCH {}` valido (N-194); l'interfaccia usa ancora `PUT` |
 | W5 | Dati per il gapless (B6) | deferred | | | 2026-10-07 · rinviato dal proprietario: non si fa in questo giro; lo spike resta il primo passo quando riprende |
 | W6 | Servire l'interfaccia web (C1) | done | 2 | f5ecae0 | 2026-10-07 · branch `dev-web-ui` · round 1: BLOCCO su `Referrer-Policy` (C1 contro §7.6), risolto con l'errata del 2026-10-07 (`no-referrer`); round 2: guide aggiornate · accettazione in Chrome del revisore del round 1: accesso, album, riproduzione, console vuota · N-195, N-196 |
-| U1 | Allineare l'interfaccia al contratto | todo | | | branch `dev-web-ui` · prima della 0.2.0 |
+| U1 | Allineare l'interfaccia al contratto | done | 1 | fe8336c | 2026-10-07 · branch `dev-web-ui` · accettazione in Chrome del revisore: `PATCH` con il solo campo cambiato letto da un'altra sessione, `/` e `?` solo con i tasti singoli, Ctrl+/ sempre, `DELETE` differito senza `If-Match` e prima di uno spostamento, riga dei 50 brani; console senza blocchi della CSP · N-197, N-198 |
 
 Stati: `todo`, `in-progress`, `done`, `blocked`.
 
