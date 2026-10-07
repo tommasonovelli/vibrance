@@ -43,7 +43,7 @@ Design: DESIGN.md (versione 0.1). Orchestratore: aggiorna questo file a ogni pas
 | W3 | Casuale, preferiti in blocco, sessioni, playlist di una traccia (B1–B4) | done | 1 | 07c6c4a | 2026-10-07 · branch `dev-web-ui` · B1 a 50.000 tracce p95 20–24 ms (budget 30); il nuovo indice per traccia porta un blocco di 1.000 elementi oltre i 100 ms di `add`: misure aperte con tetti 200 e 250 ms (N-193); `perf.sh` ora circa 25 minuti |
 | W4 | Impostazioni (B5) | done | 1 | e9a83f7 | 2026-10-07 · branch `dev-web-ui` · migrazione 00005; mutazioni del revisore: campi non inviati azzerati o riportati ai predefiniti, lettura fuori dalla transazione (modifica persa 3 su 3); `PATCH {}` valido (N-194); l'interfaccia usa ancora `PUT` |
 | W5 | Dati per il gapless (B6) | deferred | | | 2026-10-07 · rinviato dal proprietario: non si fa in questo giro; lo spike resta il primo passo quando riprende |
-| W6 | Servire l'interfaccia web (C1) | todo | | | branch `dev-web-ui` |
+| W6 | Servire l'interfaccia web (C1) | done | 2 | f5ecae0 | 2026-10-07 · branch `dev-web-ui` · round 1: BLOCCO su `Referrer-Policy` (C1 contro §7.6), risolto con l'errata del 2026-10-07 (`no-referrer`); round 2: guide aggiornate · accettazione in Chrome del revisore del round 1: accesso, album, riproduzione, console vuota · N-195, N-196 |
 
 Stati: `todo`, `in-progress`, `done`, `blocked`.
 

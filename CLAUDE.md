@@ -15,7 +15,7 @@ Vibrance is a read-only listening server over the `library/` folder that Vibranc
 - If the design contradicts itself or rests on a false assumption, stop and report a `BLOCCO:` with evidence (commands and output). Never work around it.
 - Never modify `.ref/`, the read-only clone of MusicLib 1.2.0 kept for reference. It is never committed.
 - Releases are made only by the owner, by pushing a tag `vX.Y.Z` ([docs/development.md](docs/development.md), "Releasing"). Agents never create tags and never publish. The orchestrator pushes `main` only with the owner's consent.
-- `web/` holds the documentation page built into the binary, with the vendored Scalar script (`web/docs/VENDOR.md`). `THIRD_PARTY_NOTICES.md` and `licenses/` change together with every Go module or vendored file.
+- `web/` holds what is built into the binary: the documentation page, with the vendored Scalar script (`web/docs/VENDOR.md`), and the web interface in `web/ui` (plain HTML, CSS and ES modules, no build step), served at the root. `THIRD_PARTY_NOTICES.md` and `licenses/` change together with every Go module or vendored file.
 
 ## Build, test, run: Docker only
 
