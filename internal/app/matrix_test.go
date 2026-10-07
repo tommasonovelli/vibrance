@@ -410,20 +410,28 @@ func TestAuthorizationMatrix(t *testing.T) {
 // §8.3, §12.4: the routes outside the specification are listed apart. They
 // need no session, and answer the same with one and without. The script of
 // the page of the documentation is one of them: the page is not whole
-// without it.
+// without it. So is every file of the web interface, its sign-in page, and
+// a path of its router, which is the interface's page.
 func TestInfrastructureRoutes(t *testing.T) {
 	w := newWorld(t, apiOrigin)
-	for _, r := range []struct {
+	type route struct {
 		path   string
 		status int
-	}{
+	}
+	routes := []route{
 		{livePath, s200},
 		{readyPath, s200},
-		{"/", http.StatusFound},
+		{"/", s200},
+		{"/login", s200},
+		{"/albums/" + someID, s200},
 		{"/api/openapi.yaml", s200},
 		{"/api/docs", s200},
 		{"/api/docs/scalar.js", s200},
-	} {
+	}
+	for _, p := range uiPaths(t) {
+		routes = append(routes, route{p, s200})
+	}
+	for _, r := range routes {
 		for who, c := range map[string]credential{"anonymous": nobody, "a user": w.as(w.anna), "an admin": w.as(w.admin)} {
 			req := w.request("GET", "", nil)
 			req.URL.Path = r.path

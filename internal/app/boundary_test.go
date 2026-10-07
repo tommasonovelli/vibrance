@@ -468,8 +468,8 @@ func TestPathsOutsideTheOperations(t *testing.T) {
 	}
 
 	for _, target := range []string{
-		"/nothing", "/index.html", "/api", "/api/", "/api/v1", "/api/v1/", "/api/v2/server", "/api/v1/nothing",
-		"/health", "/health/", "/health/live/", "/health/ready/x", "/favicon.ico", "/api/v1/server/",
+		"/api", "/api/", "/api/v1", "/api/v1/", "/api/v2/server", "/api/v1/nothing",
+		"/health", "/health/", "/health/live/", "/health/ready/x", "/api/v1/server/",
 		// Not canonical: the router of net/http would answer 301 to the
 		// cleaned path.
 		"//", "//api/v1/server", "/api//v1/server", "/api/v1/./server", "/api/v1/x/../server", "/./", "/../", "/health//live",
@@ -486,20 +486,24 @@ func TestPathsOutsideTheOperations(t *testing.T) {
 		}
 	}
 
+	// Every other path is the web interface: a page for GET and HEAD, 405
+	// for any other method.
 	for _, method := range []string{"GET", "HEAD"} {
 		rec := get(method, "/?x=1")
-		if rec.Code != http.StatusFound || rec.Header().Get("Location") != "/api/docs" {
-			t.Errorf("%s /: %d to %q, want 302 to /api/docs", method, rec.Code, rec.Header().Get("Location"))
+		if rec.Code != http.StatusOK || rec.Header().Get("Content-Type") != "text/html; charset=utf-8" {
+			t.Errorf("%s /: %d %q, want 200 and the page", method, rec.Code, rec.Header().Get("Content-Type"))
 		}
 		wantHeaders(t, method+" /", rec.Header())
 	}
 	for _, method := range []string{"POST", "PUT", "DELETE"} {
-		rec := get(method, "/")
-		wantCode(t, method+" /", rec, http.StatusMethodNotAllowed, "method_not_allowed")
-		if rec.Header().Get("Allow") != "GET, HEAD" {
-			t.Errorf("%s /: Allow %q", method, rec.Header().Get("Allow"))
+		for _, target := range []string{"/", "/nothing", "/index.html", "/favicon.ico"} {
+			rec := get(method, target)
+			wantCode(t, method+" "+target, rec, http.StatusMethodNotAllowed, "method_not_allowed")
+			if rec.Header().Get("Allow") != "GET, HEAD" {
+				t.Errorf("%s %s: Allow %q", method, target, rec.Header().Get("Allow"))
+			}
 		}
-		rec = get(method, api.BasePath+"/server")
+		rec := get(method, api.BasePath+"/server")
 		wantCode(t, method+" /api/v1/server", rec, http.StatusMethodNotAllowed, "method_not_allowed")
 		wantHeaders(t, method+" /api/v1/server", rec.Header())
 	}
@@ -530,7 +534,7 @@ func TestAccessLogLevels(t *testing.T) {
 		{"DEBUG", "GET /health/ready"},
 		{"INFO", "GET /api/v1/tracks/{id}"},
 		{"INFO", "GET /api/v1/tracks/{id}/lyrics"},
-		{"INFO", "GET /{$}"},
+		{"INFO", "/"},
 		{"INFO", "/"},
 	}
 	events := logs.events(t)

@@ -2,7 +2,7 @@
 
 The listening interface of Vibrance: plain HTML, CSS and JavaScript (ES modules), with no framework, no build step, no package and no external URL. It talks to the JSON API under `/api/v1` and to nothing else.
 
-**It is not served yet.** The Go server answers `/` with a redirect to `/api/docs` (DESIGN.md D20), and `web/embed.go` carries the documentation page only. Embedding and serving this folder (the shell for every app path, `login.html` at `/login`, the `Content-Security-Policy`) is a separate step.
+The server embeds this folder (`web/embed.go`) and serves it at its root (`internal/api/ui.go`): every file at its path, `login.html` at `/login`, and `index.html` at every other path outside `/api` and `/health`, with the `Content-Security-Policy` below. Only `.html`, `.js`, `.css`, `.svg` and `.woff2` files are embedded: a file of another type added here is not served.
 
 ## Files
 

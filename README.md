@@ -4,11 +4,11 @@ Vibrance lets you and the people at home listen to the music collection that [Vi
 
 1. **MusicLib** imports your albums, lets you fix their metadata and writes a clean library folder.
 2. **Vibrance reads that folder, and only reads it**: it keeps an index of your artists, albums and tracks up to date by itself, and never changes, moves or deletes a file.
-3. **Everyone has an account**, with their own favorites and private playlists, and listens through Vibrance's HTTP API: streaming of the original files, covers, synchronised lyrics and search.
+3. **Everyone has an account**, with their own favorites and private playlists, and listens in the browser, through Vibrance's web interface, or in an app, through its HTTP API: streaming of the original files, covers, synchronised lyrics and search.
 
 A track keeps its identity when you rename it, renumber it, retag it or move it to another album in MusicLib: playlists and favorites follow the audio. Vibrance is self-hosted, runs in Docker on a Linux machine next to MusicLib, and keeps working while MusicLib is stopped.
 
-**Version 0.1 is a server, without a player of its own.** It serves a documented API for apps and scripts, and a page in your browser where you can sign in and try every request. A web interface is planned.
+**Vibrance has a web player.** Its address opens a listening interface in your browser: sign in, browse the library, play, keep favorites and playlists. It also serves a documented API for apps and scripts, with a page at `/api/docs` where you can try every request. (Version 0.1 was the server alone: its address opened that documentation.)
 
 ## Contents
 
@@ -75,13 +75,13 @@ MusicLib is at **<http://127.0.0.1:8080>** (exactly this address: `localhost` is
 
 ### 4. Sign in to Vibrance
 
-Open **<http://127.0.0.1:8090>** in a browser on the same machine (exactly this address). It shows the documentation of the API. The first account is the admin: its name is `admin`, and its password is in `.env`:
+Open **<http://127.0.0.1:8090>** in a browser on the same machine (exactly this address). It opens the web interface, which asks you to sign in. The first account is the admin: its name is `admin`, and its password is in `.env`:
 
 ```sh
 grep VIBRANCE_ADMIN_PASSWORD .env                    # prints VIBRANCE_ADMIN_PASSWORD=...
 ```
 
-The password is everything after `=`. On the page, open **Sign in with a cookie** (`POST /auth/login`), choose **Test Request**, fill in `username` and `password`, and send. (The **Headers** table already has `X-Vibrance-Request: 1`, which Vibrance asks for on every request that changes something: leave it there.) A good result is `200` with your account. From then on the requests of the page are signed in.
+The password is everything after `=`: sign in with it, and the interface shows your library. To try the API instead, open <http://127.0.0.1:8090/api/docs>, the documentation of the API: there, open **Sign in with a cookie** (`POST /auth/login`), choose **Test Request**, fill in `username` and `password`, and send. (The **Headers** table already has `X-Vibrance-Request: 1`, which Vibrance asks for on every request that changes something: leave it there.) A good result is `200` with your account. From then on the requests of the page are signed in.
 
 The same from a terminal, with [`curl`](docs/api.md):
 
@@ -191,7 +191,7 @@ The block backs up both products first, and updates nothing if a backup fails. `
 - document its API with OpenAPI, serve that document and a page to try it;
 - back up, restore and check its database, and rebuild its search index if it is ever damaged.
 
-**It doesn't:** have a web player or an app of its own yet; convert audio (a browser plays only the formats it supports: ALAC only in Safari); change your music or its metadata (that is MusicLib's work); share playlists between users; scrobble, recommend or download anything; let people sign up by themselves. Search does not split Chinese or Japanese text into words and does not forgive typing mistakes. The documentation is in English.
+**It doesn't:** have an app of its own yet; convert audio (a browser plays only the formats it supports: ALAC only in Safari); change your music or its metadata (that is MusicLib's work); share playlists between users; scrobble, recommend or download anything; let people sign up by themselves. Search does not split Chinese or Japanese text into words and does not forgive typing mistakes. The documentation is in English.
 
 ## The guide
 

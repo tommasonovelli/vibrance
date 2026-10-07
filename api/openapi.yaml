@@ -113,7 +113,8 @@ info:
     - `GET /api/docs`: a page that shows this document and can send requests
       to this server. It is made of files the server carries and asks no
       other host for anything.
-    - `GET /`: a redirect to `/api/docs`.
+    - `GET /` and every other path outside `/api` and `/health`: the web
+      interface, files the server carries (`/login` is its sign-in page).
     - `GET /health/live` and `GET /health/ready`: whether the process
       answers, and whether its startup is complete (`503 not_ready` until
       then). They are also outside the check of `Host`.

@@ -110,20 +110,8 @@ func TestDocumentationIsServed(t *testing.T) {
 		}
 	}
 	for _, path := range []string{"/api", "/api/", "/api/docs/", "/api/docs/index.html", "/api/docs/VENDOR.md", "/api/docs/scalar.js.map",
-		"/api/openapi.json", "/docs"} {
+		"/api/openapi.json"} {
 		wantCode(t, "GET "+path, w.plain(http.MethodGet, path), http.StatusNotFound, "not_found")
-	}
-}
-
-// `/` leads to the page (D20), and the page is there.
-func TestRootLeadsToTheDocumentation(t *testing.T) {
-	w := newWorld(t, apiOrigin)
-	rec := w.plain(http.MethodGet, "/")
-	if rec.Code != http.StatusFound || rec.Header().Get("Location") != "/api/docs" {
-		t.Fatalf("GET /: status %d, Location %q", rec.Code, rec.Header().Get("Location"))
-	}
-	if rec := w.plain(http.MethodGet, rec.Header().Get("Location")); rec.Code != http.StatusOK {
-		t.Fatalf("the page `/` leads to: status %d", rec.Code)
 	}
 }
 

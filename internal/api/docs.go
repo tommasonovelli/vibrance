@@ -68,6 +68,9 @@ type embedded struct {
 	// binary, so a browser keeps it and asks whether it is still the one.
 	etag string
 	body []byte
+	// denyFrames is set on a page of the web interface: X-Frame-Options
+	// DENY, for the browsers that do not read frame-ancestors.
+	denyFrames bool
 }
 
 func newEmbedded(contentType, csp string, body []byte) embedded {
@@ -81,6 +84,9 @@ func (e embedded) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.Set("Content-Security-Policy", e.csp)
 	h.Set("Cache-Control", "no-cache")
 	h.Set("ETag", e.etag)
+	if e.denyFrames {
+		h.Set("X-Frame-Options", "DENY")
+	}
 	// No name and no time: the type is the one set above, and the ETag is
 	// the only validator.
 	http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(e.body))

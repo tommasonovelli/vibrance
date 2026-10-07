@@ -312,20 +312,21 @@ func TestRoutes(t *testing.T) {
 		}
 	}
 
+	// `/` is the web interface.
 	for _, method := range []string{"GET", "HEAD"} {
-		if got := do(t, method, base+"/"); got.status != 302 || got.location != "/api/docs" {
-			t.Fatalf("%s /: %+v, want 302 to /api/docs", method, got)
+		if got := do(t, method, base+"/"); got.status != 200 || got.contentType != "text/html; charset=utf-8" {
+			t.Fatalf("%s /: %+v, want 200 and the page", method, got)
 		}
 	}
 	if got := do(t, "POST", base+"/"); got.status != 405 {
 		t.Fatalf("POST /: %+v, want 405", got)
 	}
 	// A query string does not make `/` another path.
-	if got := do(t, "GET", base+"/?x=1"); got.status != 302 || got.location != "/api/docs" {
-		t.Fatalf("GET /?x=1: %+v, want 302 to /api/docs", got)
+	if got := do(t, "GET", base+"/?x=1"); got.status != 200 || got.contentType != "text/html; charset=utf-8" {
+		t.Fatalf("GET /?x=1: %+v, want 200 and the page", got)
 	}
 
-	for _, path := range []string{"/health", "/health/", "/health/live/", "/health/ready/x", "/index.html", "/api/v1/nothing"} {
+	for _, path := range []string{"/health", "/health/", "/health/live/", "/health/ready/x", "/api/v1/nothing"} {
 		got := do(t, "GET", base+path)
 		if got.status != 404 {
 			t.Fatalf("GET %s: %+v, want 404", path, got)

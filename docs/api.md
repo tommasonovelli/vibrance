@@ -1,6 +1,6 @@
 # Using the API
 
-The reference is the OpenAPI document the server itself serves: `GET /api/openapi.yaml`, and `GET /api/docs` for a page that shows it and can send requests (`/` leads there). Neither needs a session, and the page loads nothing from another host. This file is a short tour with `curl`.
+The reference is the OpenAPI document the server itself serves: `GET /api/openapi.yaml`, and `GET /api/docs` for a page that shows it and can send requests. Neither needs a session, and the page loads nothing from another host. This file is a short tour with `curl`.
 
 The examples assume a server at `http://127.0.0.1:8090` (its `VIBRANCE_PUBLIC_ORIGIN`), an account `anna` whose password is in the shell variable `VIBRANCE_PASSWORD`, and a POSIX shell.
 

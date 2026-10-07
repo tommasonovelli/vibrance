@@ -89,7 +89,7 @@ grep VIBRANCE_ADMIN_PASSWORD .env                    # prints VIBRANCE_ADMIN_PAS
 The admin's name is `admin`, and the password is everything after `=` on the last line.
 
 - **MusicLib** is at **<http://127.0.0.1:8080>**: import your music there ([MusicLib's guide](https://github.com/tommasonovelli/vibrance-musiclib/blob/v1.2.0/docs/operations.md#importing-and-the-activity-page)). Its password is in `.env` too: `grep MUSICLIB_PASSWORD .env`.
-- **Vibrance** is at **<http://127.0.0.1:8090>**. Version 0.1 has no web player of its own: the address opens the documentation of its API, where you can sign in and try every request, and [api.md](api.md) shows the main ones with `curl`. Apps talk to the same API.
+- **Vibrance** is at **<http://127.0.0.1:8090>**. The address opens the web interface: sign in with an account and listen. The documentation of the API stays at <http://127.0.0.1:8090/api/docs>, where you can sign in and try every request, and [api.md](api.md) shows the main ones with `curl`. Apps talk to the same API. (In version 0.1, which had no web interface, the address opened that documentation.)
 
 Vibrance reads the library MusicLib writes, read-only, and looks at it again every 5 minutes (`VIBRANCE_SCAN_INTERVAL`): an album imported in MusicLib appears in Vibrance at the latest a few minutes after MusicLib has written it. An admin can ask for a scan at once with `POST /api/v1/admin/library/scan`, and read the state of the library with `GET /api/v1/admin/library`.
 
