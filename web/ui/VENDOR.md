@@ -59,7 +59,7 @@ The `brand-word` symbol of `index.html` and `login.html` is the word "Vibrance" 
 
 Outlines of an OFL font used as the drawing of a logo, with the font itself not distributed, are the same practice MusicLib documents as N-309. The wordmark is shown 20 px to the em, `83.14` by `16.44` px.
 
-The README banner, `docs/assets/banner.jpg`, draws the same outlines in white, 96 px to the cap height, next to the sun, on a magenta gradient with a grain. It is made from these two symbols alone, with no font file.
+The README banner, `docs/assets/banner.jpg`, shows the same wordmark in white, next to the sun, on a gradient. No font file is part of it.
 
 ## `no-cover.svg`
 

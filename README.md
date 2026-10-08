@@ -12,7 +12,7 @@ A track keeps its identity when you rename it, renumber it, retag it or move it 
 
 ![The Library page of Vibrance: a sidebar with Library, Albums, Artists, Playlists, Search and the user's playlists, the list of every song with album, genre and duration, a menu to add a song to a playlist, and the player bar](docs/assets/screenshot-library.jpg)
 
-![The album page of Vibrance: the cover, title, artist, year, genre and audio format of an album, its songs with favorites and a lyrics mark, and more albums by the same artist](docs/assets/screenshot-album.jpg)
+![The Albums page of Vibrance: a grid of album covers with titles, artists and years, sorted by artist, and the queue open on the right with the song playing and the songs that come next](docs/assets/screenshot-albums.jpg)
 
 ![Now playing in Vibrance: the cover and title of the song, its synchronised lyrics with the current line highlighted, the queue, and the playback controls](docs/assets/screenshot-now-playing.jpg)
 
