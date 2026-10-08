@@ -46,7 +46,7 @@ Design: DESIGN.md (versione 0.1). Orchestratore: aggiorna questo file a ogni pas
 | W6 | Servire l'interfaccia web (C1) | done | 2 | f5ecae0 | 2026-10-07 · branch `dev-web-ui` · round 1: BLOCCO su `Referrer-Policy` (C1 contro §7.6), risolto con l'errata del 2026-10-07 (`no-referrer`); round 2: guide aggiornate · accettazione in Chrome del revisore del round 1: accesso, album, riproduzione, console vuota · N-195, N-196 |
 | U1 | Allineare l'interfaccia al contratto | done | 1 | fe8336c | 2026-10-07 · branch `dev-web-ui` · accettazione in Chrome del revisore: `PATCH` con il solo campo cambiato letto da un'altra sessione, `/` e `?` solo con i tasti singoli, Ctrl+/ sempre, `DELETE` differito senza `If-Match` e prima di uno spostamento, riga dei 50 brani; console senza blocchi della CSP · N-197, N-198 |
 | U2 | «Now playing» sempre in una schermata | done | 2 | 8d99a3a | 2026-10-08 · branch `dev-web-ui` · segnalato dall'utente · round 1: il titolo con il focus usciva dalla finestra; round 2: titolo intero solo con `:focus-visible`, in un riquadro che scorre · 300 casi misurati dal revisore in Chromium (3 dimensioni, titoli fino a 2.000 caratteri): nessuno scorrimento della pagina · N-199, N-200 (TO CONFIRM) |
-| U3 | La copertina di «Now playing» resta visibile | todo | | | branch `dev-web-ui` · prima del tag della 0.2.0 · decisione dell'utente su N-200 |
+| U3 | La copertina di «Now playing» resta visibile | done | 1 | aa3b369 | 2026-10-08 · branch `dev-web-ui` · decisione dell'utente su N-200 · 768 misure del revisore in Chromium, copertina mai sotto 128 px, nessuno scorrimento · N-201 |
 
 Stati: `todo`, `in-progress`, `done`, `blocked`.
 
