@@ -1063,10 +1063,12 @@ button.ly:hover, .ly.is-current { color: var(--ink); }
 /* From 1280 x 720 (in rem, so a larger default font keeps the scrolling
    page), in landscape, the view is exactly the window, banner included: the
    page never scrolls and the controls stay in view. The cover gives up the
-   height the rest needs, never wider than its column; the title stops at two
-   lines and shows whole with the keyboard's focus (now-playing.js lets it
-   take the focus only when cut): the cover gives way first, and a title
-   longer than the column scrolls in its own box, so even then nothing
+   height the rest needs, never wider than its column and never under 8rem
+   a side; the title stops at two lines, the artist and the album at one
+   (the whole text stays in the page for a screen reader). With the
+   keyboard's focus a cut title shows whole (now-playing.js lets it take the
+   focus only when cut): the cover gives way first, down to its 8rem, then
+   the title box, down to one line, and scrolls inside, so even then nothing
    reaches the controls. The lyrics and the queue scroll in their own boxes.
    Below that, the page scrolls as above. */
 @media (min-width: 80rem) and (min-height: 45rem) and (orientation: landscape) {
@@ -1077,14 +1079,18 @@ button.ly:hover, .ly.is-current { color: var(--ink); }
   .now-top, .now-transport { flex: none; }
   .now-body { flex: 1 1 0; min-height: 0; grid-template-rows: minmax(0, 1fr); align-items: stretch; }
   .now-song { container-type: inline-size; display: flex; flex-direction: column; min-height: 0; }
-  .now-cover { flex: 1 1 0; align-self: flex-start; width: auto; max-width: 100%; min-height: 0; max-height: 100cqw; }
+  .now-cover { flex: 1 1 0; align-self: flex-start; width: auto; max-width: 100%; min-height: 8rem; max-height: 100cqw; }
   .now-info { flex: 0 1 auto; min-height: 0; align-items: stretch; }
   .now-info .heart { align-self: flex-start; }
   .now-text { display: flex; flex-direction: column; min-height: 0; }
   .now-text > * { flex: none; }
   .now-title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+  .now-artist, .now-album a { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .now-album { display: flex; }
+  .now-album a { min-width: 0; }
+  .now-year { flex: none; white-space: pre; }
   .now-title:focus-visible {
-    display: block; flex: 0 1 auto; min-height: 0; overflow-y: auto;
+    display: block; flex: 0 1 auto; min-height: 1lh; overflow-y: auto;
     scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--ink) 30%, transparent) transparent;
   }
   .now-lyr { display: flex; flex-direction: column; min-height: 0; }
