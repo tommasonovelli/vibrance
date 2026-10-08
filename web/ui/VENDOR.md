@@ -40,6 +40,8 @@ The `brand-sun` symbol, inline in `index.html` and `login.html`, and `favicon.sv
 
 The symbol is the owner's mark and is not under the MIT License. MusicLib's `LOGO.md` says: "The sun symbol is original artwork by tommasonovelli. It is not covered by the project's MIT License: all rights reserved." and "You may keep the symbol in unmodified copies of this project, including when you redistribute them. If you distribute a modified version to others, replace the symbol with your own." The same terms are those of this one. That file concerns the symbol only.
 
+The symbol is also in the README banner, [`docs/assets/banner.jpg`](../../docs/assets/banner.jpg), and in the README screenshots, `docs/assets/screenshot-*.jpg`, under the same terms.
+
 ## The wordmark
 
 The `brand-word` symbol of `index.html` and `login.html` is the word "Vibrance" as vector outlines, in `--ink`. It was drawn the way MusicLib drew its own wordmark (MusicLib's N-309): the letterforms of Bricolage Grotesque, outlined, with no font file in the repository or in the image.
@@ -56,6 +58,8 @@ The `brand-word` symbol of `index.html` and `login.html` is the word "Vibrance" 
 | License of the font | SIL Open Font License 1.1 |
 
 Outlines of an OFL font used as the drawing of a logo, with the font itself not distributed, are the same practice MusicLib documents as N-309. The wordmark is shown 20 px to the em, `83.14` by `16.44` px.
+
+The README banner, `docs/assets/banner.jpg`, draws the same outlines in white, 96 px to the cap height, next to the sun, on a magenta gradient with a grain. It is made from these two symbols alone, with no font file.
 
 ## `no-cover.svg`
 

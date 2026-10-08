@@ -14,6 +14,8 @@ Three rules hold for every request (the specification has the others):
 - Every request other than GET and HEAD carries `X-Vibrance-Request: 1`, signing in included: without it, or with another value, the answer is `403 request_header_required`. The specification declares it as a required header of each such operation, so a client generated from it, and the page at `/api/docs`, send it by themselves; with `curl` it is `-H 'X-Vibrance-Request: 1'`.
 - Errors are JSON, `{"code": ..., "message": ..., "details": {...}}`. Test the `code`, which is stable.
 
+To try a request without a terminal, open <http://127.0.0.1:8090/api/docs>. Open **Sign in with a cookie** (`POST /auth/login`), choose **Test Request**, fill in `username` and `password`, and send; leave `X-Vibrance-Request: 1` in the **Headers** table. A good result is `200` with your account, and from then on the requests of the page are signed in.
+
 ## Signing in with a cookie
 
 A browser signs in with `POST /auth/login` and keeps the cookie `vibrance_session`. With `curl`, a cookie jar does the same:

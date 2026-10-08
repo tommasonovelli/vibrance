@@ -16,15 +16,31 @@ MusicLib has its own guide, [operations.md of MusicLib](https://github.com/tomma
 
 ## Contents
 
-1. [What you need](#what-you-need)
-2. [Install](#install)
-3. [Configuration](#configuration)
-4. [Adopting an existing MusicLib installation](#adopting-an-existing-musiclib-installation)
-5. [The passwords and the accounts](#the-passwords-and-the-accounts)
-6. [Access from other devices](#access-from-other-devices)
-7. [Backups, restore and moving](#backups-restore-and-moving)
-8. [Upgrading](#upgrading)
-9. [Troubleshooting](#troubleshooting)
+1. [What Vibrance does and doesn't do](#what-vibrance-does-and-doesnt-do)
+2. [What you need](#what-you-need)
+3. [Install](#install)
+4. [Configuration](#configuration)
+5. [Adopting an existing MusicLib installation](#adopting-an-existing-musiclib-installation)
+6. [The passwords and the accounts](#the-passwords-and-the-accounts)
+7. [Access from other devices](#access-from-other-devices)
+8. [Backups, restore and moving](#backups-restore-and-moving)
+9. [Upgrading](#upgrading)
+10. [Troubleshooting](#troubleshooting)
+
+## What Vibrance does and doesn't do
+
+**It does:**
+
+- index MusicLib's library by itself, in the background, and show what it could not read and why;
+- keep the id of a track through every change MusicLib makes to it, so that playlists and favorites never lose it; albums that leave the library are shown as unavailable, never deleted, and come back as they were;
+- give each person an account (`admin` or `user`), with sign-in by cookie for browsers and by token for apps;
+- serve artists, albums and tracks, sorted and paged; the original audio files with ranges (**FLAC**, **MP3**, **M4A** with AAC or ALAC, as MusicLib writes them); the album covers, as they are or as thumbnails; the **LRC lyrics** as structured lines, synchronised or plain with their stanzas;
+- search artists, albums and tracks as you type, without regard to case, accents and the way a system writes accented letters;
+- keep favorites and private playlists for each user, and each user's preferences (volume leveling, keyboard shortcuts, theme) on every device;
+- document its API with OpenAPI, serve that document and a page to try it;
+- back up, restore and check its database, and rebuild its search index if it is ever damaged.
+
+**It doesn't:** have a mobile app of its own yet; convert audio (a browser plays only the formats it supports: ALAC only in Safari); play without a short silence between the songs of an MP3 or AAC album that plays without pauses; change your music or its metadata (that is MusicLib's work); share playlists between users; scrobble, recommend or download anything from the Internet; let people sign up by themselves. Search does not split Chinese or Japanese text into words and does not forgive typing mistakes. The interface and the documentation are in English.
 
 ## What you need
 
@@ -45,6 +61,9 @@ uname -m                                   # must print x86_64
 docker compose version                     # prints "Docker Compose version v2...." (2.24 or later)
 findmnt -no FSTYPE -T /var/lib/docker      # must print ext4
 ```
+
+- If `docker` is missing, install it with `sudo apt install docker.io docker-compose-v2`. If it says "permission denied", run `sudo usermod -aG docker "$USER"`, then sign out and in again.
+- To keep MusicLib's data in a folder of your choice instead of Docker's storage, **decide before the first start**: MusicLib pairs its database with its data folder then. Follow [MusicLib's guide, "The data in a host folder"](https://github.com/tommasonovelli/vibrance-musiclib/blob/v1.2.0/docs/operations.md#the-data-in-a-host-folder), with the `compose.yaml` and `env.example` of Vibrance's release in place of MusicLib's. Vibrance mounts the same folder, read-only.
 
 ## Install
 
