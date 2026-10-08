@@ -176,7 +176,7 @@ services:
   # data volume, mounted read-only, and keeps its own state in its own
   # volume. It does not need MusicLib to run.
   vibrance:
-    image: ghcr.io/tommasonovelli/vibrance:0.1.0
+    image: ghcr.io/tommasonovelli/vibrance:0.2.0
     # `musiclib-vibrance`, or the project's name, as for MusicLib's services.
     container_name: ${COMPOSE_PROJECT_NAME:-musiclib}-vibrance
     # Reaps the ffmpeg and ffprobe processes the server starts.

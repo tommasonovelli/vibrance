@@ -24,7 +24,7 @@ A track keeps its identity when you rename it, renumber it, retag it or move it 
 
 Each step says what it does and what a good result looks like. The [operations guide](docs/operations.md) explains every step in more depth.
 
-Vibrance is installed **together with MusicLib**, as one Docker Compose stack: MusicLib's own `compose.yaml`, unchanged, plus the `vibrance` service. Each release of Vibrance names the MusicLib version it was tested with (MusicLib 1.2.0 for Vibrance 0.1.0).
+Vibrance is installed **together with MusicLib**, as one Docker Compose stack: MusicLib's own `compose.yaml`, unchanged, plus the `vibrance` service. Each release of Vibrance names the MusicLib version it was tested with (MusicLib 1.2.0 for Vibrance 0.2.0).
 
 **Already running MusicLib?** Do not use the block of step 2: follow [Adopting an existing MusicLib installation](docs/operations.md#adopting-an-existing-musiclib-installation), which keeps your containers, your volumes and your `.env`.
 

@@ -4,6 +4,7 @@ Vibrance reads only the `library/` folder of Vibrance MusicLib, and the two mark
 
 | Vibrance | MusicLib | Status |
 |---|---|---|
+| 0.2.0 | 1.2.0 | Tested: `scripts/contract.sh` passes every scenario, A1–A20, with `ghcr.io/tommasonovelli/musiclib:1.2.0@sha256:52204bdf0ca23eeae71453f2ae8a1ee0a8d9b52ef4ce58df42ace369ab8012dd`. |
 | 0.1.0 | 1.2.0 | Tested: `scripts/contract.sh` passes every scenario, A1–A20, with `ghcr.io/tommasonovelli/musiclib:1.2.0@sha256:52204bdf0ca23eeae71453f2ae8a1ee0a8d9b52ef4ce58df42ace369ab8012dd`. |
 
 A Vibrance release fixes the MusicLib version of its stack: the `compose.yaml` it ships is MusicLib's own file of that version, plus Vibrance's service (`docs/operations.md`). Upgrade the two together, only with a Vibrance release, never with MusicLib's own `compose.yaml`.

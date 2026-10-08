@@ -5,6 +5,10 @@ Versions follow [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-08
+
+Vibrance has a web player. The server now serves a listening interface at its address, and the API gains what the interface needs: every track in one list, shuffle, summaries, several favorites at once, sign out everywhere else, the playlists of a track and preferences kept on the account. It still runs next to Vibrance MusicLib 1.2.0. To upgrade from 0.1.0, follow [Upgrading](https://github.com/tommasonovelli/vibrance/blob/v0.2.0/docs/operations.md#upgrading) in the operations guide: the first start applies three new migrations, after which Vibrance 0.1.0 refuses the database, so make the backup the guide asks for first.
+
 ### Added
 
 - **Every track in one list.** `GET /api/v1/tracks` lists the available tracks, paged, by title, by artist, album after album, or by when Vibrance first saw them, in either direction, optionally only those of the albums of one artist. A track that MusicLib moves to another album keeps its place among the recently added. The first start after the upgrade computes the sort keys of every track once before it serves.
@@ -20,6 +24,14 @@ Versions follow [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html)
 ### Changed
 
 - `/` serves the web interface instead of redirecting to `/api/docs`. The documentation stays at `/api/docs`.
+
+### Known limits
+
+- Playback is not gapless: a short silence can be heard between the songs of an MP3 or AAC album that plays without pauses.
+- The limits of 0.1.0 on search (no segmentation of Chinese or Japanese text, no tolerance for typing mistakes) and on lyrics time tags still hold.
+- Only Linux amd64 with Docker Engine and local ext4 storage is supported, as for MusicLib.
+- Like 0.1.0, this release was tested only on Docker Desktop for Windows, not on a native Linux Docker Engine: there the quality gate, the contract suite with the real MusicLib 1.2.0 (in two runs), the stack smoke test, the performance suite, `govulncheck` and the image build all passed.
+- Vibrance 0.2.0 is still built with Go 1.25.14, MusicLib 1.2.0's toolchain, whose series the Go project no longer supports. No known vulnerability reaches Vibrance's code at the time of the release (`govulncheck`).
 
 ## [0.1.0] - 2026-10-06
 
@@ -46,5 +58,6 @@ The first release. Vibrance runs next to Vibrance MusicLib 1.2.0 in one Docker C
 - This release was tested only on Docker Desktop for Windows, not yet on a native Linux Docker Engine, which is the platform it supports: there the quality gate, the contract suite with the real MusicLib 1.2.0 (twice in a row), the stack smoke test, `govulncheck` and the image build all passed.
 - Vibrance 0.1.0 is built with Go 1.25.14, to stay on the same pinned toolchain as MusicLib 1.2.0. It is the last release of the Go 1.25 series, which the Go project no longer supports. No known vulnerability reaches Vibrance's code at the time of the release (`govulncheck`); a later release moves to a supported Go.
 
-[Unreleased]: https://github.com/tommasonovelli/vibrance/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/tommasonovelli/vibrance/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/tommasonovelli/vibrance/releases/tag/v0.2.0
 [0.1.0]: https://github.com/tommasonovelli/vibrance/releases/tag/v0.1.0

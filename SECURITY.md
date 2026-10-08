@@ -4,7 +4,7 @@
 
 Only the latest release of Vibrance receives security fixes. Each release names the Vibrance MusicLib version it runs with ([docs/compat.md](docs/compat.md)); update the stack only with Vibrance's releases ([Upgrading](docs/operations.md#upgrading)).
 
-Vibrance 0.1.0 is built with Go 1.25.14, the toolchain Vibrance MusicLib 1.2.0 is built with. It is the last release of the Go 1.25 series, which the Go project no longer supports: a vulnerability found in Go's standard library from now on is fixed only in newer series. Vibrance stays on MusicLib's pinned versions for this release and will move to a supported Go in a later one. Before the release, `govulncheck` found no known vulnerability that Vibrance's code reaches; if one is found later, it is fixed by a new release of Vibrance built with a newer Go.
+Vibrance 0.2.0, like 0.1.0, is built with Go 1.25.14, the toolchain Vibrance MusicLib 1.2.0 is built with. It is the last release of the Go 1.25 series, which the Go project no longer supports: a vulnerability found in Go's standard library from now on is fixed only in newer series. Vibrance stays on MusicLib's pinned versions for this release and will move to a supported Go in a later one. Before the release, `govulncheck` found no known vulnerability that Vibrance's code reaches; if one is found later, it is fixed by a new release of Vibrance built with a newer Go.
 
 ## Reporting a vulnerability
 
