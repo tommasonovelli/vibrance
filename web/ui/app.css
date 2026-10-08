@@ -1060,6 +1060,39 @@ button.ly:hover, .ly.is-current { color: var(--ink); }
   .now-btns { justify-content: center; }
 }
 
+/* From 1280 x 720 (in rem, so a larger default font keeps the scrolling
+   page), in landscape, the view is exactly the window, banner included: the
+   page never scrolls and the controls stay in view. The cover gives up the
+   height the rest needs, never wider than its column; the title stops at two
+   lines and shows whole with the keyboard's focus (now-playing.js lets it
+   take the focus only when cut): the cover gives way first, and a title
+   longer than the column scrolls in its own box, so even then nothing
+   reaches the controls. The lyrics and the queue scroll in their own boxes.
+   Below that, the page scrolls as above. */
+@media (min-width: 80rem) and (min-height: 45rem) and (orientation: landscape) {
+  .shell:has(> .cols > .page[data-glow="now"]) { height: 100vh; height: 100dvh; }
+  .shell:has(> .cols > .page[data-glow="now"]) > .cols { flex: 1 1 0; min-height: 0; align-items: stretch; }
+  .page[data-glow="now"] { min-height: 0; }
+  .now { height: 100%; min-height: 0; }
+  .now-top, .now-transport { flex: none; }
+  .now-body { flex: 1 1 0; min-height: 0; grid-template-rows: minmax(0, 1fr); align-items: stretch; }
+  .now-song { container-type: inline-size; display: flex; flex-direction: column; min-height: 0; }
+  .now-cover { flex: 1 1 0; align-self: flex-start; width: auto; max-width: 100%; min-height: 0; max-height: 100cqw; }
+  .now-info { flex: 0 1 auto; min-height: 0; align-items: stretch; }
+  .now-info .heart { align-self: flex-start; }
+  .now-text { display: flex; flex-direction: column; min-height: 0; }
+  .now-text > * { flex: none; }
+  .now-title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+  .now-title:focus-visible {
+    display: block; flex: 0 1 auto; min-height: 0; overflow-y: auto;
+    scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--ink) 30%, transparent) transparent;
+  }
+  .now-lyr { display: flex; flex-direction: column; min-height: 0; }
+  .ly-list { flex: 1 1 0; height: auto; min-height: 0; }
+  .ly-foot { flex: none; }
+  .now-queue { align-self: start; max-height: 100%; min-height: 0; }
+}
+
 /* The keyboard shortcuts sheet (shortcuts.js), opened with ? */
 .sheet-keys { width: min(100% - 2rem, 56rem); }
 .keys-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s4); }

@@ -77,6 +77,26 @@ export async function render(main, params, signal) {
 
   // ---- The song ----
 
+  // On a window that holds the whole view the title stops at two lines
+  // (app.css §17). A cut title is a tab stop, and with the focus it shows
+  // whole, scrolling in its own box if it must, so a keyboard can read it
+  // (a click focuses it without unclamping: the cover does not jump); a
+  // screen reader reads the whole text anyway. The check waits while it has
+  // the focus: unclamped, it is never cut. A whole title overflows its box
+  // by a few pixels (the glyphs), a cut one by at least a line: half a line
+  // tells them apart.
+  const title = $('.now-title', view);
+  function cut() {
+    if (document.activeElement === title) return;
+    const hidden = title.scrollHeight - title.clientHeight > parseFloat(getComputedStyle(title).lineHeight) / 2;
+    if (hidden) title.tabIndex = 0; else title.removeAttribute('tabindex');
+  }
+  const sizes = new ResizeObserver(cut);
+  sizes.observe(title);
+  signal.addEventListener('abort', () => sizes.disconnect());
+  // Clamped again, it shows its first lines, wherever it was scrolled to.
+  title.addEventListener('blur', () => { title.scrollTop = 0; cut(); }, { signal });
+
   let album = null;
   function showSong() {
     const now = player.current();
@@ -91,7 +111,8 @@ export async function render(main, params, signal) {
       main.style.removeProperty('--cover');
       if (track.album.cover) cover.decode().then(() => { if (!signal.aborted && album === track.album.id) main.style.setProperty('--cover', `url("${cover.currentSrc}")`); }).catch(() => {});
     }
-    $('.now-title', view).textContent = track.title;
+    title.textContent = track.title;
+    cut();
     const artist = $('.now-artist', view);
     artist.textContent = track.artist;
     if (track.artist === track.album.artist.name) artist.href = `/artists/${track.album.artist.id}`; else artist.removeAttribute('href');
